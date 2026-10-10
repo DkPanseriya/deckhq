@@ -41,6 +41,17 @@ import {
   referencedMedia,
   resolveOptional,
 } from './media.mjs';
+import {
+  atomFeed,
+  FEED,
+  fill,
+  followBlock,
+  followLinks,
+  MAKER_URL,
+  quotesBlock,
+  releaseAnchor,
+  WAITLIST_URL,
+} from './slots.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -63,6 +74,13 @@ const REPO = 'https://github.com/DkPanseriya/deckhq';
  */
 const SITE_ORIGIN = 'https://deckhq.dev';
 
+/**
+ * The one line DeckHQ is described by: in the home page's title, over its
+ * headline, in every footer and on the card a link unfurls into. There is no
+ * second one.
+ */
+const TAGLINE = 'An office for your AI coding agents';
+
 /** The card a link to any page unfurls into: 1200 x 630. */
 const PREVIEW = 'link-preview.png';
 
@@ -79,11 +97,11 @@ const STYLES = ['style.css', 'components.css'];
 const PAGES = [
   {
     slug: 'index',
-    title: 'DeckHQ: every AI coding session on your machine, on one office floor',
+    title: `DeckHQ: ${TAGLINE[0].toLowerCase()}${TAGLINE.slice(1)}`,
     description:
-      'DeckHQ draws every AI coding session on your machine as a robot in one office: who is ' +
-      'working, who is waiting on you, and for how long. Local, free, MIT.',
-    preload: 'hero',
+      'The agent that finished an hour ago is still waiting for you. DeckHQ puts every Claude ' +
+      'Code and Codex session on one office floor until you clear it. Local, free, MIT.',
+    loop: 'hero-walk',
   },
   {
     slug: 'features',
@@ -217,9 +235,16 @@ function head(page) {
   // each the file for the density the screen has. One of the four is fetched.
   const hint = (name, media) =>
     `\n    <link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`;
-  const preload = page.preload
-    ? hint(page.preload, '(min-width: 40rem)') + hint(`${page.preload}-phone`, NARROW)
-    : '';
+  // A page that opens on a loop asks for the loop, or for its first frame when
+  // the reader asked for less motion. One of the two is fetched, never both.
+  const moving = (name) =>
+    `\n    <link rel="preload" as="image" href="media/${name}.gif" media="(prefers-reduced-motion: no-preference)" fetchpriority="high" />` +
+    `\n    <link rel="preload" as="image" href="media/${name}.png" media="(prefers-reduced-motion: reduce)" fetchpriority="high" />`;
+  const preload = page.loop
+    ? moving(page.loop)
+    : page.preload
+      ? hint(page.preload, '(min-width: 40rem)') + hint(`${page.preload}-phone`, NARROW)
+      : '';
   const base = page.base ? `\n    <base href="${esc(page.base)}" />` : '';
   // No `<link rel="canonical">`: a page's own address is in `og:url`, and the
   // rule that no `<link>` on this site names an absolute URL has no exception.
@@ -246,7 +271,8 @@ function head(page) {
     <meta name="twitter:image" content="${esc(card)}" />
     <link rel="stylesheet" href="style.css" />
     <link rel="icon" href="deckhq-mark.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="deckhq-mark.png" />${preload}
+    <link rel="apple-touch-icon" href="deckhq-mark.png" />
+    <link rel="alternate" type="application/atom+xml" title="DeckHQ releases" href="${FEED}" />${preload}
     <script src="site.js" defer></script>
   </head>`;
 }
@@ -262,6 +288,9 @@ function shell(page) {
   const bar = PAGES.filter((p) => p.nav);
   const nav = bar.map((p) => link(p, '          ')).join('\n');
   const drawer = bar.map((p) => link(p, '            ')).join('\n');
+  const follow = followLinks({ repo: REPO, url: WAITLIST_URL })
+    .map((li) => `            ${li}`)
+    .join('\n');
 
   return `<!doctype html>
 <html lang="en">
@@ -299,7 +328,7 @@ ${page.body.replace(/\n$/, '')}
             <img src="deckhq-mark.svg" alt="" width="22" height="22" />
             DeckHQ
           </p>
-          <p>Every AI coding session on your machine, on one office floor.</p>
+          <p>${TAGLINE}.</p>
           <p><code>npx deckhq app</code></p>
         </div>
         <div class="foot-col">
@@ -329,10 +358,16 @@ ${page.body.replace(/\n$/, '')}
             <li><a href="${REPO}/issues">Report a problem</a></li>
           </ul>
         </div>
+        <div class="foot-col">
+          <h2>Follow</h2>
+          <ul>
+${follow}
+          </ul>
+        </div>
       </div>
       <p class="wrap foot-note">
-        Built by Darshak Panseriya. This site loads nothing from anywhere else: no web font, no
-        CDN, no analytics.
+        Built by Darshak Panseriya. <a href="${MAKER_URL}">More by Darshak</a>. This site loads
+        nothing from anywhere else: no web font, no CDN, no analytics.
       </p>
     </footer>
   </body>
@@ -364,7 +399,7 @@ function indentBlock(html, spaces) {
 function changelogBody(releases) {
   const sections = releases
     .map(
-      (release) => `          <section class="release">
+      (release) => `          <section class="release" id="${releaseAnchor(release.version)}">
             <h2>${esc(release.version)}${release.date ? ` <span class="release-date">${esc(release.date)}</span>` : ''}</h2>
 ${indentBlock(markdown(release.highlights), 12)}
           </section>`,
@@ -398,13 +433,20 @@ function build() {
 
   const releases = releaseHighlights(read('CHANGELOG.md'));
 
+  // The blocks a page asks for by name. What users said is a data file, and
+  // an empty one renders nothing.
+  const slots = {
+    follow: followBlock({ repo: REPO, url: WAITLIST_URL }),
+    quotes: quotesBlock(JSON.parse(read(path.join('site', 'quotes.json'))).quotes),
+  };
+
   // The bodies first, because the pictures are published from what the pages
   // actually show: a capture no page uses is not on the site.
   const bodies = PAGES.map((page) => {
     const source = page.generated
       ? changelogBody(releases)
       : read(path.join('site', 'pages', `${page.slug}.html`));
-    return { page, body: resolveOptional(source) };
+    return { page, body: fill(resolveOptional(source), slots) };
   });
   const shown = new Set([PREVIEW]);
   for (const { page, body } of bodies) {
@@ -447,6 +489,9 @@ function build() {
   const listed = PAGES.filter((p) => !p.unlisted).map((p) => pageUrl(p.slug));
   write('sitemap.txt', `${listed.join('\n')}\n`);
   write('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${SITE_ORIGIN}/sitemap.txt\n`);
+
+  // The releases as a feed, for a reader who would rather be told than look.
+  write(FEED, atomFeed({ origin: SITE_ORIGIN, releases, render: markdown }));
 
   // GitHub Pages runs Jekyll over an upload unless told not to.
   write('.nojekyll', '');
@@ -493,6 +538,7 @@ async function serve() {
     '.css': 'text/css; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
     '.txt': 'text/plain; charset=utf-8',
+    '.xml': 'application/atom+xml; charset=utf-8',
     '.png': 'image/png',
     '.gif': 'image/gif',
     '.svg': 'image/svg+xml',
@@ -550,4 +596,5 @@ export {
   PREVIEW,
   SITE_ORIGIN,
   STYLES,
+  TAGLINE,
 };

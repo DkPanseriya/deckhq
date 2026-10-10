@@ -1,25 +1,30 @@
 <section class="hero wrap">
   <div class="hero-copy">
-    <h1>Every AI coding session on your machine, on one office floor.</h1>
+    <p class="eyebrow">An office for your AI coding agents</p>
+    <h1>The agent that finished an hour ago is still waiting for you.</h1>
     <p class="lede">
-      DeckHQ draws each session as a robot at a desk. You see who is working, who is waiting on you,
-      and for how long.
+      DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
+      queue until you clear it.
     </p>
     <div class="actions">
       <p class="cmd cmd--hero"><code>npx deckhq app</code></p>
-      <a class="btn btn--ghost" href="features.html">See what it does</a>
+      <a class="btn btn--ghost" href="#doctor">Or count yours first</a>
     </div>
     <p class="hero-note">
-      Node 18 or newer. Free, MIT, zero dependencies, and it stays on your machine.
+      Node 18 or newer. Free, MIT, zero dependencies, local. Claude Code is verified; Codex is
+      verified for reading and replying.
     </p>
   </div>
-  <figure class="shot shot--window hero-shot">
+  <figure class="shot shot--window hero-shot hero-loop">
     <img
-      src="media/hero.png"
-      data-narrow="media/hero-phone.png"
+      src="media/hero-walk.gif"
       fetchpriority="high"
-      alt="The DeckHQ window. The header reads 2 needs you: 1 hand up, 1 for review. Below it, an office seen from above: Your Office with two robots waiting on a sofa, one under a red badge reading 1d 2h; a lounge with five resting; and three project rooms, orbital-api, checkout-flow and design-system, each with a robot at a desk."
+      alt="The DeckHQ floor, moving. A robot named Elif finishes its turn at a desk in the orbital-api room and a red badge appears over it. It stands, the room's lights go down behind it, and it walks the corridor into Your Office and sits on the sofa beside the two already waiting. The plate on Your Office goes from 2 waiting to 3 waiting."
     />
+    <figcaption>
+      One real walk on the demo floor, recorded at 25 frames a second. Elif finishes in orbital-api,
+      crosses the corridor and sits in Your Office; the plate goes from 2 waiting to 3.
+    </figcaption>
   </figure>
 </section>
 
@@ -68,23 +73,14 @@
 
 <section class="band band--deep">
   <div class="wrap">
-    <div class="section-head">
-      <h2>Everyone waiting on you is in your office.</h2>
-      <p class="lede">
-        A session that finishes its turn stands up, walks the corridor into Your Office and sits
-        down. How long it has waited is over its head, and the longest wait sits nearest your desk.
-      </p>
-    </div>
-    <figure class="shot shot--crop">
-      <img
-        src="media/loop-walk.gif"
-        alt="A robot named Elif finishes its turn in the orbital-api room, stands up from its desk, walks along the corridor into Your Office and sits on the sofa beside the two already waiting."
-      />
-      <figcaption>One real walk, recorded at 25 frames a second.</figcaption>
-    </figure>
-
-    <div class="split after-figure">
+    <div class="split">
       <div class="split-copy">
+        <h2>Everyone waiting on you is in your office.</h2>
+        <p>
+          A session that finishes its turn stands up, walks the corridor into Your Office and sits
+          down. How long it has waited is over its head, and the longest wait sits nearest your
+          desk.
+        </p>
         <h3>Two signals, because they need different answers.</h3>
         <ul class="facts">
           <li>

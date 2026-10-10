@@ -21,11 +21,39 @@ import path from 'node:path';
 import { test, before, after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import {
+  atomFeed,
+  fill,
+  followBlock,
+  followLinks,
+  quotesBlock,
+  WAITLIST_URL,
+  waitlistHost,
+} from '../../site/slots.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const siteDir = path.join(root, 'site');
 
-/** Hosts a reader may be sent to by a link they click. Nothing is fetched from them. */
-const LINKABLE = ['github.com', 'www.npmjs.com'];
+/**
+ * Hosts a reader may be sent to by a link they click. Nothing is fetched from
+ * them. Each one past the project's own two homes was added on purpose:
+ *
+ *   - `claude.com` and `code.claude.com`: Anthropic's own announcement and
+ *     documentation of agent view, which the home page's comparison cites as
+ *     its source for every word it says about that tool;
+ *   - `darshakpanseriya.com`: the maker's own site, one link in the footer;
+ *   - the host of `WAITLIST_URL` in `site/slots.mjs`, when that is set: the
+ *     hosted sign-up form the e-mail button opens. It is taken from the
+ *     constant, so setting the address is the whole change. Empty today.
+ */
+const LINKABLE = [
+  'github.com',
+  'www.npmjs.com',
+  'claude.com',
+  'code.claude.com',
+  'darshakpanseriya.com',
+  ...(waitlistHost() ? [waitlistHost()] : []),
+];
 
 /**
  * This site's own origin — WP-75.
@@ -95,6 +123,8 @@ test('the site builds every page it navigates to', () => {
     'site.js',
     'sitemap.txt',
     'robots.txt',
+    // The releases as an Atom feed, written from `CHANGELOG.md`.
+    'feed.xml',
     // WP-82 · the mark, both the SVG the tab strip gets and the dark raster
     // the pages show. `site/favicon.svg` — a crimson square that was nothing
     // the product used — is gone.
@@ -477,10 +507,10 @@ test('every image carries alt text, and every photograph carries words', () => {
   }
 });
 
-test('the only hosts anywhere on the site are GitHub, npm and this site', () => {
+test('the only hosts anywhere on the site are this site and the allow-list', () => {
   // A stricter restatement of the two SECURITY tests above, over every absolute
   // URL on every page whatever attribute or text it sits in: the Pages origin
-  // (printed as a line to copy), and the two places a reader is sent.
+  // (printed as a line to copy), and the places `LINKABLE` sends a reader.
   const allowed = new Set([...LINKABLE, SELF]);
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
@@ -1147,37 +1177,51 @@ test('the page works with its script removed', () => {
   }
 });
 
-test('the home page leads with the floor, and every band picture is lazy', async () => {
+test('the home page leads with the walk, and every band picture is lazy', async () => {
   const { imageSize } = await import('../../site/build.mjs');
   const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 
-  // The first picture a stranger sees is the whole window on a fixture floor.
+  // The first picture a stranger sees MOVES: a session finishes, crosses the
+  // corridor into Your Office and sits. It was the whole window, as a still,
+  // until 10 October 2026; the walk is what the product is, so it leads.
   const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
   assert.ok(first, 'the home page shows no picture from the media directory');
-  assert.equal(first[1], 'media/hero.png', `the hero is ${first[1]}`);
+  assert.equal(first[1], 'media/hero-walk.gif', `the hero is ${first[1]}`);
 
-  // The hero is preloaded, at the density the screen has, and is the one
-  // picture that is not lazy; everything under it waits for the scroll.
-  // A narrow screen gets a closer crop of the same window, and its own hint,
-  // so a phone is not sent the whole floor to show at the size of a stamp.
-  for (const [name, media] of [
-    ['hero', '(min-width: 40rem)'],
-    ['hero-phone', '(max-width: 39.99rem)'],
+  // It sits in the first section, above every band, under the one headline.
+  const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('</section>'));
+  assert.match(hero, /<h1>The agent that finished an hour ago is still waiting for you\.<\/h1>/);
+  assert.ok(hero.includes('media/hero-walk.gif'), 'the walk is not in the first section');
+  assert.ok(hero.indexOf('<h1>') < hero.indexOf('media/hero-walk.gif'), 'the walk is over the h1');
+
+  // The loop is preloaded for a reader who takes motion, and its first frame
+  // for one who asked for less; a browser fetches the one whose query matches.
+  for (const [file, media] of [
+    ['hero-walk.gif', '(prefers-reduced-motion: no-preference)'],
+    ['hero-walk.png', '(prefers-reduced-motion: reduce)'],
   ]) {
     assert.ok(
       home.includes(
-        `<link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, ` +
-          `media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`,
+        `<link rel="preload" as="image" href="media/${file}" media="${media}" fetchpriority="high" />`,
       ),
-      `${name} is not preloaded`,
+      `${file} is not preloaded`,
     );
   }
+  // Reduced motion gets the still, in the markup and not from a script.
   assert.match(
-    home,
-    /<picture><source media="\(max-width: 39\.99rem\)" srcset="media\/hero-phone\.png 1x, media\/hero-phone@2x\.png 2x" width="\d+" height="\d+" \/><img\b/,
-    'the hero has no closer crop for a narrow screen',
+    hero,
+    /<picture><source media="\(prefers-reduced-motion: reduce\)" srcset="media\/hero-walk\.png" \/><img\b/,
+    'the hero plays whatever the reader asked for',
+  );
+  assert.ok(fs.existsSync(path.join(out, 'media', 'hero-walk.png')), 'the hero has no still');
+  // The still is the loop's own first frame, so nothing moves when it swaps.
+  assert.deepEqual(
+    imageSize(path.join(out, 'media', 'hero-walk.png')),
+    imageSize(path.join(out, 'media', 'hero-walk.gif')),
+    'the hero and its still are different sizes',
   );
   assert.ok(!/data-narrow/.test(home), 'an authoring attribute reached the page');
+  assert.ok(!/<video\b/.test(home), 'a video reached the page without a weight rule for it');
   const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
   const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
   assert.ok(
@@ -1228,7 +1272,8 @@ test('the home page leads with the floor, and every band picture is lazy', async
 
 test('what a reader downloads before scrolling the home page', async () => {
   // The document, the stylesheet, the script, the mark, and the one picture
-  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB.
+  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB. The picture is
+  // the walk loop now, which is most of it, and the ceiling did not move.
   const { BUDGET, pageWeight } = await import('../../site/build.mjs');
   assert.ok(BUDGET.firstView <= 600 * 1024, 'the first-view budget was raised');
   const bytes = pageWeight(out, 'index.html', { dpr: 2, all: false });

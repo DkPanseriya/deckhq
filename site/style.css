@@ -464,35 +464,62 @@ kbd {
 
 /* ------------------------------------------------------------ the hero */
 
+/* The whole point of the first screen is that the loop is on it: the
+   headline, one sentence, the command, and the walk, before any scrolling. So
+   the type is a step under the display size and the gaps are short. */
 .hero {
-  padding-top: clamp(3rem, 2rem + 5vw, 6.5rem);
+  padding-top: clamp(1.25rem, 0.5rem + 1.8vw, 2.25rem);
 }
 
 .hero-copy {
   display: grid;
-  gap: var(--s-3);
+  gap: var(--s-2);
   justify-items: start;
 }
 
+/* The one line DeckHQ is described by, over the headline. Not a label style:
+   it is a sentence, set small. */
+.eyebrow {
+  color: var(--accent);
+  font: 500 var(--t-small) / 1.4 var(--mono);
+}
+
 .hero h1 {
-  max-width: 21ch;
-  font-size: var(--t-display);
-  line-height: 1.02;
+  max-width: 30ch;
+  font-size: clamp(2rem, 1rem + 3.9vw, 4rem);
+  line-height: 1.04;
   letter-spacing: -0.035em;
 }
 
 .hero .lede {
-  max-width: 36ch;
+  max-width: 44ch;
 }
 
 .hero-note {
   color: var(--muted);
   font-size: var(--t-small);
-  max-width: 34ch;
+  max-width: 40ch;
 }
 
 .hero-shot {
-  margin-top: clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
+  margin-top: clamp(1.25rem, 0.9rem + 1vw, 1.75rem);
+}
+
+/* The walk is a strip: an office, a corridor and a desk. Narrower than a desk
+   monitor it is cut to its left end, where the walk arrives, so a robot stays
+   a size it can be read at. */
+@media (max-width: 55.99rem) {
+  .hero-loop img {
+    aspect-ratio: 2 / 1;
+    object-fit: cover;
+    object-position: 0 100%;
+  }
+}
+
+@media (max-width: 39.99rem) {
+  .hero-loop img {
+    aspect-ratio: 3 / 2;
+  }
 }
 
 /* On a wide window the headline runs the width of the page, with the sentence
@@ -504,13 +531,17 @@ kbd {
     row-gap: var(--s-2);
   }
 
+  .eyebrow,
   .hero h1 {
     grid-column: 1 / -1;
-    margin-bottom: var(--s-3);
+  }
+
+  .hero h1 {
+    margin-bottom: var(--s-1);
   }
 
   .hero .lede {
-    grid-row: 2 / span 2;
+    grid-row: 3 / span 2;
   }
 
   .hero .actions,
@@ -521,7 +552,7 @@ kbd {
 
   .hero-note {
     text-align: right;
-    max-width: 46ch;
+    max-width: 62ch;
   }
 }
 

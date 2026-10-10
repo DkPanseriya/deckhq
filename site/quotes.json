@@ -1,0 +1,9 @@
+{
+  "$comment": [
+    "What users have said about DeckHQ, shown on the home page: three at most.",
+    "Empty until a real person has said something in public. An entry is",
+    "{ \"quote\": \"their words, unedited\", \"name\": \"who\", \"where\": \"where they said it\" }.",
+    "While the list is empty the home page renders no section at all."
+  ],
+  "quotes": []
+}
