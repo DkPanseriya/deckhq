@@ -51,8 +51,7 @@ export function cloudBox(ox, oy, u, side) {
 /** @typedef {{x:number, y:number, w:number, h:number}} Rect */
 
 /** @param {Rect} a @param {Rect} b */
-const overlaps = (a, b) =>
-  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /**
  * Where the collision pass set every name it drew, as boxes: each label in the

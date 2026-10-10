@@ -192,7 +192,11 @@ export class FurnishingHold {
         if (frozen) this.waiting = true;
         else {
           const lower = headcountKey(st.peak) !== headcountKey(a);
-          Object.assign(st, { held: st.peak, lowSince: lower ? now : null, peak: lower ? a : null });
+          Object.assign(st, {
+            held: st.peak,
+            lowSince: lower ? now : null,
+            peak: lower ? a : null,
+          });
         }
       }
       if (headcountKey(st.held) === headcountKey(a)) continue;
