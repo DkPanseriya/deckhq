@@ -13,7 +13,22 @@ import {
   roomHeadcounts,
 } from '../../public/render/plan-hold.js';
 
+import { buildPlan } from '../../public/render/plan.js';
+
 const NOW = Date.UTC(2026, 8, 1, 12, 0, 0);
+const STAGE = { w: 1600, h: 900 };
+const PROJECTS = ['api', 'web'].map((id) => ({ id, name: id, sessionCount: 2 }));
+
+/** Everything a room is drawn from, as one string: its box and all it stands on. */
+const laid = (plan, id) => {
+  const room = plan.rooms.find((r) => r.id === id);
+  const n = (v) => Math.round(v * 1000) / 1000;
+  return JSON.stringify([
+    [room.x, room.y, room.w, room.h].map(n),
+    room.props.map((p) => [p.kind, n(p.x), n(p.y), n(p.w), n(p.h)]),
+    (plan.seats.get(id) || []).map((s) => [n(s.x), n(s.y)]),
+  ]);
+};
 const MIN = 60_000;
 
 /** One session, working at a desk in `projectId` unless told otherwise. */
@@ -81,6 +96,29 @@ test('a room somebody is walking to or from neither grows nor shrinks', () => {
   assert.equal(at(1, 2 * MIN + FURNISH_HOLD_MS, busy).get('api').desks, 3, 'nor shrunk');
   assert.equal(hold.waiting, true);
   assert.equal(at(1, 2 * MIN + FURNISH_HOLD_MS).size, 0);
+});
+
+test('a held room is the room it was: same box, same furniture, same chairs', () => {
+  const before = [agent('a1', 'api'), agent('a2', 'api'), agent('w1', 'web'), agent('w2', 'web')];
+  // `a1`'s turn ends: it is waiting on the user, on its way to the office.
+  const after = before.map((a) =>
+    a.id === 'a1' ? { ...a, activityState: 'for_review', reviewSince: NOW } : a,
+  );
+  const opts = { stage: STAGE, now: NOW };
+  const full = buildPlan(PROJECTS, before, opts);
+  const bare = buildPlan(PROJECTS, after, opts);
+  assert.notEqual(laid(bare, 'api'), laid(full, 'api'), 'unheld, the room is laid again');
+
+  const hold = new FurnishingHold();
+  assert.equal(hold.update(roomHeadcounts(before, { now: NOW }), NOW).size, 0);
+  const held = hold.update(roomHeadcounts(after, { now: NOW + 1000 }), NOW + 1000);
+  assert.deepEqual([...held.keys()], ['api']);
+  const kept = buildPlan(PROJECTS, after, { ...opts, held });
+  assert.equal(laid(kept, 'api'), laid(full, 'api'));
+  assert.equal(laid(kept, 'web'), laid(full, 'web'), 'and so is the room beside it');
+  // No hold in force is no `held` at all: the plan is the one it always was.
+  const none = buildPlan(PROJECTS, before, { ...opts, held: new Map() });
+  assert.equal(laid(none, 'api'), laid(full, 'api'));
 });
 
 test('a crew that falls under three keeps its floor and lays no longer desk', () => {
