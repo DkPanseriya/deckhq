@@ -612,6 +612,26 @@ kbd {
   }
 }
 
+/* A loop: the video lies over its own first frame, inside its line. */
+.loop {
+  position: relative;
+  display: block;
+}
+
+.loop video {
+  position: absolute;
+  inset: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: calc(var(--radius) - 1px);
+  object-fit: cover;
+  object-position: 0 0;
+}
+
+.hero-loop video {
+  object-position: 0 100%;
+}
+
 .shot figcaption {
   margin-top: var(--s-2);
   color: var(--muted);

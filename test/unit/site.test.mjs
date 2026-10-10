@@ -71,6 +71,9 @@ const SELF = 'deckhq.dev';
 /** The stylesheet's two source files; `site/build.mjs` serves them as one. */
 const STYLE_SOURCES = ['style.css', 'components.css'];
 
+/** Every kind of picture the site serves: stills, and loops as video. */
+const PICTURES = ['.png', '.gif', '.mp4'];
+
 /** @param {string} dir @param {string[]} exts */
 function walk(dir, exts) {
   /** @type {string[]} */
@@ -468,7 +471,7 @@ test('the site says nothing the product refuses to say', () => {
 test('the build copies every image its pages reference', () => {
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
-    for (const m of html.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
+    for (const m of html.matchAll(/<(?:img|source)[^>]*\ssrc="([^"]+)"/g)) {
       const target = path.resolve(path.dirname(page), m[1]);
       assert.ok(fs.existsSync(target), `${path.relative(out, page)} shows a missing ${m[1]}`);
     }
@@ -533,7 +536,7 @@ test('HONESTY: every picture is a declared capture, and the unreleased say so', 
     await import('../../site/build.mjs');
   const { COMPOSED } = await import('../../site/media.mjs');
   const declared = declaredMedia();
-  const served = walk(path.join(out, 'media'), ['.png', '.gif']).map((f) => path.basename(f));
+  const served = walk(path.join(out, 'media'), PICTURES).map((f) => path.basename(f));
   assert.ok(served.length > 30, `expected the site to carry pictures; found ${served.length}`);
   for (const file of served) {
     assert.ok(
@@ -616,7 +619,7 @@ test('no picture the site serves is wider than the hero at twice its size', asyn
   // dense screen, and never more. The size is read from the file's own header.
   const { imageSize } = await import('../../site/build.mjs');
   let checked = 0;
-  for (const image of walk(path.join(out, 'media'), ['.png', '.gif'])) {
+  for (const image of walk(path.join(out, 'media'), PICTURES)) {
     const size = imageSize(image);
     const where = `media/${path.basename(image)}`;
     assert.ok(size, `${where} is not a picture this build can measure`);
@@ -736,16 +739,17 @@ test('COPY: a picture that is not built says so where it is shown', () => {
 });
 
 test('WEIGHT: every picture is inside the budget for what it is', async () => {
-  // 400 KB for a still, at either density; 3 MB for a loop. The owner's report
-  // was that the pictures loaded slowly and that some never arrived, so the
-  // ceiling is on every file the site serves and not on a list of them.
+  // 400 KB for a still, at any density; 1 MB for a loop, which was 3 MB while
+  // a loop was a GIF. The owner's report was that the pictures loaded slowly
+  // and that some never arrived, so the ceiling is on every file the site
+  // serves and not on a list of them.
   const { BUDGET } = await import('../../site/build.mjs');
   assert.ok(BUDGET.still <= 400 * 1024, 'the budget for a still was raised');
-  assert.ok(BUDGET.loop <= 3 * 1024 * 1024, 'the budget for a loop was raised');
+  assert.ok(BUDGET.loop <= 1024 * 1024, 'the budget for a loop was raised');
   let checked = 0;
-  for (const file of walk(path.join(out, 'media'), ['.png', '.gif'])) {
+  for (const file of walk(path.join(out, 'media'), PICTURES)) {
     const size = fs.statSync(file).size;
-    const budget = file.endsWith('.gif') ? BUDGET.loop : BUDGET.still;
+    const budget = /\.(gif|mp4)$/.test(file) ? BUDGET.loop : BUDGET.still;
     checked++;
     assert.ok(
       size <= budget,
@@ -761,7 +765,10 @@ test('WEIGHT: no page costs more than its budget, read to the bottom', async () 
   // pair, with every lazy picture and every loop on the page.
   const { PAGES, BUDGET, pageWeight } = await import('../../site/build.mjs');
   assert.ok(BUDGET.page.default <= 3 * 1024 * 1024, 'the page budget was raised');
-  assert.ok(BUDGET.page['index.html'] <= 2.5 * 1024 * 1024, 'the home budget was raised');
+  // The home page was held to 2.5 MB while its two loops were GIFs. As video
+  // at sixty frames a second and twice the width it measures 2977 KB, and it
+  // is held to what every other page is (11 October 2026).
+  assert.ok(BUDGET.page['index.html'] <= 3 * 1024 * 1024, 'the home budget was raised');
   for (const page of PAGES) {
     const rel = `${page.slug}.html`;
     const bytes = pageWeight(out, rel, { dpr: 2, all: true });
@@ -775,45 +782,88 @@ test('WEIGHT: no page costs more than its budget, read to the bottom', async () 
   }
 });
 
-test('MOTION: every loop moves, at twenty frames a second or more', () => {
-  // A GIF with one frame is a PNG that costs more, and it is what a capture
-  // pipeline produces when the floor was not animating. Counting frames means
-  // counting graphic control extensions: `21 F9 04`, then a flags byte and the
-  // frame's delay in hundredths of a second. Five hundredths is 20 fps.
+test('MOTION: every loop is a video at sixty frames a second, and it moves', async () => {
+  // A loop was a GIF at 25 frames a second until 11 October 2026. A GIF cannot
+  // be fluid: its frame delay is in hundredths of a second and a browser reads
+  // anything under two of them as ten. So a loop is H.264 in a plain MP4, and
+  // what is asserted here is read out of the file's own tables. That each file
+  // PLAYS, and at what rate, is measured in Chrome by the tool that writes it
+  // (`scripts/lib/video.mjs`); a unit test has no decoder.
+  const { inspectMp4 } = await import('../../scripts/lib/mp4-mux.mjs');
+  const { imageSize } = await import('../../site/build.mjs');
   let checked = 0;
-  for (const file of walk(path.join(out, 'media'), ['.gif'])) {
-    const bytes = fs.readFileSync(file);
+  for (const file of walk(path.join(out, 'media'), ['.mp4'])) {
+    const info = inspectMp4(fs.readFileSync(file));
     const where = `media/${path.basename(file)}`;
-    let frames = 0;
-    let slowest = 0;
-    for (let i = 0; i + 8 < bytes.length; i++) {
-      // The whole block, to its terminator and the image descriptor after it,
-      // so three matching bytes inside a frame's own data are not a frame.
-      const block = bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04;
-      if (block && bytes[i + 7] === 0x00 && bytes[i + 8] === 0x2c) {
-        frames++;
-        slowest = Math.max(slowest, bytes.readUInt16LE(i + 4));
-      }
-    }
     checked++;
-    assert.ok(frames > 20, `${where} has ${frames} frame(s)`);
-    assert.ok(slowest <= 5, `${where} holds a frame for ${slowest} hundredths of a second`);
-    // Its first frame is beside it, for a reader who asked for less motion.
-    assert.ok(fs.existsSync(file.replace(/\.gif$/, '.png')), `${where} has no still beside it`);
+    // The header before the frames, so the first one can be shown while the
+    // rest arrive; and not fragmented, which some players will not loop.
+    assert.deepEqual(info.top, ['ftyp', 'moov', 'mdat'], `${where} is not moov-first`);
+    assert.equal(info.fragmented, false, `${where} is fragmented`);
+    assert.equal(info.codec, 'avc1', `${where} is not H.264`);
+    assert.equal(info.fps, 60, `${where} is ${info.fps} frames a second`);
+    assert.ok(info.constantRate, `${where} does not hold one frame duration`);
+    assert.ok(info.frames >= 120, `${where} has ${info.frames} frame(s)`);
+    assert.equal(info.frames, Math.round(info.seconds * 60), `${where}: frames and duration`);
+    assert.equal(info.sync[0], 1, `${where} does not open on a key frame`);
+    // A video of a floor that was not animating is a still that costs more.
+    // Measured: one picture held for 120 frames at 1404x1212 has a median
+    // frame of 95 bytes; the quietest loop here, Your Office, 379.
+    const rest = info.sizes.slice(1).sort((a, b) => a - b);
+    const median = rest[Math.floor(rest.length / 2)];
+    assert.ok(median > 200, `${where}: a median frame of ${median} bytes; nothing moves`);
+    // Its first frame is beside it at both densities, and is the same shape,
+    // so nothing shifts when the video takes over from it.
+    const still = imageSize(file.replace(/\.mp4$/, '@2x.png'));
+    assert.ok(still, `${where} has no still beside it`);
+    assert.deepEqual(still, { width: info.width, height: info.height }, `${where}: its still`);
+    assert.ok(fs.existsSync(file.replace(/\.mp4$/, '.png')), `${where} has no plain still`);
   }
-  assert.ok(checked > 0, 'expected the site to carry a loop');
+  assert.ok(checked >= 4, `expected the site to carry its loops; found ${checked}`);
 
-  // And a page that shows a loop offers that still under reduced motion.
+  // And on the page: silent, looping, inline, laid over the still that is its
+  // first frame. Reduced motion is in the markup and not left to a script: the
+  // only source is offered to readers who did not ask for less, so one who did
+  // is sent no video at all and sees the still.
+  const motion = '(prefers-reduced-motion: no-preference)';
+  let shown = 0;
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
-    for (const m of html.matchAll(/<img\b[^>]*\ssrc="(media\/[\w-]+)\.gif"[^>]*>/g)) {
-      const still = `<picture><source media="(prefers-reduced-motion: reduce)" srcset="${m[1]}.png" />`;
-      assert.ok(
-        html.includes(still + m[0]),
-        `${path.relative(out, page)} plays ${m[1]}.gif whatever the reader asked for`,
+    const where = path.relative(out, page);
+    const videos = [...html.matchAll(/<video\b([^>]*)>([\s\S]*?)<\/video>/g)];
+    for (const [whole, attrs, inner] of videos) {
+      shown++;
+      for (const needed of ['muted', 'loop', 'playsinline']) {
+        assert.match(
+          attrs,
+          new RegExp(`\\s${needed}(\\s|$)`),
+          `${where}: a video is not ${needed}`,
+        );
+      }
+      assert.match(attrs, /\swidth="\d+" height="\d+"/, `${where}: a video with no size`);
+      assert.ok(!/\ssrc=/.test(attrs), `${where}: a video names its file where no query guards it`);
+      const source = inner.match(
+        /^<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>$/,
       );
+      assert.ok(source, `${where}: a video without exactly one guarded source: ${inner}`);
+      assert.equal(source[2], motion, `${where} plays ${source[1]} whatever the reader asked for`);
+      // The still it lies over, which carries the words a screen reader gets.
+      const before = html.slice(0, html.indexOf(whole));
+      const img = before.slice(before.lastIndexOf('<img'));
+      assert.ok(
+        before.endsWith(img) && img.includes(` src="media/${source[1]}.png"`),
+        `${where}: ${source[1]}.mp4 is not laid over its own first frame`,
+      );
+      assert.match(before.slice(0, -img.length), /<span class="loop">$/);
+      assert.match(attrs, /\saria-hidden="true"/, `${where}: the video is announced twice`);
+      // Only the first picture on a page plays by itself. Any other waits for
+      // the script, because `autoplay` fetches a video wherever it is.
+      const first = /fetchpriority="high"/.test(img);
+      assert.equal(/\sautoplay(\s|$)/.test(attrs), first, `${where}: ${source[1]} and autoplay`);
+      assert.match(attrs, first ? /\spreload="metadata"/ : /\spreload="none"/);
     }
   }
+  assert.ok(shown >= 4, `expected the pages to show their loops; found ${shown}`);
 });
 
 test('WEIGHT: every picture below the fold is lazy, on every page', () => {
@@ -1186,42 +1236,43 @@ test('the home page leads with the walk, and every band picture is lazy', async 
   // until 10 October 2026; the walk is what the product is, so it leads.
   const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
   assert.ok(first, 'the home page shows no picture from the media directory');
-  assert.equal(first[1], 'media/hero-walk.gif', `the hero is ${first[1]}`);
+  // The picture is the walk's first frame, and the walk is a video over it.
+  assert.equal(first[1], 'media/hero-walk.png', `the hero is ${first[1]}`);
 
   // It sits in the first section, above every band, under the one headline.
   const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('</section>'));
   assert.match(hero, /<h1>The agent that finished an hour ago is still waiting for you\.<\/h1>/);
-  assert.ok(hero.includes('media/hero-walk.gif'), 'the walk is not in the first section');
-  assert.ok(hero.indexOf('<h1>') < hero.indexOf('media/hero-walk.gif'), 'the walk is over the h1');
+  assert.ok(hero.includes('media/hero-walk.mp4'), 'the walk is not in the first section');
+  assert.ok(hero.indexOf('<h1>') < hero.indexOf('media/hero-walk.mp4'), 'the walk is over the h1');
 
-  // The loop is preloaded for a reader who takes motion, and its first frame
-  // for one who asked for less; a browser fetches the one whose query matches.
-  for (const [file, media] of [
-    ['hero-walk.gif', '(prefers-reduced-motion: no-preference)'],
-    ['hero-walk.png', '(prefers-reduced-motion: reduce)'],
-  ]) {
-    assert.ok(
-      home.includes(
-        `<link rel="preload" as="image" href="media/${file}" media="${media}" fetchpriority="high" />`,
-      ),
-      `${file} is not preloaded`,
-    );
-  }
-  // Reduced motion gets the still, in the markup and not from a script.
+  // The first frame is preloaded at the density the screen has: it is what
+  // the page lays out, what is seen until the video has a frame, and all a
+  // reader who asked for less motion is sent. The video is not hinted.
+  assert.ok(
+    home.includes(
+      '<link rel="preload" as="image" href="media/hero-walk.png" imagesrcset="media/hero-walk.png 1x, media/hero-walk@2x.png 2x" fetchpriority="high" />',
+    ),
+    'the first frame of the walk is not preloaded',
+  );
+  assert.ok(!/<link[^>]*\.mp4/.test(home), 'a video is preloaded by a link');
+  // Reduced motion gets the still, in the markup and not from a script: the
+  // one source is guarded by the query, and the video plays by itself.
   assert.match(
     hero,
-    /<picture><source media="\(prefers-reduced-motion: reduce\)" srcset="media\/hero-walk\.png" \/><img\b/,
+    /<span class="loop"><img\b[^>]*><video autoplay muted loop playsinline preload="metadata"[^>]*><source src="media\/hero-walk\.mp4" type="video\/mp4" media="\(prefers-reduced-motion: no-preference\)" \/><\/video><\/span>/,
     'the hero plays whatever the reader asked for',
   );
-  assert.ok(fs.existsSync(path.join(out, 'media', 'hero-walk.png')), 'the hero has no still');
-  // The still is the loop's own first frame, so nothing moves when it swaps.
+  // The still is the video's own first frame at twice the size the page
+  // shows it, so nothing moves when the video takes over.
   assert.deepEqual(
-    imageSize(path.join(out, 'media', 'hero-walk.png')),
-    imageSize(path.join(out, 'media', 'hero-walk.gif')),
+    imageSize(path.join(out, 'media', 'hero-walk@2x.png')),
+    imageSize(path.join(out, 'media', 'hero-walk.mp4')),
     'the hero and its still are different sizes',
   );
   assert.ok(!/data-narrow/.test(home), 'an authoring attribute reached the page');
-  assert.ok(!/<video\b/.test(home), 'a video reached the page without a weight rule for it');
+  // A video has a weight rule now: `pageWeight` counts one whole, before the
+  // reader scrolls if it plays by itself. Exactly one on this page does.
+  assert.equal((home.match(/<video autoplay\b/g) ?? []).length, 1, 'videos that play at once');
   const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
   const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
   assert.ok(
@@ -1272,14 +1323,27 @@ test('the home page leads with the walk, and every band picture is lazy', async 
 
 test('what a reader downloads before scrolling the home page', async () => {
   // The document, the stylesheet, the script, the mark, and the one picture
-  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB. The picture is
-  // the walk loop now, which is most of it, and the ceiling did not move.
+  // that is not lazy, on a dense screen: the walk's first frame and the whole
+  // of its video, because a video that plays by itself is fetched to its end.
+  //
+  // 850 KB. It was 600 KB until 11 October 2026, when the walk was a 385 KB
+  // GIF, 1140 pixels wide at 25 frames a second in 256 colours. The owner
+  // asked for sixty frames a second. As H.264 at 2400 pixels the walk is
+  // 586 KB, which is the least Chrome's encoder writes it in without
+  // softening it, and the first view measures 797 KB.
   const { BUDGET, pageWeight } = await import('../../site/build.mjs');
-  assert.ok(BUDGET.firstView <= 600 * 1024, 'the first-view budget was raised');
+  assert.ok(BUDGET.firstView <= 850 * 1024, 'the first-view budget was raised');
   const bytes = pageWeight(out, 'index.html', { dpr: 2, all: false });
   assert.ok(
     bytes <= BUDGET.firstView,
-    `the home page's first view is ${(bytes / 1024).toFixed(0)} KB, over 600 KB`,
+    `the home page's first view is ${(bytes / 1024).toFixed(0)} KB, over 850 KB`,
+  );
+  // What did not move: the page is there to be read before the video is. Its
+  // first frame and everything ahead of it are well inside the old 600 KB.
+  const video = fs.statSync(path.join(out, 'media', 'hero-walk.mp4')).size;
+  assert.ok(
+    bytes - video <= 300 * 1024,
+    `the home page before its video is ${((bytes - video) / 1024).toFixed(0)} KB, over 300 KB`,
   );
   // And read to the bottom with every loop playing, it is under 3 MB.
   const whole = pageWeight(out, 'index.html', { dpr: 2, all: true });

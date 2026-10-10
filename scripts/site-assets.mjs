@@ -5,6 +5,8 @@
  *   node scripts/site-assets.mjs --only queue    # the ones whose name matches
  *   node scripts/site-assets.mjs --survey        # whole frames, uncropped
  *   node scripts/site-assets.mjs --sheet DIR     # + twelve frames of each loop
+ *   node scripts/site-assets.mjs --frames DIR    # + every frame of each loop
+ *   node scripts/site-assets.mjs --formats       # + each still as PNG and WebP, weighed
  *   node scripts/site-assets.mjs --list          # what the manifest declares
  *
  * The owner's review of the site was that its pictures are out of date, that
@@ -26,10 +28,18 @@
  *   - a still is taken under emulated `prefers-reduced-motion: reduce` and is
  *     re-taken until two screenshots agree byte for byte, so nothing that is
  *     still moving becomes a picture;
- *   - a GIF is taken with motion ON. Either by stepping the scene's pinned
- *     phase (`?phase=`, WP-87) frame by frame, which is exact and repeatable,
- *     or — for the walk, which is driven by the wall clock and not by a clip
- *     phase — by recording the floor canvas on a timer.
+ *   - a loop is taken with motion ON, one frame at a time, and written as a
+ *     video at sixty frames a second (`lib/site-loop.mjs`, `lib/video.mjs`).
+ *     Either by stepping the scene's pinned phase (`?phase=`, WP-87), or — for
+ *     the walk, which is driven by the clock and not by a clip phase — by
+ *     holding the floor's clock and the daemon's and moving both one frame at
+ *     a time. Neither depends on how fast this machine is, and the written
+ *     file is played in Chrome and measured before it is reported.
+ *
+ * WHY NOT A GIF. Its frame delay is in hundredths of a second and a browser
+ * treats anything under two of them as ten, so fifty frames a second is the
+ * most it can show, in 256 colours. No page of the site and no README shows
+ * one of these loops as a GIF, so none is written here.
  *
  * It borrows its whole method from `scripts/goldens.mjs`: same demo child,
  * same readiness probe, same settle-then-agree capture. It is a separate
@@ -47,12 +57,16 @@ import { fileURLToPath } from 'node:url';
 import { findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 import { boxDownscale, decodePng } from './lib/png.mjs';
 import { encodeIndexedPng } from './lib/png-indexed.mjs';
-import { buildPalette, encodeGif, indexPixels, Q } from './gif-encoder.mjs';
+import { VIRTUAL_CLOCK } from './lib/capture-kit.mjs';
+import { loopFrames } from './lib/site-loop.mjs';
+import { compareFormats, cutCrop, largeWidth, stillScale, writeLarge } from './lib/site-still.mjs';
+import { describeVideo, writeVideo } from './lib/video.mjs';
 import { DEMO_EPOCH } from './demo-args.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST_DEFAULT = path.join(ROOT, 'site', 'assets.json');
 const DEMO_SCRIPT = path.join(ROOT, 'scripts', 'demo-floor.mjs');
+const STEPPED_SCRIPT = path.join(ROOT, 'scripts', 'demo-floor-stepped.mjs');
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -63,6 +77,8 @@ const ONLY = opt('--only', '');
 const MANIFEST = path.resolve(ROOT, opt('--manifest', MANIFEST_DEFAULT));
 const SURVEY = argv.includes('--survey');
 const SHEET = opt('--sheet', '') ? path.resolve(ROOT, opt('--sheet', '')) : '';
+const FRAMES = opt('--frames', '') ? path.resolve(ROOT, opt('--frames', '')) : '';
+const FORMATS = argv.includes('--formats');
 const LIST = argv.includes('--list');
 const OUT_DIR = path.resolve(ROOT, opt('--out', SURVEY ? 'site/.survey' : 'docs/media/site'));
 
@@ -71,6 +87,8 @@ const BOOT_TIMEOUT_MS = 60_000;
 const READY_TIMEOUT_MS = 45_000;
 /** The floor's own settling window, after it says it is ready. */
 const SETTLE_MS = 3500;
+/** And longer before a walk is recorded: everybody has come in and sat down. */
+const WALK_SETTLE_MS = 6000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const say = (line) => process.stdout.write(`${line}\n`);
@@ -80,7 +98,7 @@ const say = (line) => process.stdout.write(`${line}\n`);
 /**
  * @typedef {object} Asset
  * @property {string} name        the file, without its extension
- * @property {'still'|'gif'} kind
+ * @property {'still'|'loop'} kind
  * @property {string} population  a `scripts/demo-floor.mjs --population`
  * @property {string} [theme]     a theme name; default is the warm office
  * @property {string} [press]     keys to send once the floor has settled
@@ -92,8 +110,8 @@ const say = (line) => process.stdout.write(`${line}\n`);
  * @property {boolean} [permission] raise a real permission request first
  * @property {{x:number,y:number,w:number,h:number}} [crop] CSS pixels from the
  *   top left of the page. One coordinate system for both kinds: a still is cut
- *   out of the screenshot, and a GIF's frames come off the floor canvas, which
- *   the grabber offsets by the canvas's own position on the page. A GIF can
+ *   out of the screenshot, and a loop's frames come off the floor canvas, which
+ *   the grabber offsets by the canvas's own position on the page. A loop can
  *   therefore only show what is on the canvas; a rectangle over the chrome
  *   comes back empty.
  * @property {string} [query]     appended to the floor's address: `look=night-lab`,
@@ -101,11 +119,13 @@ const say = (line) => process.stdout.write(`${line}\n`);
  * @property {boolean} [single]   write one file at `width`, with no `@2x` beside it
  * @property {number} [scale]     device pixel ratio for this capture
  * @property {number} width       the width the `@2x` file is written at. The plain
- *   file is half of it. A GIF is one file, at exactly this width
- * @property {'phase'|'live'} [mode]  how a GIF's frames are taken
+ *   file is half of it. A loop is one video at exactly this width, which is
+ *   twice the width a page shows it at, with its first frame beside it
+ * @property {'phase'|'live'} [mode]  how a loop's frames are taken
  * @property {string} [endTurn]   a project: tell its agent its turn has ended
- * @property {number} [fps]
+ * @property {number} [fps]       frames a second; 60 unless it says otherwise
  * @property {number} [seconds]
+ * @property {number} [bitrate]   bits a second for the video
  * @property {string} note        what the picture is of, for `--list`
  */
 
@@ -127,21 +147,40 @@ function manifest() {
  * so a site picture and a golden are photographs of the same fixture, booted
  * the same way, on the same pinned clock.
  *
+ * `stepped` starts `demo-floor-stepped.mjs` instead, whose pinned clock moves
+ * when `setNow` says so: the daemon's half of a walk recorded frame by frame.
+ *
  * @param {string} population
  * @param {string} theme
- * @returns {Promise<{url:string, port:number, stop:() => Promise<void>}>}
+ * @param {boolean} [stepped]
+ * @returns {Promise<{url:string, port:number, stop:() => Promise<void>,
+ *   setNow:(ms:number) => Promise<void>}>}
  */
-function startDemo(population, theme = 'default') {
+function startDemo(population, theme = 'default', stepped = false) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
+      [
+        stepped ? STEPPED_SCRIPT : DEMO_SCRIPT,
+        '--population',
+        population,
+        '--theme',
+        theme,
+        '--port',
+        '0',
+      ],
       {
         cwd: ROOT,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe', ...(stepped ? ['ipc'] : [])],
         env: { ...process.env, DECKHQ_NOW: DEMO_EPOCH },
       },
     );
+    /** Tell the stepped daemon what time it is, and wait until it has heard. */
+    const setNow = (ms) =>
+      new Promise((heard) => {
+        child.once('message', () => heard(undefined));
+        child.send({ now: new Date(ms).toISOString() });
+      });
     let out = '';
     let settled = false;
     /** @type {() => Promise<void>} */
@@ -184,7 +223,7 @@ function startDemo(population, theme = 'default') {
       if (m && !settled) {
         settled = true;
         clearTimeout(timer);
-        resolve({ url: m[1], port: Number(new URL(m[1]).port), stop });
+        resolve({ url: m[1], port: Number(new URL(m[1]).port), stop, setNow });
       }
     };
     child.stdout.on('data', onData);
@@ -397,45 +436,20 @@ function writePng(img, asset, file) {
 }
 
 /**
- * Encode frames into a looping GIF with one global palette.
- *
- * One palette over every frame, not one per frame: a per-frame palette makes
- * the floor shimmer, and the thing this picture has to keep is that the robots
- * stay the colour their state says they are. 255 colours, with the 256th slot
- * reserved for the transparency the encoder uses to send only what moved.
- *
- * @param {{width:number,height:number,data:Uint8Array}[]} images
- * @param {number} fps
- */
-function writeGif(images, fps, file) {
-  const { width, height } = images[0];
-  const palette = buildPalette(
-    images.map((i) => i.data),
-    255,
-  );
-  const cache = new Int16Array(1 << (3 * Q)).fill(-1);
-  const delayCs = Math.round(100 / fps);
-  const frames = images.map((img) => ({ indices: indexPixels(img.data, palette, cache), delayCs }));
-  const gif = encodeGif({ width, height, palette, frames });
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, gif);
-  return { width, height, bytes: gif.length, colours: palette.length, frames: frames.length };
-}
-
-/**
  * Twelve frames of a loop on one sheet, four across, for a person to look at.
  *
- * A GIF is the one picture here that cannot be checked by opening it: a walk
+ * A loop is the one picture here that cannot be checked by opening it: a walk
  * that never left its desk and a walk that crossed the floor are the same
  * first frame. `--sheet DIR` writes this beside nothing the site serves.
  *
- * @param {{width:number,height:number,data:Uint8Array}[]} images
+ * @param {{base64:string}[]} frames PNGs, in order
  * @param {string} file
  */
-function writeSheet(images, file) {
-  const picks = Array.from({ length: 12 }, (_, i) =>
-    boxDownscale(images[Math.floor((i * (images.length - 1)) / 11)], 400),
-  );
+function writeSheet(frames, file) {
+  const picks = Array.from({ length: 12 }, (_, i) => {
+    const frame = frames[Math.floor((i * (frames.length - 1)) / 11)];
+    return boxDownscale(decodePng(Buffer.from(frame.base64, 'base64')), 400);
+  });
   const { width, height } = picks[0];
   const sheet = { width: width * 4, height: height * 3, data: new Uint8Array(width * height * 48) };
   picks.forEach((frame, i) => {
@@ -448,159 +462,6 @@ function writeSheet(images, file) {
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, encodeIndexedPng(sheet));
-}
-
-/* -------------------------------------------------------------------- frames */
-
-/**
- * Install the in-page frame grabber.
- *
- * A GIF's frames come off the floor canvas rather than through
- * `Page.captureScreenshot`: a screenshot costs Chrome a few hundred
- * milliseconds, which caps an external loop at three or four frames a second,
- * and a `drawImage` into a scratch canvas costs a fraction of one. The grabber
- * also does the crop and the scale, so what crosses the protocol is the
- * finished frame and not a 3200 px screenshot.
- */
-async function installGrabber(client) {
-  await evaluate(
-    client,
-    `(() => {
-      // One coordinate system for the whole manifest: the rectangle is in CSS
-      // pixels from the top left of the PAGE, and this puts it into the
-      // canvas's own backing pixels — its offset on the page, then its device
-      // pixel ratio.
-      window.__deckhqBox = () => {
-        const c = document.getElementById('floor-canvas');
-        const b = c.getBoundingClientRect();
-        return { left: b.left, top: b.top, width: b.width, height: b.height, k: c.width / b.width };
-      };
-      window.__deckhqGrab = (px, py, w, h, outW) => {
-        const c = document.getElementById('floor-canvas');
-        const b = c.getBoundingClientRect();
-        const k = c.width / b.width;
-        const x = px - b.left;
-        const y = py - b.top;
-        const o = document.createElement('canvas');
-        o.width = outW;
-        o.height = Math.max(1, Math.round((h * outW) / w));
-        const ctx = o.getContext('2d');
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(c, x * k, y * k, w * k, h * k, 0, 0, o.width, o.height);
-        return o.toDataURL('image/png');
-      };
-      window.__deckhqPhase = (p) => {
-        const s = document.getElementById('floor-canvas').__deckhqScene;
-        s._phase = p;
-        return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      };
-      return true;
-    })()`,
-  );
-}
-
-/** One frame off the canvas, as an RGBA image. */
-async function grab(client, rect, outWidth) {
-  const url = await evaluate(
-    client,
-    `window.__deckhqGrab(${rect.x}, ${rect.y}, ${rect.w}, ${rect.h}, ${outWidth})`,
-  );
-  return decodePng(Buffer.from(String(url).split(',')[1], 'base64'));
-}
-
-/**
- * The frames of one GIF.
- *
- * `phase` steps WP-87's pinned phase from 0 to 1 across the whole run, so the
- * clip is walked through its own cycle exactly once and the last frame joins
- * the first. Every animation on the floor is pinned to the same phase, which
- * is what makes this repeatable to the pixel and what makes it a loop.
- *
- * `live` lets the wall clock drive and samples on a timer, which is the only
- * way to record the things that are not a clip phase at all — an agent
- * standing up, walking out of its room and into your office.
- *
- * @param {Asset} asset
- * @param {number} scale
- * @param {() => Promise<string>} [during] run once a live recording has begun
- */
-async function frames(client, asset, scale, during) {
-  const fps = asset.fps ?? 25;
-  const count = Math.round(fps * (asset.seconds ?? 4));
-  const rect = asset.crop ?? { x: 0, y: 0, w: 1600, h: 1000 };
-  // Never enlarge: a frame is written at the width it was drawn at, or less.
-  const outWidth = Math.min(asset.width, Math.round(rect.w * scale));
-  /** @type {{width:number,height:number,data:Uint8Array}[]} */
-  const out = [];
-  if ((asset.mode ?? 'phase') === 'phase') {
-    for (let i = 0; i < count; i++) {
-      await evaluate(client, `window.__deckhqPhase(${(i / count).toFixed(6)})`);
-      out.push(await grab(client, rect, outWidth));
-    }
-    return out;
-  }
-  // Live. The frames are buffered INSIDE the page on a timer and pulled out
-  // afterwards, which is `scripts/capture-hero.mjs`'s trick and the only way
-  // to reach 25 fps: a round trip per frame caps an external loop at three or
-  // four. `getImageData` of the crop alone is a few milliseconds.
-  await evaluate(
-    client,
-    `(() => {
-      const c = document.getElementById('floor-canvas');
-      const ctx = c.getContext('2d');
-      const b = c.getBoundingClientRect();
-      const k = c.width / b.width;
-      const r = {
-        x: Math.round((${rect.x} - b.left) * k),
-        y: Math.round((${rect.y} - b.top) * k),
-        w: Math.round(${rect.w} * k),
-        h: Math.round(${rect.h} * k),
-      };
-      const rec = { frames: [], r };
-      rec.timer = setInterval(() => {
-        rec.frames.push(ctx.getImageData(r.x, r.y, r.w, r.h));
-      }, ${(1000 / fps).toFixed(2)});
-      window.__deckhqRec = rec;
-      return true;
-    })()`,
-  );
-  // What the recording is OF happens once it is already running, so the loop
-  // opens on the agent at its desk rather than on one already at the door.
-  if (during) {
-    await sleep(600);
-    say(`       ${await during()}`);
-  }
-  await sleep((count / fps) * 1000 + 200);
-  const taken = await evaluate(
-    client,
-    `(() => {
-      const rec = window.__deckhqRec;
-      clearInterval(rec.timer);
-      return rec.frames.length;
-    })()`,
-  );
-  for (let i = 0; i < Math.min(taken, count); i++) {
-    const url = await evaluate(
-      client,
-      `(() => {
-        const rec = window.__deckhqRec;
-        const f = rec.frames[${i}];
-        const s = document.createElement('canvas');
-        s.width = f.width;
-        s.height = f.height;
-        s.getContext('2d').putImageData(f, 0, 0);
-        const o = document.createElement('canvas');
-        o.width = ${outWidth};
-        o.height = Math.max(1, Math.round((f.height * ${outWidth}) / f.width));
-        const ctx = o.getContext('2d');
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(s, 0, 0, o.width, o.height);
-        return o.toDataURL('image/png');
-      })()`,
-    );
-    out.push(decodePng(Buffer.from(String(url).split(',')[1], 'base64')));
-  }
-  return out;
 }
 
 /**
@@ -658,7 +519,10 @@ if (LIST) {
   process.exit(0);
 }
 
-const wanted = assets.filter((a) => !ONLY || a.name.includes(ONLY));
+// `--only hero` is the hero and not also `hero-phone` and `hero-walk`: a name
+// in full is that one asset, and anything else is every name containing it.
+const exact = assets.filter((a) => a.name === ONLY);
+const wanted = exact.length ? exact : assets.filter((a) => !ONLY || a.name.includes(ONLY));
 if (wanted.length === 0) throw new Error(`--only ${ONLY} matched nothing`);
 
 const chromePath = findChrome();
@@ -680,21 +544,29 @@ await withChrome(
       const t0 = Date.now();
       let demo = null;
       let permission = null;
+      let held = null;
       try {
-        demo = await startDemo(asset.population, asset.theme ?? 'default');
+        // A walk is recorded on a held clock: the daemon's is stepped, and the
+        // page's is replaced before any of its own scripts run.
+        const live = asset.kind === 'loop' && asset.mode === 'live';
+        demo = await startDemo(asset.population, asset.theme ?? 'default', live);
+        if (live) {
+          held = await client.send('Page.addScriptToEvaluateOnNewDocument', {
+            source: VIRTUAL_CLOCK,
+          });
+        }
 
-        // Device scale 2 for a still: the crop rectangle is written in CSS
-        // pixels and comes out at twice its size, which is the most the page
-        // is allowed to serve and the least that still looks sharp.
-        // Device scale 2 by default. A GIF of a large region says `"scale": 1`
-        // instead: its frames are buffered as raw pixels inside the page, and
-        // four times the pixels for four times the memory buys nothing once
-        // the result is downscaled to the width the page shows.
-        // A still whose crop is small is taken denser still — three or four
+        // Device scale 2 by default: the crop rectangle is written in CSS
+        // pixels and comes out at twice its size.
+        // A picture whose crop is small is taken denser still — three or four
         // device pixels to one — so a 400 px detail fills a 560 px column on
-        // a dense screen without being enlarged.
+        // a dense screen without being enlarged. A loop is drawn at the whole
+        // ratio that covers its width, and scaled down to it in the page.
+        // A still that has a third, larger file is drawn at the ratio that
+        // makes its crop exactly that wide (`lib/site-still.mjs`).
         const dense = asset.crop ? Math.min(4, Math.ceil(asset.width / asset.crop.w)) : 2;
-        const scale = asset.scale ?? (asset.kind === 'gif' ? 1 : Math.max(2, dense));
+        const scale =
+          asset.scale ?? (asset.kind === 'still' ? stillScale(asset) : Math.max(2, dense));
         await client.send('Emulation.setDeviceMetricsOverride', {
           width: viewport.width,
           height: viewport.height,
@@ -702,8 +574,8 @@ await withChrome(
           mobile: false,
         });
         // A still is a photograph of a state, so motion is off unless the
-        // asset pins a phase; a GIF is a photograph of motion, so it is on.
-        const reduce = asset.kind !== 'gif' && asset.phase === undefined;
+        // asset pins a phase; a loop is a photograph of motion, so it is on.
+        const reduce = asset.kind !== 'loop' && asset.phase === undefined;
         await client.send('Emulation.setEmulatedMedia', {
           features: [
             { name: 'prefers-reduced-motion', value: reduce ? 'reduce' : 'no-preference' },
@@ -762,52 +634,77 @@ await withChrome(
           await sleep(SETTLE_MS);
         }
 
-        if (asset.kind === 'gif') {
-          await installGrabber(client);
+        if (asset.kind === 'loop') {
+          // Everybody walks in from the door on first paint; a walk wants
+          // exactly one person moving when it starts.
+          if (live) await sleep(WALK_SETTLE_MS);
           const port = demo.port;
-          const during =
-            asset.endTurn === undefined ? undefined : () => endTurn(port, asset.endTurn);
-          const images = await frames(client, asset, scale, during);
-          const file = path.join(OUT_DIR, `${asset.name}.gif`);
-          const r = writeGif(images, asset.fps ?? 25, file);
-          // Its first frame, as a still: what a reader who asked for reduced
-          // motion is shown in the loop's place.
-          const poster = encodeIndexedPng(images[0]);
-          fs.writeFileSync(file.replace(/\.gif$/, '.png'), poster);
-          if (SHEET) {
-            writeSheet(images, path.join(SHEET, `${asset.name}.frames.png`));
-            // The alternative to a GIF, measured rather than argued: the same
-            // frames as one strip a page would step through. Written nowhere.
-            const strip = {
-              width: r.width,
-              height: r.height * images.length,
-              data: Buffer.concat(images.map((image) => image.data)),
-            };
-            const kb = (encodeIndexedPng(strip).length / 1024).toFixed(0);
-            say(
-              `       as a strip of PNG frames: ${kb} KB, against ${(r.bytes / 1024).toFixed(0)} KB`,
+          const taken = await loopFrames(client, asset, {
+            scale,
+            setNow: live ? demo.setNow : undefined,
+            // Six tenths of a second in, so the loop opens on the agent at
+            // its desk rather than on one already at the door.
+            events:
+              asset.endTurn === undefined
+                ? []
+                : [{ at: 0.6, run: () => endTurn(port, asset.endTurn) }],
+            say,
+          });
+          const file = path.join(OUT_DIR, `${asset.name}.mp4`);
+          // Its first frame, as a still at both densities like any other: the
+          // picture the page holds the box with and plays the video over, and
+          // all a reader who asked for reduced motion is shown.
+          const first = decodePng(Buffer.from(taken.frames[0].base64, 'base64'));
+          writePng(first, asset, file.replace(/\.mp4$/, '.png'));
+          if (SHEET) writeSheet(taken.frames, path.join(SHEET, `${asset.name}.frames.png`));
+          if (FRAMES) {
+            const dir = path.join(FRAMES, asset.name);
+            fs.mkdirSync(dir, { recursive: true });
+            taken.frames.forEach((frame, i) =>
+              fs.writeFileSync(
+                path.join(dir, `${String(i).padStart(4, '0')}.png`),
+                Buffer.from(frame.base64, 'base64'),
+              ),
             );
           }
+          const r = await writeVideo(file, taken.frames, taken.fps, {
+            width: taken.width,
+            height: taken.height,
+            bitrate: asset.bitrate,
+            // A loop is played from its start and never sought into, and a
+            // key frame is the heaviest frame in the file (65 KB of the
+            // hero's 653 KB was its second one): the first frame is the only
+            // one.
+            keyEvery: taken.frames.length,
+          });
           say(
-            `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ${r.frames} frames @ ` +
-              `${asset.fps ?? 25} fps  ${r.colours} colours  ${(r.bytes / 1024).toFixed(0)} KB  ` +
-              `${((Date.now() - t0) / 1000).toFixed(1)}s`,
+            `  ok   ${asset.name.padEnd(22)} ${((Date.now() - t0) / 1000).toFixed(1)}s\n` +
+              `       ${describeVideo(r)}`,
           );
           continue;
         }
 
-        const png = await captureStill(client, SURVEY ? undefined : asset.crop);
-        const img = decodePng(png);
+        // Chrome cuts the crop out itself at a whole ratio. At any other its
+        // clip resamples, so the whole window is taken and cut here.
+        const clipped = !SURVEY && asset.crop && Number.isInteger(scale);
+        const png = await captureStill(client, clipped ? asset.crop : undefined);
+        const shot = decodePng(png);
+        const img = SURVEY || clipped || !asset.crop ? shot : cutCrop(shot, asset.crop, scale);
         const file = path.join(OUT_DIR, `${asset.name}.png`);
         const r = writePng(
           img,
           SURVEY ? { ...asset, width: img.width, single: true } : asset,
           file,
         );
+        // The third file: the capture itself, at the width it was drawn at.
+        const large = SURVEY ? 0 : largeWidth(asset);
+        const big = large ? await writeLarge(client, img, file.replace(/\.png$/, '@3x')) : null;
+        if (FORMATS) say(`       ${await compareFormats(client, img)}`);
         say(
           `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ` +
             `${(r.bytes / 1024).toFixed(0)} KB` +
             (r.half ? ` + ${(r.half / 1024).toFixed(0)} KB at half` : '') +
+            (big ? ` + ${path.basename(big.file)} ${big.width}x${big.height} ${big.said}` : '') +
             `  ${((Date.now() - t0) / 1000).toFixed(1)}s`,
         );
       } catch (error) {
@@ -815,6 +712,11 @@ await withChrome(
         say(`  FAIL ${asset.name.padEnd(22)} ${error.message.split('\n')[0]}`);
       } finally {
         permission?.stop();
+        if (held) {
+          await client
+            .send('Page.removeScriptToEvaluateOnNewDocument', { identifier: held.identifier })
+            .catch(() => {});
+        }
         // Release the page before the daemon is asked to go: an SSE stream is
         // a request in flight, and the polite order costs one command.
         await client.send('Page.navigate', { url: 'about:blank' }).catch(() => {});

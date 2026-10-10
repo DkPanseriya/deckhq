@@ -1,8 +1,10 @@
 /*
  * Everything on this site that needs a script.
  *
- * Five things, and the page is whole without any of them:
+ * Six things, and the page is whole without any of them:
  *
+ *   - a moving picture below the first one plays when it is scrolled to.
+ *     Without the script it is its first frame, a still;
  *   - a link to one answer on the Questions page opens that answer. Without
  *     the script the link lands on the question, closed;
  *
@@ -111,6 +113,31 @@
     box.appendChild(line);
     box.classList.add('is-live');
   });
+
+  /* -------------------------------------------------------------- loops */
+
+  /* A loop is fetched and played when it is scrolled to and paused when it
+     leaves; none plays for a reader who asked for less motion. */
+  const loops = document.querySelectorAll('.loop video');
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    loops.forEach(function (video) {
+      video.removeAttribute('autoplay');
+      video.pause();
+    });
+  } else if ('IntersectionObserver' in window) {
+    const seen = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) entry.target.pause();
+          else entry.target.play().catch(function () {});
+        });
+      },
+      { rootMargin: '200px' },
+    );
+    loops.forEach(function (video) {
+      seen.observe(video);
+    });
+  }
 
   /* ------------------------------------------------------------ answers */
 

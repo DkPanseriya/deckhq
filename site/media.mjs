@@ -12,8 +12,10 @@
  *   - a still comes as a pair, `name.png` and `name@2x.png`, and the page gets
  *     a `srcset` naming both, so a dense screen is sharp and an ordinary one
  *     downloads half the pixels;
- *   - a loop is a GIF with its first frame beside it as a still, and a reader
- *     who asked for reduced motion is served the still;
+ *   - a loop is a video at sixty frames a second, `name.mp4`, played over its
+ *     own first frame, which is a still like any other. The still is what the
+ *     page lays out, what a screen reader is told about, and all a reader who
+ *     asked for reduced motion is ever sent;
  *   - every `<img>` leaves here with its own width and height, so nothing on a
  *     page moves while a picture arrives.
  */
@@ -21,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { inspectMp4 } from '../scripts/lib/mp4-mux.mjs';
 import { placeholderFor } from './placeholder.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,11 +39,25 @@ export const MEDIA_DIR = path.join(root, 'docs', 'media', 'site');
  */
 export const BUDGET = {
   still: 400 * 1024,
-  loop: 3 * 1024 * 1024,
-  /** A whole page read to the bottom on a dense screen, loops included. */
-  page: { 'index.html': 2.5 * 1024 * 1024, default: 3 * 1024 * 1024 },
-  /** What arrives before a reader scrolls: the document, its assets, the hero. */
-  firstView: 600 * 1024,
+  /** A loop is a video now; the heaviest is under 600 KB. It was 3 MB, for GIFs. */
+  loop: 1024 * 1024,
+  /**
+   * A whole page read to the bottom on a dense screen, loops included. The
+   * home page was held to 2.5 MB while its two loops were GIFs at 25 frames a
+   * second; as video at 60, twice as wide, it measures 2977 KB.
+   */
+  page: { 'index.html': 3 * 1024 * 1024, default: 3 * 1024 * 1024 },
+  /**
+   * What arrives before a reader scrolls: the document, its assets, the hero's
+   * first frame and the whole of the hero's video. It was 600 KB, when the
+   * hero was a 385 KB GIF, 1140 pixels wide at 25 frames a second. The video
+   * is 586 KB at 2400 pixels and 60 frames a second, which is as light as
+   * Chrome's encoder makes it without softening it, and it measures 797 KB.
+   * The picture is on the page sooner than it was: its first frame and
+   * everything before it are 211 KB of that, and the video plays over it as
+   * it arrives.
+   */
+  firstView: 850 * 1024,
 };
 
 /**
@@ -65,14 +82,20 @@ export function declaredMedia() {
   const names = new Set();
   for (const asset of manifest.assets) {
     names.add(`${asset.name}.png`);
-    if (asset.kind === 'gif') names.add(`${asset.name}.gif`);
-    else if (!asset.single) names.add(`${asset.name}@2x.png`);
+    if (!asset.single) names.add(`${asset.name}@2x.png`);
+    if (asset.kind === 'loop') names.add(`${asset.name}.mp4`);
   }
   return names;
 }
 
+/** The loops the manifest declares, by name: `hero-walk`, not a file. */
+export function declaredLoops() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(here, 'assets.json'), 'utf8'));
+  return new Set(manifest.assets.filter((a) => a.kind === 'loop').map((a) => a.name));
+}
+
 /**
- * The pixel size of a PNG or a GIF, read out of its header.
+ * The pixel size of a PNG, a GIF or an MP4, read out of the file itself.
  *
  * @param {string} file
  * @returns {{width: number, height: number} | null}
@@ -91,11 +114,22 @@ export function imageSize(file) {
   if (ext === '.gif' && bytes.length > 10 && bytes.subarray(0, 3).toString('latin1') === 'GIF') {
     return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
   }
+  if (ext === '.mp4') {
+    try {
+      const { width, height } = inspectMp4(bytes);
+      return { width, height };
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
 /** The width under which a page shows a picture's closer crop, where it has one. */
 export const NARROW = '(max-width: 39.99rem)';
+
+/** The readers a loop is played for: the ones who did not ask for less motion. */
+export const MOTION = '(prefers-reduced-motion: no-preference)';
 
 /** @param {string} tag @param {string} name */
 const attr = (tag, name) => (tag.match(new RegExp(`\\s${name}="([^"]*)"`)) ?? [null, null])[1];
@@ -124,9 +158,15 @@ export function resolveOptional(body) {
  */
 export function referencedMedia(html) {
   const seen = new Set();
-  for (const m of html.matchAll(/(?:^|["\s,])media\/([\w@.-]+\.(?:png|gif))/g)) seen.add(m[1]);
+  for (const m of html.matchAll(/(?:^|["\s,])media\/([\w@.-]+\.(?:png|gif|mp4))/g)) seen.add(m[1]);
   return [...seen];
 }
+
+/** `media/hero-walk.png` -> `hero-walk`, when that is a loop the manifest declares. */
+const loopOf = (src, loops) => {
+  const name = path.basename(src, '.png');
+  return loops.has(name) ? name : null;
+};
 
 /**
  * Copy the pictures the pages show into the built site, and nothing else.
@@ -137,11 +177,13 @@ export function referencedMedia(html) {
  */
 export function publishMedia(outDir, files) {
   const declared = declaredMedia();
+  const loops = declaredLoops();
   const wanted = new Set(files);
-  // A still brings its dense sibling, and a loop brings its first frame.
+  // A still brings its dense sibling, and a loop's still brings its video.
   for (const file of files) {
     if (file.endsWith('.gif')) wanted.add(file.replace(/\.gif$/, '.png'));
     else if (declared.has(dense(file))) wanted.add(dense(file));
+    if (loopOf(file, loops)) wanted.add(`${loopOf(file, loops)}.mp4`);
   }
   let bytes = 0;
   let heaviest = { file: '', bytes: 0 };
@@ -155,7 +197,7 @@ export function publishMedia(outDir, files) {
       throw new Error(`media/${file} is declared and not captured: run scripts/site-assets.mjs`);
     }
     const size = fs.statSync(from).size;
-    const budget = file.endsWith('.gif') ? BUDGET.loop : BUDGET.still;
+    const budget = /\.(gif|mp4)$/.test(file) ? BUDGET.loop : BUDGET.still;
     if (size > budget) {
       throw new Error(
         `media/${file} is ${Math.round(size / 1024)} KB, over the ` +
@@ -186,6 +228,7 @@ export function publishMedia(outDir, files) {
  * @param {Record<string, [number, number, number]>} [tones] `placeholderTones()`
  */
 export function dressImages(body, outDir, tones = {}) {
+  const loops = declaredLoops();
   return body.replace(/<img\b[^>]*>/g, (tag) => {
     const src = attr(tag, 'src');
     if (!src || !src.startsWith('media/')) return tag;
@@ -211,6 +254,26 @@ export function dressImages(body, outDir, tones = {}) {
       return (
         `<picture><source media="${NARROW}" srcset="${narrow} 1x, ${dense(narrow)} 2x" ` +
         `width="${small.width}" height="${small.height}" />${img}</picture>`
+      );
+    }
+    const loop = loopOf(src, loops);
+    if (loop) {
+      // The video is laid over its own first frame and takes no room of its
+      // own, so the still is what holds the box, what is described, and what
+      // is lazy. The first picture on a page plays at once; any other is
+      // fetched and played by the script when it is scrolled to, because a
+      // video with `autoplay` is fetched whole wherever on the page it is.
+      // `media` on the source is the reduced-motion rule, in the markup: a
+      // reader who asked for less is offered no source, so nothing is fetched
+      // and the still is all there is.
+      const video = imageSize(path.join(outDir, 'media', `${loop}.mp4`));
+      if (!video) throw new Error(`media/${loop}.mp4 is not a video this build can measure`);
+      const first = /\sfetchpriority="high"/.test(tag);
+      return (
+        `<span class="loop">${img}<video${first ? ' autoplay' : ''} muted loop playsinline ` +
+        `preload="${first ? 'metadata' : 'none'}" width="${video.width / 2}" ` +
+        `height="${video.height / 2}" aria-hidden="true" tabindex="-1">` +
+        `<source src="media/${loop}.mp4" type="video/mp4" media="${MOTION}" /></video></span>`
       );
     }
     if (!src.endsWith('.gif')) return img;
@@ -273,6 +336,14 @@ export function pageWeight(outDir, rel, opts = {}) {
     seen.add(src);
     const image = path.resolve(path.dirname(file), src);
     if (fs.existsSync(image)) bytes += fs.statSync(image).size;
+  }
+  // A video is counted whole: one with `autoplay` is fetched to its last byte
+  // as soon as the page is, and any other when the reader scrolls to it.
+  for (const [tag, src] of html.matchAll(/<video\b[^>]*>\s*<source\b[^>]*\ssrc="([^"]+)"/g)) {
+    if ((!all && !/\sautoplay[\s>]/.test(tag)) || seen.has(src)) continue;
+    seen.add(src);
+    const video = path.resolve(path.dirname(file), src);
+    if (fs.existsSync(video)) bytes += fs.statSync(video).size;
   }
   return bytes;
 }

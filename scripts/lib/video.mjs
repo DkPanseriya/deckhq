@@ -188,7 +188,8 @@ export function avcLevel(width, height, fps) {
  * Encode frames in the page and bring the chunks back.
  *
  * @returns {Promise<{samples:{data:Uint8Array,key:boolean}[], avcC:Uint8Array, codec:string,
- *   colorSpace:any, scaled:boolean}>}
+ *   colorSpace:any, said:any, scaled:boolean}>} `said` is the colour space as the
+ *   encoder named it; `colorSpace` is the same thing as code points, for the file
  */
 async function encode(evaluate, frames, fps, cfg) {
   await evaluate(ENCODER);
@@ -350,6 +351,39 @@ export async function measureVideo(file, first) {
   return { ...measured, container: inspectMp4(bytes) };
 }
 
+/**
+ * One decoded frame of a video file, as PNG bytes: what a reader sees at that
+ * moment, compression and all. A poster is the frame before it was encoded,
+ * so looking at a poster says nothing about what the encoder did to it.
+ *
+ * @param {string} file an MP4
+ * @param {number} seconds
+ * @returns {Promise<Buffer>}
+ */
+export async function videoStill(file, seconds) {
+  const bytes = fs.readFileSync(file);
+  const png = await onBlankPage(async (evaluate) => {
+    await hand(evaluate, '__mp4', bytes.toString('base64'));
+    return evaluate(`(async () => {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.preload = 'auto';
+      const data = Uint8Array.from(atob(window.__mp4), (c) => c.charCodeAt(0));
+      v.src = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
+      await new Promise((ok) => v.addEventListener('loadeddata', ok, { once: true }));
+      const shown = new Promise((ok) => v.requestVideoFrameCallback(ok));
+      v.currentTime = ${Number(seconds)};
+      await shown;
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      c.getContext('2d').drawImage(v, 0, 0);
+      return c.toDataURL('image/png').split(',')[1];
+    })()`);
+  });
+  return Buffer.from(png, 'base64');
+}
+
 /* ------------------------------------------------------------------ write */
 
 /**
@@ -364,9 +398,13 @@ export async function measureVideo(file, first) {
  * @param {(string|Buffer|{width:number,height:number,data:Uint8Array})[]} frames
  * @param {number} fps
  * @param {{width?:number, height?:number, bitrate?:number, keyEvery?:number,
- *          measure?:boolean}} [opts]
- *   `bitrate` in bits a second (default: a tenth of a bit a pixel a frame);
+ *          measure?:boolean, encoder?:object}} [opts]
+ *   `bitrate` in bits a second (default: a tenth of a bit a pixel a frame). It
+ *   is a ceiling and not a size: Chrome's software encoder has a quality it
+ *   does not go past, and a floor that mostly stands still reaches it far
+ *   under the default. Lower it only to make a file smaller and softer.
  *   `keyEvery` in frames (default: two seconds, so a seek never decodes more).
+ *   `encoder` is merged over the `VideoEncoder` configuration, for a trial.
  */
 export async function writeVideo(file, frames, fps, opts = {}) {
   if (!frames.length) throw new Error('writeVideo: no frames');
@@ -386,7 +424,13 @@ export async function writeVideo(file, frames, fps, opts = {}) {
       bitrate,
       bitrateMode: 'variable',
       latencyMode: 'quality',
+      // A picture of an interface, not of the world. Measured on 60 frames of
+      // Your Office at 1404x1212 and 20 Mbit/s: the key frame is the same
+      // 58 KB either way, and the frames after it average 0.5 KB with this
+      // hint against 2.4 KB without, at the same picture.
+      contentHint: 'detail',
       avc: { format: 'avc' },
+      ...opts.encoder,
     },
   };
   const t0 = Date.now();
