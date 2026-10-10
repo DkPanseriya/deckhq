@@ -74,7 +74,7 @@ import {
   setNotifications,
   setPrevActivityStates,
 } from './app-notify.js';
-import { redactSnapshots, takeSnapshot, toggleRedaction } from './app-snapshot.js';
+import { redactSnapshots, sharePicture, takeSnapshot, toggleRedaction } from './app-snapshot.js';
 import {
   dismissCard,
   maybeShowNightCard,
@@ -791,6 +791,7 @@ const paletteUI = createPalette({
     // WP-83. Whether any currency figure appears at all, anywhere.
     setShowCost: (next) => setShowCost(next, toast),
     snapshot: takeSnapshot,
+    sharePicture,
     toggleRedaction,
     toggleLetGoVisible: () => {
       letGoVisible = !letGoVisible;

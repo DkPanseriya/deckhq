@@ -198,7 +198,33 @@ export function reportSnapshot({ copied, saved, oversize, bytes }) {
   if (copied) parts.push('on the clipboard');
   if (saved) parts.push(`saved to ${saved}`);
   const tail = oversize ? ` It is ${mb} MB, over the 2 MB target.` : '';
-  toast(`${what} ${parts.join(' and ')}.${tail}`);
+  // A snapshot is the window as it is. The picture made to be posted — a fixed
+  // frame, names hidden unless asked — is one button away from it, and this is
+  // where somebody who wanted that one finds out it exists.
+  toast(`${what} ${parts.join(' and ')}.${tail}`, {
+    action: { label: 'Share picture…', run: sharePicture },
+  });
+}
+
+/**
+ * `X` — "Share picture of the floor…". The sheet and the second floor behind
+ * it are loaded the first time somebody asks, like the floating office: most
+ * sessions never open it, and none should pay for it at boot.
+ */
+export async function sharePicture() {
+  try {
+    const sheet = await import('./share-sheet.js');
+    sheet.openShareSheet({
+      copyPng,
+      saveSnapshot,
+      snapshotFonts,
+      busy: () => capturing,
+      setBusy: setCapturing,
+    });
+  } catch (err) {
+    console.warn('[deckhq] the share sheet could not be loaded', err);
+    toast('The share sheet could not be loaded.', { isError: true });
+  }
 }
 
 /** `Shift+S`. A toggle that says which way it went, because the next `S` acts on it. */

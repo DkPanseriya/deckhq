@@ -347,6 +347,14 @@ const CAPTURES = [
   // its button, inside the window, with eleven legible pictures in it. `L` is the floor's own key for it, so the way in is the way
   // a person has — `three@selected`'s rule.
   { name: 'look-bar', population: 'three', theme: 'default', press: 'L' },
+  // THE SHARE SHEET, open with its defaults over the `demo` floor: `X`, the
+  // floor's own key for it. What it holds is the one claim about this feature a
+  // unit test cannot make — that the preview in the sheet is a picture of the
+  // floor behind it with every room renamed. The floor behind says
+  // `orbital-api`; the preview says something else, in the same place, over the
+  // same people. `share-redact.test.mjs` proves no name is in the copy; this is
+  // the photograph of the copy being what was drawn.
+  { name: 'share@demo', population: 'demo', theme: 'default', press: 'X' },
   { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
   { name: 'demo@small', population: 'demo', theme: 'default', query: 'scale=small' },
   // THE TWO OTHER WAYS OF DIVIDING A FLOOR, each through the style that asks

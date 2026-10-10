@@ -573,7 +573,8 @@ Everything is read locally and nothing leaves the machine.
   disk. Derived and disposable; delete it any time and it rebuilds.
 - `~/.deckhq/backups/` — a copy of your Claude Code settings file, taken before DeckHQ ever
   modifies it.
-- `~/.deckhq/snapshots/` — only what `--capture-proof` writes, when you ask for it.
+- `~/.deckhq/snapshots/` — the pictures you ask for and nothing else: `S`, a saved card, a
+  [share picture](#share-a-picture-of-your-floor), and `doctor --capture-proof`.
 - `~/.deckhq/daemon.json` — the port a running daemon bound, so a hook can find it. Removed on a
   clean shutdown; nothing you own is in it.
 - `~/.deckhq/rates.json` — your own prices, if you set any. Edit it in the settings sheet or in a
@@ -975,6 +976,7 @@ These are real, and listed here rather than discovered later.
 | `,`                 | Settings — the whole sheet, its sections named across the top            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk  |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot     |
+| `X`                 | Share picture — a sheet with a preview; names hidden unless you say so   |
 | `Esc`               | Close the panel — or dismiss the day's card, if one is up                |
 | `+` / `-`           | Magnify, 1x to 2.5x                                                      |
 | `0`                 | Back to fit — which is also the minimum                                  |
@@ -998,6 +1000,43 @@ something — `A`, `D` and `S` belong to that card: allow, deny, and allow for t
 session. It holds only while the card is up and the composer is unfocused. With the day's card or
 Wrapped on screen, `S` saves **that** — the card plus a small photograph of the floor it is about.
 `Shift+S` is the redaction toggle either way.
+
+## Share a picture of your floor
+
+`S` photographs the window as it is. `X` — or **Share picture of the floor…** in `⌘K`, or the
+button on a snapshot's toast — makes the other picture: one meant to be shown to people who should
+not see what you are working on.
+
+It opens a small sheet with a live preview and three switches, all on when it opens, every time:
+
+| Switch                   | On                                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| **Hide project names**   | Every room is renamed with an invented repository name; a worktree's bench reads `branch 1`.      |
+| **Hide session details** | No session title, no tool text, no model. A working robot's bubble says `shell` or `files` only.   |
+| **Add the footer**       | A slim band under the floor: the DeckHQ mark, one line of the floor's own numbers, `deckhq.dev`. |
+
+**What is hidden, and why.** A real floor carries real names: the repository on each room's plate,
+the branch on a worktree's bench, the command over a working robot's head. Those are the things a
+picture gives away, so they are off unless you turn them on. A room keeps the same invented name
+from one picture to the next, so a floor you post twice is recognisably the same floor.
+
+**What stays.** The robots' names — Elif, Kobe; they are DeckHQ's own, from its list, not yours —
+their states, who is waiting and for how long, where everybody sits, and the counts. That is the
+picture. A name you typed for a robot yourself is treated as a session detail and replaced by the
+one DeckHQ gave it.
+
+**What is never in the picture, whatever the switches say:** a directory on your disk, a session
+id, a pending permission prompt, the queue strip, the header, your cursor.
+
+The picture is not a screenshot with things painted over. It is drawn again, by the same painters
+in your current theme and style, from a copy of the floor that those names were never put into —
+so there is nothing under the paint. It is 16:9 (3520 × 1980) or square, with a margin of ground
+round the building.
+
+**Save picture** writes a PNG to `~/.deckhq/snapshots/`, where `S` writes. **Copy image** puts the
+same picture on your clipboard, and **Reveal file** opens that folder. Nothing is uploaded, posted
+or sent: DeckHQ makes no network call, and "share" here means a file and your clipboard. Making a
+picture changes nothing on the floor — no session is acknowledged, benched or touched.
 
 ## The day's card, and Wrapped
 

@@ -6067,3 +6067,117 @@ textarea.field-input {
   color: var(--ink);
 }
 /* WP-69 · the Studio board — end ----------------------------------------- */
+
+/* ============================================ the share picture's sheet
+   `X`, or "Share picture of the floor…" in ⌘K. Built by public/share-sheet.js.
+   A dialog like the others, a little wider so the preview is a picture
+   rather than a thumbnail. Every colour is a chrome token. */
+.dialog--share {
+  max-width: 44rem;
+  width: min(94vw, 44rem);
+}
+.dialog--share .dialog-body {
+  max-height: 78vh;
+}
+.share-preview {
+  display: grid;
+  place-items: center;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+/* The picture, scaled. A square frame is held to the height the wide one
+   takes, so choosing 1:1 does not push the switches off the sheet. */
+.share-preview-canvas {
+  display: block;
+  width: 100%;
+  max-width: calc(23.5rem * var(--share-ratio, 1.7778));
+  height: auto;
+}
+.share-switch {
+  margin: 0.55rem 0;
+  align-items: flex-start;
+}
+.share-switch-text {
+  display: block;
+  min-width: 0;
+}
+.share-switch .field-label {
+  color: var(--ink-2);
+}
+.share-switch .field-note {
+  display: block;
+  margin: 0.15rem 0 0;
+}
+.share-switch .btn {
+  flex: 0 0 auto;
+  min-width: 3.2rem;
+}
+.share-shapes {
+  display: flex;
+  gap: 0.4rem;
+}
+/* The one line that says where the picture goes. It is the answer to the
+   question a word like "share" raises, so it is in ink and not in muted. */
+.share-note {
+  margin: 0.9rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.dialog-body .share-status {
+  margin: 0.6rem 0 0;
+  min-height: 1.2em;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* An error is marked the way a toast marks one: the dot, and ink for the words. */
+.share-status.is-error::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.08em;
+}
+/* Where the second scene's canvas is laid out: at its real size, so the
+   renderer measures a real box, and nowhere anybody can see or reach. */
+.share-stage {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* A toast's one button (`toast(…, {action})`): what you probably want next. */
+.toast.has-action {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.toast-action {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.toast-action:hover {
+  background: var(--surface);
+}
+.toast-action:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
