@@ -47,6 +47,7 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/atom+xml; charset=utf-8',
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',

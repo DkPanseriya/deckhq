@@ -476,6 +476,7 @@ kbd {
    the type is a step under the display size and the gaps are short. */
 .hero {
   padding-top: clamp(1.25rem, 0.5rem + 1.8vw, 2.25rem);
+  padding-bottom: var(--s-5);
 }
 
 .hero-copy {

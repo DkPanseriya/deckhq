@@ -527,9 +527,23 @@ img.ph-floor {
 }
 
 /* Two tools, side by side. The row heads are words, not labels. */
+.versus,
+.os {
+  table-layout: fixed;
+}
+
 .versus {
   min-width: 42rem;
   font-size: var(--t-body);
+}
+
+/* The corner cell sets the first column; the others share what is left. */
+.versus thead td {
+  width: 16%;
+}
+
+.os thead td {
+  width: 28%;
 }
 
 tbody th {
@@ -539,12 +553,7 @@ tbody th {
 }
 
 .versus tbody th {
-  width: 9.5rem;
   font-size: var(--t-body);
-}
-
-.versus td {
-  width: 44%;
 }
 
 /* What has been run where: one row a capability, one column a system. */
@@ -552,11 +561,7 @@ tbody th {
   min-width: 40rem;
 }
 
-.os tbody th {
-  width: 30%;
-}
-
-.os tbody td {
+:is(.versus, .os) tbody td {
   color: var(--ink-2);
   font-weight: 400;
   white-space: normal;

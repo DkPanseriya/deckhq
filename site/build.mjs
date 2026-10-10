@@ -8,8 +8,10 @@
  * There is no site generator here and no dependency to add one. The pages in
  * `site/pages/` are hand-written HTML bodies; this script wraps each one in the
  * shared shell, finishes its pictures (`site/media.mjs`), renders the release
- * highlights out of `CHANGELOG.md` (`site/markdown.mjs`), and copies the
- * captures the pages show out of `docs/media/site/`.
+ * highlights out of `CHANGELOG.md` (`site/markdown.mjs`), once as a page and
+ * once as an Atom feed, fills the blocks a page asks for by name
+ * (`site/slots.mjs`), and copies the captures the pages show out of
+ * `docs/media/site/`.
  *
  * The site is the product and what it does for the person using it. It
  * publishes no planning document and names none; `INTERNAL` below is that rule
