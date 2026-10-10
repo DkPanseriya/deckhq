@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A Studio handover is no longer lost when the board is busy.** When a hired session handed its
+  work over, DeckHQ marks the card on the board. On Windows that write is refused for an instant
+  while anything else has the board file open — the page reading it, an editor, a virus scanner —
+  and when it was refused the handover was never flagged and never offered again. A handover is now
+  counted as seen only once its flag is written; one that could not be written is tried again, and
+  the write itself retries for a third of a second before giving up.
+
 ## 1.7.0 — 2026-10-11
 
 ### Highlights
