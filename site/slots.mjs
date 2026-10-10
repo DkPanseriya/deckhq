@@ -13,13 +13,13 @@
 import { esc } from './markdown.mjs';
 
 /**
- * The hosted sign-up form: "one e-mail when it lands". EMPTY TODAY, and while
- * it is empty no button is rendered anywhere. Setting it is the whole change:
- * the home page grows the button, the footer grows a link to it, and
+ * The hosted sign-up form: "one e-mail when it lands". While it is empty no
+ * button is rendered anywhere. Setting it is the whole change: the home page
+ * grows the button, the footer grows a link to it, and
  * `test/unit/site.test.mjs` takes this address's host into its allow-list.
  * It must be an `https://` address.
  */
-export const WAITLIST_URL = '';
+export const WAITLIST_URL = 'https://deckhq.kit.com/e4794f71f8';
 
 /** The release feed, beside the pages. */
 export const FEED = 'feed.xml';
