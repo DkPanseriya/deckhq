@@ -434,6 +434,7 @@ export const REST_LIFE = Object.freeze({
  *   icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
+ *   toolSpot?:{dx:number, text:string}|null,
  *   phase?:number|null, life?:import('./life.js').Life|null,
  *   seat?:string|null, laptop?:number|null,
  *   identity?:{hair:string, accent:string, glyph:string}|null,
@@ -454,7 +455,9 @@ export const REST_LIFE = Object.freeze({
  *   `tool` (WP-52): the agent's `currentTool` from the snapshot, or null. Drawn
  *   as a bubble with the summary at `lod >= 1`, as a tool-class icon at L0 and
  *   under reduced motion, and not at all when a state icon or a waiting badge
- *   already occupies the space above the head.
+ *   already occupies the space above the head. `toolSpot`: where the frame's
+ *   label pass set that bubble — a step aside and the line it has room for —
+ *   or `null` where it found no room; omitted, the bubble is centred and whole.
  *   `labelOffsetY`, `labelOffsetX`: screen-px nudges applied to the label only.
  *   `labelPx`, `labelLeader`: the collision pass's smaller size, and its leader line.
  *   `labelRole` (WP-99): a sub-agent's role word, the first row of its tag.
@@ -584,8 +587,12 @@ export function drawCharacter(ctx, pose, opts) {
     drawIcon(ctx, ox, oy, u, opts.icon, color, pose.ringPhase);
   } else if (showTool && lod >= 1 && !reduced) {
     // WP-64: an MCP tool's raw id reads `Gmail · send` here. Every other
-    // tool's summary is the adapter's, unchanged.
-    drawToolBubble(ctx, ox, oy, u, toolBubbleText(tool));
+    // tool's summary is the adapter's, unchanged. The frame's label pass says
+    // where (`toolSpot`, `bubble-spots.js`): a step aside from a neighbour's
+    // name, a shorter line, or `null` — a name is on every side, no bubble.
+    if (opts.toolSpot !== null) {
+      drawToolBubble(ctx, ox, oy, u, toolBubbleText(tool), opts.toolSpot || undefined);
+    }
   } else if (showTool) {
     // L0, or reduced motion at any LOD: the class, not the sentence.
     drawToolIcon(ctx, ox, oy, u, toolIconKind(tool.name));

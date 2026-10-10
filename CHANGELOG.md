@@ -49,6 +49,11 @@
   desk, and one junior's name with it, until something else happened. A robot that has left is now
   cleared away as soon as it has finished folding, without waiting for the next change; a crew's
   count is of the juniors who are still there; and a name on a leader line fades with its robot.
+- **A tool bubble no longer runs into the name beside it.** The bubble that says what a session is
+  doing — `Bash npm test` — is as wide as its line, and at a shared desk that reached the name of
+  the robot in the next chair. It now follows the thought cloud's rule: it steps to one side of its
+  own head, as far as the other side; if that is not enough the line is cut shorter; and only where
+  a name, a **Junior** chip, a wait badge or a crew's count is on every side is it not drawn.
 - **A name is always inside its own room.** Under the bottom sofa of Your Office each name hung
   exactly on the wall between the office and the lounge. A name on a sofa that backs onto a wall is
   now lifted onto the sofa's front edge, under the same feet and inside the room; where there is no

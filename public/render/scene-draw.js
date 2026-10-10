@@ -605,6 +605,8 @@ export class SceneDraw extends SceneFrame {
       // from a daemon that predates the field simply has none, and nothing is
       // drawn.
       tool: agent.currentTool || null,
+      // Where its bubble goes, clear of every name (`bubble-spots.js`).
+      toolSpot: labels && labels.bubbles ? labels.bubbles.get(rec.id) : undefined,
       identity,
       appearance,
       selected: rec.id === this._selectedId,

@@ -19,15 +19,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LARGE_NOW, populationFloor } from '../helpers/large-floor.mjs';
-import { frameAt } from '../helpers/label-frame.mjs';
+import { drawnBox, frameAt, hits, measuringCtx } from '../helpers/label-frame.mjs';
 import { paintRecorder } from '../helpers/paint-recorder.mjs';
 import { fakeId } from '../../scripts/demo-write.mjs';
-import { AgentRuntime, assignSeats } from '../../public/render/agents.js';
+import { AgentRuntime, assignSeats, worldToScreen } from '../../public/render/agents.js';
+import { BUBBLE_CLEAR_PX, BUBBLE_STEP, placeBubbles } from '../../public/render/bubble-spots.js';
+import { toolBubbleBox } from '../../public/render/rig-bubble.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { LIFE } from '../../public/render/life.js';
-import { drawLabel } from '../../public/render/rig.js';
+import { drawCharacter, drawLabel } from '../../public/render/rig.js';
+import { sampleClip } from '../../public/render/clips.js';
 import { planFrameLabels } from '../../public/render/scene-frame-labels.js';
-import { PALETTE } from '../../public/render/palette.js';
+import { PALETTE, STATE_COLORS } from '../../public/render/palette.js';
 
 /**
  * A demo population under the ids the demo floor gives it (`fakeId`, counted
@@ -226,4 +229,183 @@ test('a name on a leader fades with the figure it names', () => {
   assert.ok(after.some((p) => p.op === 'fillText' && p.args[0] === 'Femi'));
   for (const p of after) assert.equal(p.alpha, 0.25, `${p.op} ${p.args[0]} at ${p.alpha}`);
   assert.equal(ctx.globalAlpha, 0.25, 'and the context is handed back as it came');
+});
+
+// ------------------------------------------ 3 · a tool bubble yields to a name
+
+/** What a cloud or a bubble may not cover: every name set, every badge, pill and chip. */
+function takenOf(f) {
+  const names = f.labels.labels
+    .filter((it) => f.labels.plan.get(it.id))
+    .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
+  return [...names, ...f.labels.obstacles.filter((o) => /^(badge|pill|chip):/.test(o.id))];
+}
+
+/** The box a figure's bubble is drawn in, where the pass set it. */
+function bubbleAt(f, rec, spot) {
+  const s = worldToScreen(rec, f.camera);
+  const box = toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), spot.text);
+  return { ...box, x: box.x + spot.dx };
+}
+
+/** A demo floor with every working session in the middle of a tool call. */
+function busyFloor(name, summary = 'Bash npm test') {
+  const floor = demoFloor(name);
+  for (const a of floor.agents) {
+    if (a.ackState === 'active' && a.activityState === 'working')
+      a.currentTool = { name: 'Bash', summary };
+  }
+  return floor;
+}
+
+test('`need.office`: the bubble over the session running `npm test` is clear of its neighbour’s name', () => {
+  const f = frameAt(1600, 900, () => busyFloor('pair'), { badges: true });
+  const rec = f.records.find((r) => r.agent.title === 'Rate limiter for the public API');
+  const s = worldToScreen(rec, f.camera);
+  const taken = takenOf(f);
+  const natural = toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), 'Bash npm test');
+  const under = taken.find((t) => hits(natural, t));
+  assert.ok(under && under.id !== rec.id, 'centred over its head, it is over somebody else’s name');
+  const spot = f.labels.bubbles.get(rec.id);
+  assert.ok(spot, 'it is drawn: there is room beside the name');
+  assert.equal(spot.text, 'Bash npm test', 'and whole: a step aside was enough');
+  assert.notEqual(spot.dx, 0);
+  const box = bubbleAt(f, rec, spot);
+  assert.equal(taken.find((t) => hits(box, t))?.id, undefined);
+  // Still over its own head: the head's centre line is under the bubble.
+  assert.ok(box.x <= s.x + 0.01 && box.x + box.w >= s.x - 0.01, 'the bubble left its figure');
+});
+
+test('no tool bubble is over a name, a role chip, a wait badge or a crew chip', () => {
+  const seen = { natural: 0, aside: 0, shorter: 0, none: 0, wouldCover: 0 };
+  for (const name of ['pair', 'crew', 'demo', 'crowded']) {
+    for (const [w, h, zoom] of [
+      [1420, 690, 1],
+      [1600, 900, 1],
+      [2000, 1024, 1],
+      [1600, 900, 2.5],
+    ]) {
+      const long = 'Edit src/render/scene-frame-labels.js';
+      for (const summary of ['Bash npm test', long]) {
+        const f = frameAt(w, h, () => busyFloor(name, summary), { badges: true, zoom });
+        if (f.lod < 1) continue;
+        const taken = takenOf(f);
+        for (const rec of f.records) {
+          const s = worldToScreen(rec, f.camera);
+          const spot = f.labels.bubbles.get(rec.id);
+          if (!rec.agent.currentTool) {
+            assert.equal(spot, undefined, `${rec.id} has no tool and is given a bubble`);
+            continue;
+          }
+          const natural = toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), summary);
+          // "In its way" is on it or within the floor a bubble keeps clear.
+          const c = BUBBLE_CLEAR_PX;
+          const reach = { x: natural.x - c, y: natural.y - c, w: natural.w + c * 2 };
+          const covers = taken.some((t) => hits({ ...reach, h: natural.h + c * 2 }, t));
+          if (covers) seen.wouldCover++;
+          const where = `${name} ${w}x${h} x${zoom}: ${rec.agent.label}`;
+          if (spot === null) {
+            assert.ok(covers, `${where} has no bubble and nothing in its way`);
+            seen.none++;
+            continue;
+          }
+          // Where nothing is in its way, nothing about it changes.
+          if (!covers) assert.deepEqual(spot, { dx: 0, text: natural.text }, where);
+          const box = bubbleAt(f, rec, spot);
+          const over = taken.find((t) => hits(box, t));
+          assert.equal(over, undefined, `${where}: its bubble is over ${over?.id}`);
+          // Never farther than the other side of the head, and never a longer line.
+          assert.ok(box.x <= s.x + 0.01 && box.x + box.w >= s.x - 0.01, `${where} left its head`);
+          assert.ok(box.w <= natural.w + 0.01, where);
+          if (spot.text !== natural.text) seen.shorter++;
+          else if (spot.dx !== 0) seen.aside++;
+          else seen.natural++;
+        }
+      }
+    }
+  }
+  assert.ok(seen.wouldCover > 0, 'unplaced, a bubble covers a name on these floors');
+  assert.ok(seen.aside > 0, `some step aside: ${JSON.stringify(seen)}`);
+  assert.ok(seen.natural > seen.none * 4, `and few have none: ${JSON.stringify(seen)}`);
+  assert.equal(seen.wouldCover, seen.aside + seen.shorter + seen.none);
+});
+
+test('a bubble is whole over its head, then a step aside, then shorter, then not drawn', () => {
+  const ctx = measuringCtx();
+  const fig = { id: 'a', x: 200, y: 300, u: 20, text: 'Bash npm test' };
+  const whole = toolBubbleBox(ctx, fig.x, fig.y, fig.u, fig.text);
+  const place = (taken) => placeBubbles(ctx, [fig], taken).get('a');
+  const name = (x, w) => ({ x, y: whole.y, w, h: whole.h });
+  assert.deepEqual(place([]), { dx: 0, text: 'Bash npm test' });
+
+  // A name at its right-hand end: one step to the left, and the whole line.
+  const right = name(whole.x + whole.w - 3, 30);
+  assert.deepEqual(place([right]), { dx: -BUBBLE_STEP * whole.w, text: 'Bash npm test' });
+  // At its left-hand end: one step to the right, which is tried first.
+  const left = name(whole.x - 27, 30);
+  assert.deepEqual(place([left]), { dx: BUBBLE_STEP * whole.w, text: 'Bash npm test' });
+
+  // A name on each side and less than the line's width between them: every
+  // place is tried for the whole line, and then the line is cut.
+  const narrow = [name(whole.x - 22, 30), name(whole.x + whole.w - 8, 30)];
+  const cut = place(narrow);
+  assert.equal(cut.text, 'Bash npm…');
+  const box = toolBubbleBox(ctx, fig.x, fig.y, fig.u, cut.text);
+  for (const t of narrow) assert.ok(!hits({ ...box, x: box.x + cut.dx }, t));
+  // Closer still, and it is cut to half.
+  const tight = [name(whole.x - 12, 30), name(whole.x + whole.w - 18, 30)];
+  assert.equal(place(tight).text, 'Bash…');
+
+  // A name across the whole of its head: neither side is clear, at any length.
+  assert.equal(place([name(whole.x - 60, whole.w + 120)]), null);
+  // Never farther than the other side of the head.
+  const over = name(fig.x - 20, 40);
+  assert.equal(place([over]), null, 'a name over the head itself is not stepped round');
+});
+
+test('the rig draws the bubble where the pass set it, and none where the pass found no room', () => {
+  const tool = { name: 'Bash', summary: 'Bash npm test' };
+  const draw = (toolSpot) => {
+    const ctx = paintRecorder();
+    ctx.canvas = {};
+    /** @type {number[]} */
+    const beats = [];
+    const seen = new Proxy(ctx, {
+      get: (t, key) => (key === 'arc' ? (x) => beats.push(x) : t[key]),
+      set: (t, key, value) => Reflect.set(t, key, value),
+    });
+    const opts = { x: 100, y: 100, u: 20, lod: 2, color: STATE_COLORS.working, state: 'working' };
+    drawCharacter(seen, sampleClip('type', 0, false), { ...opts, tool, toolSpot });
+    const line = ctx.paints.find((p) => p.op === 'fillText' && /^Bash/.test(p.args[0]));
+    return { line, beats: beats.slice(-2) };
+  };
+  // Nobody said where (a caller with no label pass): centred, whole, as it was.
+  const natural = draw(undefined);
+  assert.deepEqual(natural.line.args.slice(0, 2), ['Bash npm test', 100]);
+  assert.ok(
+    natural.beats.every((x) => x > 100),
+    'its trail rises on the right',
+  );
+  // A step to the left and a shorter line: the text, its plate and the trail go with it.
+  const aside = draw({ dx: -12, text: 'Bash npm…' });
+  assert.deepEqual(aside.line.args.slice(0, 2), ['Bash npm…', 88]);
+  assert.ok(
+    aside.beats.every((x) => x < 100),
+    'and the trail is mirrored to that side',
+  );
+  // No room on either side of the head: no bubble, and no cloud in its place.
+  const none = draw(null);
+  assert.equal(none.line, undefined);
+  assert.ok(
+    none.beats.every((x) => !natural.beats.includes(x)),
+    'nor its trail',
+  );
+});
+
+test('under reduced motion, or at L0, a tool is an icon and nobody is given a bubble', () => {
+  const still = frameAt(1600, 900, () => busyFloor('pair'), { badges: true, reduced: true });
+  assert.equal(still.labels.bubbles.size, 0);
+  const small = frameAt(1420, 690, () => busyFloor('large'), { badges: true });
+  assert.equal(small.lod, 0);
+  assert.equal(small.labels.bubbles.size, 0);
 });
