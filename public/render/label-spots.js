@@ -163,7 +163,7 @@ export function resolveLabelCollisions(items, bounds) {
           const claim = gap > 0 ? { ...rect, y: it.feet.y, h: rect.h + gap } : rect;
           if (!free(claim)) continue;
           placed.push(claim);
-          result.set(it.id, spotOf(it, form, dx, dy, false));
+          result.set(it.id, spotOf(it, form, dx, dy, detached(it, rect)));
           break;
         }
       }
@@ -202,6 +202,24 @@ export function resolveLabelCollisions(items, bounds) {
   }
 
   return result;
+}
+
+/**
+ * Has a NEAR name slid clear of its own figure? A name under its feet may step
+ * sideways a sixteenth of itself at a time to clear a neighbour, and a long tag
+ * under a small body — a junior's `code-reviewer` — can step until no part of
+ * it is under the body it names: still within reach, and reading as nobody's.
+ * Such a name is tied back to its feet by the leader a far name already has. A
+ * name beside the body, at the body's own height, is against it and needs none.
+ * @param {{feet?:{x:number, y:number}, side?:number, bh?:number}} it
+ * @param {{x:number, y:number, w:number, h:number}} rect where it was set
+ */
+function detached(it, rect) {
+  if (!it.feet || !(it.bh > 0)) return false;
+  const side = it.side || 0;
+  const under = rect.x < it.feet.x + side && rect.x + rect.w > it.feet.x - side;
+  const level = rect.y < it.feet.y && rect.y + rect.h > it.feet.y - it.bh;
+  return !under && !level;
 }
 
 /** `up` for a smaller form of the same label: the same bottom line over the head. */

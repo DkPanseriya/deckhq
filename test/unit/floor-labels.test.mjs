@@ -745,6 +745,29 @@ test('no thought cloud is over a name, a role chip, a wait badge or a crew chip'
   assert.equal(wouldCover, mirrored + dropped);
 });
 
+test('a name that is not under, over or beside its own figure is on a leader', () => {
+  for (const name of ['crew', 'demo', 'crowded']) {
+    const f = frameAt(1600, 869, () => populationFloor(name), { badges: true });
+    for (const it of f.labels.labels) {
+      const spot = f.labels.plan.get(it.id);
+      if (!spot) continue;
+      const box = drawnBox(it, spot);
+      const under = box.x < it.feet.x + it.side && box.x + box.w > it.feet.x - it.side;
+      const level = box.y < it.feet.y && box.y + box.h > it.feet.y - it.bh;
+      if (under || level) continue;
+      assert.equal(spot.leader, true, `${name}: ${f.labels.texts.get(it.id)} stands alone`);
+    }
+  }
+  // The rule itself, on the case the crew floor drew: a tag wider than the
+  // body it names, pushed aside at its own depth until none of it is under it.
+  const wide = { id: 'tag', x: 60, y: 104, w: 80, h: 12, keep: true };
+  const item = { ...wide, feet: { x: 100, y: 100 }, bh: 60, side: 6, variants: [] };
+  const chip = { id: 'chip', x: 92, y: 100, w: 16, h: 20, pin: true };
+  const spot = resolveLabelCollisions([chip, item]).get('tag');
+  assert.deepEqual(spot, { offsetY: 0, offsetX: -50, leader: true });
+  assert.equal(resolveLabelCollisions([item]).get('tag').leader, undefined);
+});
+
 test('a cloud takes its own side, then the other, then none', () => {
   const me = { id: 'a', x: 100, y: 100, u: 10 };
   assert.equal(placeClouds([me], []).get('a'), 1);
