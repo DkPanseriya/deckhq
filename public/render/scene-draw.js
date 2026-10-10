@@ -181,6 +181,9 @@ export class SceneDraw extends SceneFrame {
       // `?scale=` and `?look=` paint this tab and write nothing back — the same
       // reason `planSignature` reads it from there too.
       agentSize: LOOK.agentSize,
+      // The rooms the page is holding furniture in (`plan-hold.js`), decided by
+      // `setState` before it asked for this plan; none, on most snapshots.
+      held: this._held || undefined,
     });
     // The fit scale first: the floor is baked at the scale it is drawn at, so
     // the bake has to know it (`scene-bake.js`).
@@ -286,6 +289,9 @@ export class SceneDraw extends SceneFrame {
         makeActivityRotation,
         makeIdleRotation,
       });
+      // A room held back for a walker, or for five minutes, is laid now if it
+      // is due (`plan-hold.js`); on any other frame this asks two numbers.
+      this._settleHold();
       // Drawn only where it would be a different picture from the one on the
       // canvas (`scene-frame.js`): a floor where nobody moved and no minute
       // turned over is left exactly as it is.

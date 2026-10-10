@@ -48,7 +48,9 @@
  * ============================================================================
  */
 
-import { AgentRuntime, assignSeats } from './agents.js';
+import { AgentRuntime, assignSeats, deskSeatsOf } from './agents.js';
+import { FurnishingHold, roomHeadcounts } from './plan-hold.js';
+import { now as clockNow } from '../clock.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
@@ -199,9 +201,13 @@ export class Scene extends SceneInput {
     // genuine new snapshot is not a per-pixel window-drag event. `_rebuildPlan`
     // itself keeps the floor centred at its one fit scale, so there is no
     // separate first-fit step to do here.
+    // What each room is furnished for comes first (`plan-hold.js`): a room one
+    // person has just left is still the room it was, and where that is so the
+    // hold is part of what the building is a function of.
+    const held = this._holdFurniture();
     const parts = planSignatureParts(this._snapshot);
-    const signature = joinPlanSignature(parts);
-    const geometry = parts.geometry.join('~');
+    const signature = joinPlanSignature(parts) + held;
+    const geometry = parts.geometry.join('~') + held;
     if (signature !== this._planSignature && this._plan && geometry === this._planGeometry) {
       // THE SAME BUILDING IN DIFFERENT PAINT. Only the theme moved, and a theme
       // is paint: the plan in hand is still the plan, everybody is still in
@@ -224,18 +230,18 @@ export class Scene extends SceneInput {
       // apply the new snapshot, so the agents whose own state changed walk
       // from their old seat to their new one and nobody else moves.
       if (this._plan) {
-        this._runtime.sync(
-          previousAgents,
-          this._plan,
-          assignSeats(this._plan, previousAgents, { selectedId: this._selectedId }),
-          { now: animMs() },
-        );
+        this._runtime.sync(previousAgents, this._plan, this._seats(previousAgents), {
+          now: animMs(),
+        });
       }
     }
 
     if (this._plan) {
-      const seatMap = assignSeats(this._plan, agents, { selectedId: this._selectedId });
+      const seatMap = this._seats(agents);
       this._runtime.sync(agents, this._plan, seatMap, { now: animMs() });
+      // Where everybody at a desk now sits, so nobody changes chairs because a
+      // neighbour left (`assignKept`). The page's own memory, never written.
+      this._seatKeep = deskSeatsOf(this._plan, seatMap);
     }
 
     if (this.canvas.setAttribute) {
@@ -243,6 +249,80 @@ export class Scene extends SceneInput {
     }
 
     if (!this._running) this._draw(); // keep the floor current even if the loop is paused (hidden tab)
+  }
+
+  /**
+   * Everybody's seat in the plan in hand: `assignSeats`, with the two things
+   * the page knows and the snapshot does not — whose panel is open, and which
+   * desk chair each of them was last in.
+   * @param {any[]} agents
+   */
+  _seats(agents) {
+    return assignSeats(this._plan, agents, { selectedId: this._selectedId, keep: this._seatKeep });
+  }
+
+  /**
+   * WHAT EACH ROOM IS FURNISHED FOR THIS SNAPSHOT (`plan-hold.js`), decided
+   * before the plan is asked for: the most people it has held in the last five
+   * minutes, and unchanged while anybody is walking to it or from it. Kept on
+   * this scene and nowhere else — a reload is a floor furnished for who is on it.
+   * @returns {string} the hold as a suffix for the plan's signature; `''` on a
+   *   floor nothing is held on, which is every floor at rest
+   */
+  _holdFurniture() {
+    const hold = this._hold || (this._hold = new FurnishingHold());
+    const snapshot = this._snapshot;
+    const now = clockNow();
+    const counts = roomHeadcounts((snapshot && snapshot.agents) || [], {
+      now,
+      goneHomeDays: (snapshot && snapshot.settings && snapshot.settings.goneHomeDays) ?? undefined,
+    });
+    const busy = this._walkingRooms();
+    const held = hold.update(counts, now, busy);
+    this._held = held.size ? held : null;
+    this._holdBusy = [...busy].sort().join('|');
+    return held.size ? `~k${hold.key()}` : '';
+  }
+
+  /**
+   * Asked once a frame: is a room owed a change no snapshot will bring? Two
+   * things are — a hold that has run its five minutes, and a room that could
+   * not be re-laid because somebody was walking to it or from it and has now
+   * arrived. Either is the snapshot in hand, planned again. On a floor nothing
+   * is held on this is two comparisons.
+   */
+  _settleHold() {
+    const hold = this._hold;
+    if (!hold || !this._plan) return;
+    if (!hold.waiting && clockNow() < hold.dueAt) return;
+    // Still waiting on the same walkers: there is nothing new to ask.
+    if (hold.waiting && [...this._walkingRooms()].sort().join('|') === this._holdBusy) return;
+    this.setState(this._snapshot);
+  }
+
+  /**
+   * The project rooms somebody is walking to or from right now: the room each
+   * walker is bound for, the room it is crossing, and its own project's room.
+   * @returns {Set<string>}
+   */
+  _walkingRooms() {
+    /** @type {Set<string>} */
+    const busy = new Set();
+    const rooms = ((this._plan && this._plan.rooms) || []).filter((r) => r.kind === 'project');
+    for (const rec of this._runtime.all()) {
+      if (!rec.path || rec.path.length === 0) continue;
+      if (rec.roomId != null) busy.add(String(rec.roomId));
+      const agent = rec.agent;
+      if (!agent) continue;
+      if (agent.projectId != null) busy.add(String(agent.projectId));
+      const lead = agent.parentId != null ? this._agentsById.get(agent.parentId) : null;
+      if (lead && lead.projectId != null) busy.add(String(lead.projectId));
+      for (const r of rooms) {
+        if (rec.x >= r.x && rec.x <= r.x + r.w && rec.y >= r.y && rec.y <= r.y + r.h)
+          busy.add(String(r.id));
+      }
+    }
+    return busy;
   }
 
   /**
@@ -366,12 +446,7 @@ export class Scene extends SceneInput {
     this._selectedId = next;
     if (!this._plan) return;
     const agents = (this._snapshot && this._snapshot.agents) || [];
-    this._runtime.sync(
-      agents,
-      this._plan,
-      assignSeats(this._plan, agents, { selectedId: this._selectedId }),
-      { now: animMs() },
-    );
+    this._runtime.sync(agents, this._plan, this._seats(agents), { now: animMs() });
     // The loop is stopped while the tab is hidden, and a selection can still
     // arrive there (a notification, the palette). Draw so the ring and the walk
     // are current whether or not anything is animating.
