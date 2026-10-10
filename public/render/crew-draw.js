@@ -223,32 +223,84 @@ function strokeFromPort(ctx, view, route, extent, rec) {
  * — over the whole crew, not the drawn part of it (`crewChipText`).
  */
 function drawChip(ctx, view, parentId, members) {
+  const seat = members[0] && members[0].targetSeat;
+  if (seat && seat.crewAway === true) {
+    drawAwayName(ctx, view, parentId, seat.crewAnchor || view.seatOf(parentId));
+  }
+  const chip = chipOf(view, parentId, members, false);
+  if (chip) plate(ctx, view, chip.at, chip.text, chip.lead);
+}
+
+/**
+ * WHAT ONE CREW'S CHIP SAYS THIS FRAME, AND WHERE: asked by the painter above
+ * and by the frame's label pass (`crewChipBoxes`), so the box a name or a
+ * thought cloud keeps clear of is the chip that is drawn and no other.
+ *
+ * `widest` is the label pass's question. Under reduced motion the chip counts
+ * the members whose transcripts are moving, which is the clock's to say; a
+ * layout is not redone when a transcript goes quiet, so it is given the text
+ * at its longest, every member working.
+ * @param {any} view @param {string} parentId
+ * @param {any[]} all the crew's records, the ones folding away among them
+ * @param {boolean} widest
+ * @returns {{text:string, at:{x:number, y:number}, lead:{x:number, y:number}|null}|null}
+ *   null for a crew with nothing to say: all of it drawn, and its pulses on
+ */
+function chipOf(view, parentId, all, widest) {
+  // ONLY THE MEMBERS WHO ARE THERE. A junior that has left the snapshot is
+  // held for the 0.42 s it takes to fold away (`leftAt`), on the seat it was
+  // last given, and that seat still says how many were at the desk before it
+  // went: one junior folding away alone read `+2`, for the two that had gone
+  // ahead of it. Its cable is still drawn, retracting; it is in no count.
+  const members = all.filter((rec) => typeof rec.leftAt !== 'number');
+  if (!members.length) return null;
   // The desk the crew is cabled to, and how many are AT it — read off the seat
   // `assignSeats` wrote, because since bug 201 neither is the parent's: the
   // parent may be on a reception sofa while its crew works at the room's
   // primary desk, and a junior that finished is resting in the lounge rather
   // than being one of the `+N` this chip stands for.
-  const seat = members[0] && members[0].targetSeat;
+  const seat = members[0].targetSeat;
   const anchor = (seat && seat.crewAnchor) || view.seatOf(parentId);
-  if (seat && seat.crewAway === true) drawAwayName(ctx, view, parentId, anchor);
   const total = (seat && seat.crewTotal) ?? view.crewCounts.get(parentId) ?? members.length;
   // Audit F10: "working" is over the WHOLE crew at the desk — the seat carries
   // every member's id — not over the twelve that happen to be drawn.
   const ids = (seat && seat.crewIds) || members.map((rec) => rec.id);
-  const working = view.reduced
-    ? ids.filter((id) => {
-        const a = view.agentsById.get(id) || members.find((rec) => rec.id === id)?.agent;
-        return a && crewCableLive(a, view.nowMs, { reduced: true }) > 0;
-      }).length
-    : null;
+  const live = (/** @type {string} */ id) => {
+    const a = view.agentsById.get(id) || members.find((rec) => rec.id === id)?.agent;
+    return a && crewCableLive(a, view.nowMs, { reduced: true }) > 0;
+  };
+  const working = !view.reduced ? null : widest ? total : ids.filter(live).length;
   const text = crewChipText(total, members.length, working);
-  if (!text) return;
-  if (!anchor) return;
+  if (!text || !anchor) return null;
   // With the lead AT this desk the chip keeps off its body: the reduced form,
   // `+1 · 6/13 working`, is wider than the gap the chip stands in, and since
   // WP-99 a lead waiting on its crew sits here rather than on a sofa.
   const lead = seat && seat.crewAway === true ? null : worldToScreen(anchor, view.camera);
-  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text, lead);
+  return { text, at: worldToScreen(crewChipAt(anchor), view.camera), lead };
+}
+
+/**
+ * THE BOX OF EVERY CREW CHIP THIS FRAME DRAWS, for the frame's label pass.
+ *
+ * A box used to be kept beside every lead that had juniors — 186 x 44 px at a
+ * close zoom — chip or no chip. Two juniors are under the cap and draw none,
+ * and the second one's thought cloud was withheld by a box with nothing in it.
+ * So this asks the painter's own question (`chipOf`) of the painter's own
+ * measure (`plateBox`): no chip, no box.
+ * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
+ * @param {{records:Iterable<any>, agentsById:Map<string,any>, camera:any, charU:number,
+ *   reduced?:boolean, crewCounts:Map<string,number>, seatOf:(id:string)=>any}} view
+ * @returns {{id:string, x:number, y:number, w:number, h:number}[]} `chip:<parent id>`
+ */
+export function crewChipBoxes(ctx, view) {
+  const out = [];
+  for (const [parentId, members] of crewRecords(view.records)) {
+    const chip = chipOf(view, parentId, members, true);
+    if (!chip) continue;
+    const box = plateBox(ctx, view, chip.at, chip.text, chip.lead);
+    out.push({ id: `chip:${parentId}`, x: box.x, y: box.y, w: box.w, h: box.h });
+  }
+  return out;
 }
 
 /** Half the width of a seated lead's body, in plan units, for the chip's clearance. */
@@ -275,24 +327,35 @@ function drawAwayName(ctx, view, parentId, anchor) {
  * near it as leaves `clear` (a body's feet point) its own width.
  */
 function plate(ctx, view, at, text, clear) {
+  const box = plateBox(ctx, view, at, text, clear);
+  ctx.font = sansFont(box.fontPx);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = PALETTE.plateHalo;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = PALETTE.plateInk;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, box.cx, box.cy);
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+}
+
+/**
+ * Where `plate` paints, measured and not painted: the same split as
+ * `labelBox` and `drawLabel`, so what the label pass keeps clear is the plate.
+ * @returns {{x:number, y:number, w:number, h:number, fontPx:number, cx:number, cy:number}}
+ */
+function plateBox(ctx, view, at, text, clear) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
-  ctx.font = sansFont(fontPx);
   const w = textWidth(ctx, sansFont(fontPx), text) + fontPx * 0.9;
   const h = fontPx * 1.5;
+  let x = at.x;
   if (clear) {
     const need = w / 2 + view.charU * CHIP_CLEAR_U;
     const dx = at.x - clear.x;
     if (dx !== 0 && Math.abs(dx) < need && Math.abs(at.y - clear.y) < view.charU * 2) {
-      at = { x: clear.x + Math.sign(dx) * need, y: at.y };
+      x = clear.x + Math.sign(dx) * need;
     }
   }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = PALETTE.plateHalo;
-  ctx.fillRect(at.x - w / 2, at.y - h / 2, w, h);
-  ctx.fillStyle = PALETTE.plateInk;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, at.x, at.y);
-  ctx.textAlign = 'start';
-  ctx.textBaseline = 'alphabetic';
+  return { x: x - w / 2, y: at.y - h / 2, w, h, fontPx, cx: x, cy: at.y };
 }

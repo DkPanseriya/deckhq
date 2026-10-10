@@ -22,44 +22,29 @@ import assert from 'node:assert/strict';
 
 import {
   crowdedOfficeFloor,
-  largeFloor,
   LARGE_NOW,
   ownerShapedFloor,
   populationFloor,
 } from '../helpers/large-floor.mjs';
+import { drawnBox, frameAt, hits, measuringCtx } from '../helpers/label-frame.mjs';
 import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
 import { drawDots } from '../../public/render/rig-props.js';
 import { buildPlan } from '../../public/render/plan.js';
-import { assignSeats, worldToScreen } from '../../public/render/agents.js';
-import { computeFill } from '../../public/render/scene-camera.js';
-import { characterScaleFor, juniorScaleFor, lodForFigure } from '../../public/render/scene-lod.js';
+import { worldToScreen } from '../../public/render/agents.js';
+import { characterScaleFor, lodForFigure } from '../../public/render/scene-lod.js';
 import { rigHeight } from '../../public/render/rig-pose.js';
-import {
-  badgeBox,
-  characterBox,
-  drawCharacter,
-  formatElapsed,
-  formatElapsedShort,
-} from '../../public/render/rig.js';
+import { characterBox, drawCharacter } from '../../public/render/rig.js';
 import { sampleClip } from '../../public/render/clips.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import {
   buildingRect,
   isLiveAgent,
   frameLabelTexts,
-  planFrameLabels,
   wallBoxes,
 } from '../../public/render/scene-frame-labels.js';
-import {
-  layoutPlate,
-  platePlanFor,
-  PLATE_KEEP_ORDER,
-  plateLimit,
-  resolveBadgeCollisions,
-} from '../../public/render/scene-labels.js';
+import { layoutPlate, PLATE_KEEP_ORDER } from '../../public/render/scene-labels.js';
 import { sofaPlacesOn } from '../../public/render/plan-office-seats.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
-import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
 import { BODY_HEIGHT_U } from '../../public/render/rig-metrics.js';
 import {
@@ -69,141 +54,11 @@ import {
   resolveLabelCollisions,
 } from '../../public/render/label-spots.js';
 
-/** Measures like a canvas: width in proportion to the font's px size. */
-function measuringCtx() {
-  return {
-    font: '10px x',
-    measureText(text) {
-      const px = parseFloat(/(\d[\d.]*)px/.exec(this.font)?.[1] ?? '10');
-      return { width: String(text).length * px * 0.58 };
-    },
-  };
-}
-
-const hits = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-
-/**
- * The box a label is DRAWN in: its own, or the smaller form the pass chose
- * (`spot.text`/`spot.px`), at the pass's offset.
- * @param {any} item @param {{offsetY:number, offsetX?:number, text?:string, px?:number}} spot
- */
-function drawnBox(item, spot) {
-  const form = spot.px ? item.variants.find((v) => v.px === spot.px && v.text === spot.text) : item;
-  assert.ok(form, `${item.id}: the pass chose a form the item does not have`);
-  return {
-    id: item.id,
-    x: form.x + (spot.offsetX || 0),
-    y: form.y + spot.offsetY,
-    w: form.w,
-    h: form.h,
-  };
-}
-
 /** The owner's CSS stage (690 px under the header) and the full window's. */
 const STAGES = [
   [1420, 690],
   [2000, 1024],
 ];
-
-/**
- * Build one frame of the large floor at a stage, the way `_draw` does. With
- * `badges`, the wait badges are measured and resolved first, as the floor does,
- * and the names are set round them.
- */
-function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
-  adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
-  try {
-    const { projects, agents } = floor();
-    const plan = buildPlan(projects, agents, { stage: { w: viewW, h: viewH }, now: LARGE_NOW });
-    const seats = assignSeats(plan, agents);
-    const { scale } = computeFill(plan.width, plan.height, viewW, viewH);
-    const camera = { zoom: scale / 14, panX: 0, panY: 0, U: 14 };
-    const charU = characterScaleFor(scale);
-    // The scale each figure is DRAWN at: a junior's is one ladder step under
-    // everybody else's, in an arc or out of one (WP-99, `_figureScale`).
-    const uOf = (rec) => (rec.agent.subagent === true ? juniorScaleFor(scale) : charU);
-    const agentsById = new Map(agents.map((a) => [a.id, a]));
-    const records = agents
-      .filter((a) => seats.has(a.id))
-      .map((a) => ({ ...seats.get(a.id), id: a.id, targetSeat: seats.get(a.id), agent: a }))
-      .sort((a, b) => a.y - b.y);
-    const pop = floorPopulation(agents, { now: LARGE_NOW });
-    const snapshot = { projects, agents, counts: { drawn: { waiting: pop.waiting } } };
-    const ctx = measuringCtx();
-    const crewCounts = new Map(
-      crewsFrom(agents, { now: LARGE_NOW }).map((c) => [c.parentId, c.count]),
-    );
-    const waits = [];
-    for (const rec of badges ? records : []) {
-      const a = rec.agent;
-      if (a.ackState !== 'active' || a.activityState !== 'for_review' || !a.reviewSince) continue;
-      const s = worldToScreen(rec, camera);
-      const ms = LARGE_NOW - a.reviewSince;
-      const box = badgeBox(ctx, s.x, s.y, charU, formatElapsed(ms));
-      const cut = badgeBox(ctx, s.x, s.y, charU, formatElapsedShort(ms));
-      const short = cut.w < box.w ? { x: cut.x, w: cut.w } : undefined;
-      waits.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms, short });
-    }
-    const badgePlan = resolveBadgeCollisions(
-      waits,
-      records.map((rec) => {
-        const s = worldToScreen(rec, camera);
-        return { id: rec.id, ...characterBox(s.x, s.y, uOf(rec)) };
-      }),
-    );
-    const badgeBoxes = waits
-      .filter((it) => badgePlan.drawn.has(it.id))
-      .map((it) => {
-        const at = badgePlan.short.has(it.id) && it.short ? it.short : it;
-        return { ...it, x: at.x, w: at.w, id: `badge:${it.id}` };
-      });
-    // After the badges, as the floor lays them: a plate stops short of one.
-    const plates = plan.rooms
-      .filter((r) => r.kind !== 'corridor')
-      .map((room) => ({
-        room,
-        ...layoutPlate(
-          ctx,
-          room,
-          platePlanFor(room, snapshot, plan),
-          camera,
-          plateLimit(room, badgeBoxes, camera),
-        ),
-      }));
-    const labels = planFrameLabels(ctx, {
-      records,
-      agentsById,
-      camera,
-      charU,
-      crewCounts,
-      badgeBoxes,
-      plateBoxes: plates.map((p) => p.rect),
-      wallBoxes: wallBoxes(plan, camera),
-      rooms: plan.rooms,
-      selectedId: null,
-      bounds: buildingRect(plan, camera),
-      uOf,
-    });
-    return {
-      plan,
-      seats,
-      scale,
-      camera,
-      charU,
-      uOf,
-      agents,
-      agentsById,
-      records,
-      plates,
-      labels,
-      crewCounts,
-      badgePlan,
-      badgeBoxes,
-    };
-  } finally {
-    adoptSnapshotClock(null);
-  }
-}
 
 test('F1 · the level of detail is the figure’s drawn height, and nothing else', () => {
   // WP-79: under 30 px of figure the rim, the glyph and the far limb go.

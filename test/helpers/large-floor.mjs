@@ -14,6 +14,8 @@ import {
   CREW_PARENT,
   JUNIOR_PARENT,
   JUNIORS,
+  LEAD_JUNIORS,
+  LEAD_PARENT,
   POPULATIONS,
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
@@ -64,6 +66,8 @@ export function crowdedOfficeFloor(now = LARGE_NOW) {
 const CREWS = /** @type {Record<string, [string, ReadonlyArray<{agentType:string}>]>} */ ({
   demo: [JUNIOR_PARENT, JUNIORS],
   away: [JUNIOR_PARENT, JUNIORS],
+  juniors: [JUNIOR_PARENT, JUNIORS],
+  lead: [LEAD_PARENT, LEAD_JUNIORS],
   crew: [CREW_PARENT, CREW_JUNIORS],
   'crew-waiting': [WAITING_CREW_PARENT, WAITING_CREW_JUNIORS],
   large: [WAITING_CREW_PARENT, WAITING_CREW_JUNIORS],

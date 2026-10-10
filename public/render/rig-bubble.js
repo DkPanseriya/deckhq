@@ -140,20 +140,40 @@ export function toolBubbleBox(ctx, ox, oy, u, summary) {
 }
 
 /**
+ * The same line cut to a share of its own width, for a bubble with a name
+ * beside it (`bubble-spots.js`): `Bash npm test` → `Bash npm…`.
+ * @param {{font:string, measureText:(text:string)=>{width:number}}} ctx
+ * @param {number} u @param {string} text an already fitted line
+ * @param {number} share of its width, under 1
+ * @returns {string}
+ */
+export function toolBubbleShorter(ctx, u, text, share) {
+  const font = sansFont(Math.max(9, u * 0.5));
+  return fitOneLine(ctx, text, textWidth(ctx, font, text) * share, font);
+}
+
+/**
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} ox @param {number} oy @param {number} u
  * @param {string} summary
+ * @param {{dx:number, text:string}} [spot] where the frame's label pass set it
+ *   (`bubble-spots.js`): a step to one side of the head, and the line it had
+ *   room for. Without one it is centred over the head, whole.
  */
-export function drawToolBubble(ctx, ox, oy, u, summary) {
-  const box = toolBubbleBox(ctx, ox, oy, u, summary);
+export function drawToolBubble(ctx, ox, oy, u, summary, spot) {
+  const dx = spot ? spot.dx : 0;
+  const box = toolBubbleBox(ctx, ox, oy, u, spot ? spot.text : summary);
+  box.x += dx;
   ctx.fillStyle = CLOUD_FILL;
   ctx.strokeStyle = CLOUD_EDGE;
   ctx.lineWidth = Math.max(0.6, u * 0.045);
 
-  // Two trailing beats, rising from beside the head to the bubble.
+  // Two trailing beats, rising from beside the head to the bubble: on the
+  // right, and mirrored for a bubble that stepped to the left of its head.
+  const side = dx < 0 ? -1 : 1;
   for (const [tx, ty, tr] of [
-    [ox + u * 0.42, oy - u * (CHROME_BUBBLE_U - 1.13), u * 0.09],
-    [ox + u * 0.2, oy - u * (CHROME_BUBBLE_U - 0.75), u * 0.13],
+    [ox + side * u * 0.42, oy - u * (CHROME_BUBBLE_U - 1.13), u * 0.09],
+    [ox + side * u * 0.2, oy - u * (CHROME_BUBBLE_U - 0.75), u * 0.13],
   ]) {
     ctx.beginPath();
     ctx.arc(tx, ty, tr, 0, TAU);
@@ -172,7 +192,7 @@ export function drawToolBubble(ctx, ox, oy, u, summary) {
   ctx.fillStyle = PALETTE.inkWarm;
   // Canvas text: the summary is hook payload text, drawn as glyphs and never
   // interpreted. There is no markup path here at all.
-  ctx.fillText(box.text, ox, box.y + box.h / 2 + box.h * 0.03);
+  ctx.fillText(box.text, ox + dx, box.y + box.h / 2 + box.h * 0.03);
   ctx.restore();
 }
 

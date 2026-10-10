@@ -39,14 +39,16 @@ import {
   SELECTION_RING_R,
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
-import { crewChipAt } from './crew.js';
+import { crewChipBoxes } from './crew-draw.js';
 import { abbreviateName, resolveLabelCollisions, WALL_CLEAR_PX } from './label-spots.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
+import { placeBubbles } from './bubble-spots.js';
+import { toolBubbleText } from './rig-bubble.js';
 import { WALL_PX, wallPieces } from './backdrop-floor.js';
 import { U_DEFAULT } from './backdrop-paint.js';
 import { JUNIOR_MARK, bareName, roleWordFor } from '../names.js';
 import { ROLE_CHIP_GAP } from './name-tag.js';
-import { agentLabelFor, isNeedsYouAgent } from './scene-agent.js';
+import { agentLabelFor, iconForAgent, isNeedsYouAgent } from './scene-agent.js';
 
 /** A session at a desk or waiting on the user: its name is never dropped. */
 const LIVE = new Set(['working', 'needs_input', 'for_review', 'stalled']);
@@ -207,14 +209,19 @@ export function roomFloor(rooms, rec, camera) {
  * @param {{records:any[], agentsById:Map<string,any>, camera:any, charU:number,
  *   crewCounts:Map<string,number>, badgeBoxes?:any[], plateBoxes?:any[], wallBoxes?:any[],
  *   rooms?:any[],
- *   selectedId?:string|null, uOf?:(rec:any)=>number,
+ *   selectedId?:string|null, uOf?:(rec:any)=>number, reduced?:boolean, lod?:0|1|2,
  *   bounds?:{x:number,y:number,w:number,h:number}}} view `records` in paint order;
+ *   `reduced` is reduced motion, under which a crew's chip says who is working
+ *   and a tool is an icon; `lod` is the frame's level of detail, and a tool is
+ *   a bubble from L1 up;
  *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default;
  *   `bounds` is the building's screen rect (`resolveLabelCollisions`)
  * @returns {{plan:Map<string,{offsetY:number, offsetX?:number}|null>,
  *   texts:Map<string,string>, roles:Map<string,string>, obstacles:any[], labels:any[],
- *   clouds:Map<string, 1|-1|0>}} `clouds`: which side of its head each figure's
- *   thought cloud hangs on this frame, `0` for none
+ *   clouds:Map<string, 1|-1|0>, bubbles:Map<string, {dx:number, text:string}|null>}}
+ *   `clouds`: which side of its head each figure's thought cloud hangs on this
+ *   frame, `0` for none; `bubbles`: for each figure that carries a tool bubble,
+ *   its step aside and the line it has room for, `null` for none
  */
 export function planFrameLabels(ctx, view) {
   const { records, camera, charU } = view;
@@ -224,9 +231,9 @@ export function planFrameLabels(ctx, view) {
     // The body as it is DRAWN: a junior's is a ladder step smaller (WP-99).
     const box = characterBox(s.x, s.y, view.uOf ? view.uOf(rec) : charU);
     obstacles.push({ id: `body:${rec.id}`, ...box, pin: true });
-    // WP-89 · a crew parent's raised hand and its chip are pinned too: §4, a
-    // junior's name is never drawn over either. Measured generously — an
-    // obstacle may claim more than it uses.
+    // WP-89 · a crew parent's raised hand is pinned too: §4, a junior's name
+    // is never drawn over it. Measured generously — an obstacle may claim
+    // more than it uses.
     if (view.crewCounts && view.crewCounts.has(rec.id)) {
       obstacles.push({
         id: `hand:${rec.id}`,
@@ -236,22 +243,22 @@ export function planFrameLabels(ctx, view) {
         h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
         pin: true,
       });
-      if (rec.targetSeat) {
-        const chip = worldToScreen(crewChipAt(rec.targetSeat), camera);
-        const cw = charU * 3.4;
-        const ch = charU * 0.8;
-        obstacles.push({
-          id: `chip:${rec.id}`,
-          x: chip.x - cw / 2,
-          y: chip.y - ch / 2,
-          w: cw,
-          h: ch,
-          pin: true,
-        });
-      }
     }
   }
   const screenOf = new Map(records.map((rec) => [String(rec.id), rec]));
+  // And every crew's chip — the ones that are DRAWN, where they are drawn
+  // (`crewChipBoxes`). A box was kept beside every lead with juniors whether
+  // its crew had a chip or not, and it took a junior's thought cloud with it.
+  const crewView = {
+    records,
+    agentsById: view.agentsById,
+    camera,
+    charU,
+    reduced: view.reduced === true,
+    crewCounts: view.crewCounts || new Map(),
+    seatOf: (/** @type {string} */ id) => screenOf.get(String(id))?.targetSeat ?? null,
+  };
+  for (const chip of crewChipBoxes(ctx, crewView)) obstacles.push({ ...chip, pin: true });
   /** @type {Map<string, number>} the figures drawn under a wait badge, and its top */
   const badged = new Map();
   for (const box of view.badgeBoxes || []) {
@@ -382,5 +389,22 @@ export function planFrameLabels(ctx, view) {
     })),
     taken,
   );
-  return { plan, texts, roles, obstacles, labels, clouds };
+  // AND THE TOOL BUBBLES, BY THE SAME RULE (`bubble-spots.js`): a bubble takes
+  // the cloud's place while a tool runs, and is as wide as its line — wide
+  // enough to reach the name of whoever sits at the next chair. Only where one
+  // is drawn at all: the rig's own gate, asked here so the two cannot disagree.
+  const bubbles = placeBubbles(
+    ctx,
+    view.reduced === true || !(Number(view.lod) >= 1)
+      ? []
+      : records.flatMap((rec) => {
+          const agent = view.agentsById.get(rec.id) || rec.agent;
+          const text = agent && agent.currentTool ? toolBubbleText(agent.currentTool) : '';
+          if (!text || iconForAgent(agent) || badged.has(String(rec.id))) return [];
+          const s = at.get(rec.id);
+          return [{ id: rec.id, x: s.x, y: s.y, u: view.uOf ? view.uOf(rec) : charU, text }];
+        }),
+    taken,
+  );
+  return { plan, texts, roles, obstacles, labels, clouds, bubbles };
 }
