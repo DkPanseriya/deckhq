@@ -11,14 +11,24 @@
  *                             the same two values under the name that says so.
  *   repoRoot                  the repository's working directory: where the
  *                             room's actions run and what its ledger key hashes.
- *   worktree                  `{ name, path, branch }` when the session is in a
- *                             LINKED worktree of that repository, else null.
+ *   worktree                  `{ name, path, kind, branch }` when the session is
+ *                             in a checkout that is not the room's own: a
+ *                             LINKED worktree of that repository, or a
+ *                             repository NESTED in it (`kind` is `linked`,
+ *                             `nested` or `submodule`). `path` is that
+ *                             checkout's own root. Else null.
+ *   ownRoot                   the repository the directory is in by git's own
+ *                             account: `repoRoot`, except in a nested
+ *                             repository, where it is the nested one's. What
+ *                             runs git FOR A REPOSITORY (Studio) runs here.
  *
- * A session used to be a project of its own whenever its directory was. Two
- * things were written down under that old id and are still on disk: pins in
+ * A session used to be a project of its own whenever its directory was, and a
+ * nested repository was one until it joined its outer repository's room. Two
+ * things were written down under those old ids and are still on disk: pins in
  * `state.json` and `projectKey` in every ledger record. Neither is rewritten.
- * `legacyId` and `legacyKey` are what a session's project WAS called, and
- * `aliasesOf` is the map from those to the repository, applied on read.
+ * `legacyId` is what a session's project WAS called when it was its directory,
+ * `ownRoot` is what it was when it was its own repository, and `aliasesOf` is
+ * the map from both to the room's repository, applied on read.
  */
 import { projectIdFromCwd, projectNameFromCwd } from './model.mjs';
 import { projectKeyFor } from './ledger-record.mjs';
@@ -29,7 +39,8 @@ import { repoRootFor } from './repo-root.mjs';
  * @property {string} projectId
  * @property {string} projectName
  * @property {string} repoRoot
- * @property {{name: string, path: string}|null} worktree
+ * @property {string} ownRoot
+ * @property {{name: string, path: string, kind: 'linked'|'nested'|'submodule'}|null} worktree
  * @property {string} legacyId  `projectIdFromCwd(cwd)`: the id before this
  */
 
@@ -47,7 +58,10 @@ export function projectOf(cwd, opts = {}) {
     // A bare repository has no checkout; the session's own directory is the
     // only place there is to run anything.
     repoRoot: repo.bare ? String(cwd || '') : root,
-    worktree: repo.worktree ? { name: repo.worktree.name, path: repo.worktree.path } : null,
+    ownRoot: repo.bare ? String(cwd || '') : repo.own || root,
+    worktree: repo.worktree
+      ? { name: repo.worktree.name, path: repo.worktree.path, kind: repo.worktree.kind || 'linked' }
+      : null,
     legacyId: projectIdFromCwd(cwd),
   };
 }
@@ -70,10 +84,13 @@ export function resolveProjects(cwds, opts = {}) {
   const roots = new Map();
   /** @type {string[]} */
   const unplaced = [];
+  /** Nested repositories: Studio hires for one as it does for any other. */
+  const nested = new Set();
   for (const cwd of new Set(cwds)) {
     if (!cwd) continue;
     const p = projectOf(cwd, { stateDir: opts.stateDir });
     out.set(cwd, p);
+    if (p.ownRoot && p.ownRoot !== p.repoRoot) nested.add(p.ownRoot);
     if (p.worktree || p.legacyId !== p.projectId) roots.set(p.projectId, p.repoRoot);
     else unplaced.push(cwd);
   }
@@ -88,7 +105,7 @@ export function resolveProjects(cwds, opts = {}) {
   const hires = `${String(opts.stateDir)
     .replace(/[\\/]+/g, '/')
     .toLowerCase()}/worktrees/`;
-  const knownRoots = [...roots.values()]
+  const knownRoots = [...new Set([...roots.values(), ...nested])]
     .filter(
       (r) =>
         !r
@@ -111,20 +128,34 @@ export function resolveProjects(cwds, opts = {}) {
  * is `old ledger projectKey → the repository's`, for records already written.
  * Only sessions whose project actually changed appear in either.
  *
- * @param {Iterable<{cwd?: string, projectId?: string, repoRoot?: string}>} agents
+ * A session has had up to two old names. Its DIRECTORY, from when a project
+ * was the directory a session started in; and its OWN REPOSITORY, from when a
+ * nested repository — a mounted clone, a submodule — had a room to itself,
+ * which is also what a session in a linked worktree of one was filed under.
+ * The second is `ownRoot`: read off the agent, else from `placed` (the scan's
+ * `resolveProjects` map), else from a nested `worktree`, whose path is it.
+ *
+ * @param {Iterable<{cwd?: string, projectId?: string, repoRoot?: string, ownRoot?: string,
+ *   worktree?: {path?: string, kind?: string}|null}>} agents
+ * @param {Map<string, ProjectOf>} [placed]
  * @returns {{ids: Record<string, string>, keys: Record<string, string>}}
  */
-export function aliasesOf(agents) {
+export function aliasesOf(agents, placed) {
   /** @type {Record<string, string>} */
   const ids = {};
   /** @type {Record<string, string>} */
   const keys = {};
   for (const a of agents) {
     if (!a || !a.cwd || !a.projectId || !a.repoRoot) continue;
-    const legacy = projectIdFromCwd(a.cwd);
-    if (legacy === a.projectId || Object.prototype.hasOwnProperty.call(ids, legacy)) continue;
-    ids[legacy] = a.projectId;
-    keys[projectKeyFor(a.cwd)] = projectKeyFor(a.repoRoot);
+    const wt = a.worktree && a.worktree.kind && a.worktree.kind !== 'linked' ? a.worktree : null;
+    const at = placed && placed.get(a.cwd);
+    const own = a.ownRoot || (at && at.ownRoot) || (wt && wt.path) || '';
+    for (const was of [a.cwd, own]) {
+      const legacy = was ? projectIdFromCwd(was) : a.projectId;
+      if (legacy === a.projectId || Object.prototype.hasOwnProperty.call(ids, legacy)) continue;
+      ids[legacy] = a.projectId;
+      keys[projectKeyFor(was)] = projectKeyFor(a.repoRoot);
+    }
   }
   return { ids, keys };
 }

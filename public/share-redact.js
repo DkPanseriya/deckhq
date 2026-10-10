@@ -99,6 +99,9 @@ export const COVER_NAMES = Object.freeze([
   'zephyr',
 ]);
 
+/** The kinds of checkout a bench can stand for (`src/core/repo-root.mjs`). */
+const WORKTREE_KINDS = ['linked', 'nested', 'submodule'];
+
 /** What a worktree's bench reads when project names are hidden, before its number. */
 export const BRANCH_WORD = 'branch';
 
@@ -418,6 +421,10 @@ function redactAgent(a, c) {
       path: `wt-${pad(n, 2)}`,
       branch: c.hideProjects ? null : textOrNull(a.worktree.branch),
     };
+    // Whether the bench is a linked worktree's or a nested repository's: one
+    // of three words the daemon chose, never a name. It decides what the bench
+    // is called for (`worktreeName`), so the picture reads as the floor does.
+    if (WORKTREE_KINDS.includes(a.worktree.kind)) out.worktree.kind = a.worktree.kind;
   } else {
     out.worktree = null;
   }

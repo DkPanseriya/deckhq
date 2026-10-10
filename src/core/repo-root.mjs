@@ -505,9 +505,15 @@ function resolve(asked, opts) {
     return answer(info(known ? up.info.root : claude.root, 'guess', wt, more), start, null, seen);
   }
   if (studio && studio.root) {
+    // The repository it was hired for may be a nested one: its room is the
+    // outer repository's, and it is still that repository's worktree.
+    const up = resolve(studio.root, { stateDir: opts.stateDir });
+    const known = up.info.kind !== 'none';
     /** @type {RepoInfo['worktree']} */
     const wt = { name: studio.name, path: studio.path, kind: 'linked' };
-    return answer(info(studio.root, 'guess', wt), start, null);
+    const more = { own: studio.root };
+    const seen = [...up.seen, witnessOf(up.at)];
+    return answer(info(known ? up.info.root : studio.root, 'guess', wt, more), start, null, seen);
   }
   return answer(info(asked, 'none', null), start, null);
 }

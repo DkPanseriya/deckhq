@@ -339,12 +339,18 @@ export class RegistryCompute extends RegistrySnapshot {
         cwd: obs.cwd || '',
         // A WORKTREE IS NOT A PROJECT. `projectId` is the repository's, and
         // `repoId`/`repoName` say so by name; `worktree` is set only in a
-        // LINKED worktree, with the branch the session itself reported.
+        // LINKED worktree or in a repository NESTED in the room's (`kind`
+        // says which), with the branch the session itself reported.
         repoId: obs.projectId || 'unknown',
         repoName: obs.projectName || 'unknown',
         repoRoot: obs.repoRoot || obs.cwd || '',
         worktree: obs.worktree
-          ? { name: obs.worktree.name, path: obs.worktree.path, branch: obs.gitBranch ?? null }
+          ? {
+              name: obs.worktree.name,
+              path: obs.worktree.path,
+              branch: obs.gitBranch ?? null,
+              kind: obs.worktree.kind || 'linked',
+            }
           : null,
         gitBranch: obs.gitBranch,
         model: obs.model,

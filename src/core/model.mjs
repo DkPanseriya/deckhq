@@ -108,9 +108,14 @@ export {
  *                                      what it is. The room key.
  * @property {string} [repoName]
  * @property {string} [repoRoot]         the repository's working directory
- * @property {{name: string, path: string, branch: string|null}|null} [worktree]
- *                                      the LINKED worktree the session is in,
- *                                      or null in the main checkout
+ * @property {{name: string, path: string, branch: string|null,
+ *   kind?: 'linked'|'nested'|'submodule'}|null} [worktree]
+ *                                      the checkout the session is in when it
+ *                                      is not the room's own: a LINKED worktree
+ *                                      of the repository, or a repository
+ *                                      NESTED in it (a mounted clone it names,
+ *                                      a submodule). `path` is that checkout's
+ *                                      root. Null in the main checkout
  * @property {string} cwd
  * @property {string|null} gitBranch
  * @property {string|null} model

@@ -143,9 +143,15 @@ export function plannerAmong(agents, root, taken) {
  * @returns {{root:string, projectKey:string}|{error:string}}
  */
 export function resolveProject(raw) {
-  /** The repository's own directory, when the directory is in one that exists. */
+  /**
+   * The repository's own directory, when the directory is in one that exists.
+   * Its OWN repository, not the room's: a clone mounted inside another
+   * repository, or a submodule, shares that repository's room on the floor, but
+   * a hire is a `git worktree add`, and git makes that in the repository the
+   * directory is in. So Studio in a nested repository is that repository's.
+   */
   const repositoryOf = (/** @type {string} */ dir) => {
-    const home = projectOf(dir).repoRoot;
+    const home = projectOf(dir).ownRoot;
     if (!home || samePath(home, dir)) return dir;
     try {
       return fs.statSync(home).isDirectory() ? path.resolve(home) : dir;

@@ -197,7 +197,7 @@ export class RegistrySnapshot extends RegistryBase {
    */
   projectAliases() {
     if (this._aliasesFor !== this._agents || !this._aliases) {
-      this._aliases = aliasesOf(this._agents || []);
+      this._aliases = aliasesOf(this._agents || [], this._projectsByCwd);
       this._aliasesFor = this._agents;
     }
     return this._aliases;
