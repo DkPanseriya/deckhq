@@ -1,7 +1,7 @@
 {
   "name": "deckhq",
   "displayName": "DeckHQ",
-  "description": "Every AI coding session on your machine, on one office floor — in a VS Code panel. Local, private, no telemetry.",
+  "description": "An office for your AI coding agents — in a VS Code panel. Local, private, no telemetry.",
   "version": "0.1.0",
   "publisher": "DkPanseriya",
   "license": "MIT",
@@ -15,9 +15,6 @@
   },
   "bugs": {
     "url": "https://github.com/DkPanseriya/deckhq/issues"
-  },
-  "sponsor": {
-    "url": "https://github.com/sponsors/DkPanseriya"
   },
   "categories": [
     "Visualization",

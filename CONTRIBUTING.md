@@ -58,7 +58,8 @@ browser's own APIs have covered every need so far — the HTTP server, the trans
 SSE stream, the whole renderer. A security reviewer can read this entire project in an afternoon
 precisely because there is nothing else to read.
 
-Dev dependencies are fine — there are two, `eslint` and `prettier`.
+Dev dependencies are fine: `eslint`, `prettier` and `typescript`, which checks the JSDoc types and
+emits nothing.
 
 A genuinely unavoidable runtime dependency needs maintainer sign-off before the PR is written, and
 a line in `CHANGELOG.md` explaining why the standard library was not enough.
@@ -70,7 +71,7 @@ a line in `CHANGELOG.md` explaining why the standard library was not enough.
 Node 18 or newer. Nothing to install to run the product itself.
 
 ```sh
-npm install            # dev tooling only: eslint and prettier
+npm install            # dev tooling only: eslint, prettier and typescript
 npm start              # daemon on http://127.0.0.1:4317
 npm start -- --port 4400
 node bin/deckhq.mjs --help
@@ -97,11 +98,14 @@ npm run test:unit                         # unit only
 npm test -- test/unit/state-machine.test.mjs   # one file
 npm run lint
 npm run format:check                      # CI checks this; npm run format fixes it
+npm run typecheck                         # the daemon and the browser code, from their JSDoc
 ```
 
-CI runs lint, format check and the full suite on Ubuntu, macOS and Windows against Node 18, 20 and
-22 — all nine combinations must be green. Path handling and process spawning are the two places
-that break on one platform and pass on the others, so be suspicious of both.
+Those four — lint, format check, type check, tests — pass before a change is proposed. CI runs lint,
+format check and the full suite on Ubuntu, macOS and Windows against Node 18, 20 and 22 — all nine
+combinations must be green — and the type check and the goldens once each. Path handling and
+process spawning are the two places that break on one platform and pass on the others, so be
+suspicious of both.
 
 ### Baking the Linux goldens
 

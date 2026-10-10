@@ -3,11 +3,11 @@
 [![npm](https://img.shields.io/npm/v/deckhq)](https://www.npmjs.com/package/deckhq)
 [![CI](https://github.com/DkPanseriya/deckhq/actions/workflows/ci.yml/badge.svg)](https://github.com/DkPanseriya/deckhq/actions/workflows/ci.yml)
 
-**Every AI coding session on your machine, on one office floor.** It sees the ones your terminal
-forgot, and it remembers what's waiting on you even after you've read it. Local, private, MIT,
-zero dependencies.
+**An office for your AI coding agents.** The agent that finished an hour ago is still waiting for
+you. DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
+queue until you clear it. Local, free, MIT, zero dependencies.
 
-![The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn sit waiting for a reply](test/goldens/win32/three.png)
+![The DeckHQ floor seen from above: Your Office with two sessions waiting on the sofa, one of them with a hand up, three project rooms with a robot at a desk in two of them, and the Lounge with five resting](test/goldens/win32/three.png)
 
 _Screenshot — three repositories, nine sessions, two of them waiting on you._
 
@@ -51,12 +51,13 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 - **A queue only you can clear.** What a session is doing changes on its own. What you owe it
   changes when you press a button. Opening a conversation does not clear it; scrolling past it does
   not clear it; reading it does not clear it.
-- **Six states, and two different "needs you" signals.** Both wait in your office. A raised hand
+- **Six states, and two different "needs you" signals.** Both wait in Your Office. A raised hand
   means _I am mid-task and blocked_. A red badge with a waiting time means _I finished; review
   this_. They need different responses, so they look different and are counted separately.
 - **A review card, not a notification.** Click anyone and the panel has how long they have been
   waiting, what they said as the markdown they actually wrote, and what changed in that project's
-  working tree — then `1` reply, `2` approve, `3` bench.
+  working tree — then `1` reply, `2` approve, `3` bench. `O` brings the window that session is
+  already running in to the front.
 - **The crew, when a session fires three or more sub-agents.** The desk becomes a formation: the
   juniors cross-legged in an arc around it, a laptop before each, and a cable from each to the desk
   with a pulse running up it while that junior's transcript is still being written. A junior that
@@ -66,6 +67,7 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
   setting away and off by default, because most people run these tools on a subscription.
 - **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` discharges one,
   and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
+- **A picture you can post.** `X` draws the floor again with project names and session details out.
 
 All of it, with a picture each, is on the site: [the features](https://deckhq.dev/features.html).
 [The manual](docs/GUIDE.md) has every command, key and file.
@@ -91,7 +93,7 @@ All of it, with a picture each, is on the site: [the features](https://deckhq.de
 
 | Runtime         | Status                            | What that means                                                                                                        |
 | --------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Claude Code** | verified                          | Read, reply, streamed sends, hooks, and one permission prompt answered from the panel on a real session                |
+| **Claude Code** | verified                          | Read, reply, streamed sends, hooks, and a permission prompt answered from the panel on a real session, once            |
 | **Codex**       | verified for reading and replying | Real sessions read and a real reply sent, 4 September 2026. No hooks, no permission card, liveness inferred from mtime |
 | **Gemini CLI**  | **unverified**                    | Implemented against the runtime's documented on-disk format; never run against real data                               |
 | **OpenCode**    | **unverified**                    | Implemented against the published CLI; never run against real data                                                     |
@@ -115,9 +117,8 @@ Closing the window costs nothing: the daemon outlives it, which is the whole poi
 Both installers print every path they would write and the exact command each will run **before**
 `--yes`, tag every file they create, and remove only what they tagged. **Windows is the platform
 this was run on.** The macOS bundle and the Linux desktop entries are written from Apple's and
-freedesktop.org's documentation and have never been executed on a machine.
-
-Details, and the `?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](docs/GUIDE.md).
+freedesktop.org's documentation and have never been executed on a machine. Details, and the
+`?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](docs/GUIDE.md).
 
 ## Change the look
 
@@ -145,7 +146,7 @@ Studio is the opt-in "idea to office" mode, per project, off until `deckhq studi
 writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
 roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
 and is on [the site](https://deckhq.dev/features.html#studio). **Not yet watched:** a real
-planner interview, or a hired session's real reply — the maintainer's `claude` login has expired.
+planner interview, or a hired session's real reply.
 
 **Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,
 a brief file that is yours to edit, and a real session there under that brief, on the floor within
@@ -208,9 +209,9 @@ Real, and listed here rather than discovered later.
   gives a resumed chat a new id and nothing in the file names the one it continues, so DeckHQ
   matches on the first message. On 101 real transcripts it found 92 conversations. A resume from a
   different directory stays two agents.
-- **"Open in terminal" is verified on Windows only.** Six macOS terminals and eight Linux ones are
-  written against their documented interfaces and have never been run on a real Mac or a real Linux
-  desktop.
+- **"Open in terminal" and "Go to session" are verified on Windows only.** Six macOS terminals and
+  eight Linux ones are written against their documented interfaces and have never been run on a real
+  Mac or Linux desktop; neither has Go to session, which cannot work on Wayland and says so.
 - **You get tokens, not dollars**, until you turn **Show cost** on. It is an estimate and never a
   bill: DeckHQ multiplies the tokens it counted by published list prices, has no idea what your
   plan charges you, and prints `no rate` rather than `$0.00` for a model it has no price for.
@@ -225,10 +226,9 @@ Real, and listed here rather than discovered later.
 ## Support
 
 DeckHQ is free, MIT, and built by one person. If it saves you time and you want to support the
-work, the best help is a bug report with `deckhq doctor` output, or telling one colleague. If you
-would rather send something, write to the author at the address in `package.json` and ask for a
-private channel (PayPal or similar); there is no official sponsorship programme, on purpose, and
-nothing in the product changes either way.
+work, the best help is a bug report with `deckhq doctor --share` output, or telling one colleague.
+To send something, ask the author through [GitHub](https://github.com/DkPanseriya); there is no
+official sponsorship programme, on purpose, and nothing in the product changes either way.
 
 ## Contributing
 
@@ -240,7 +240,7 @@ you decide what you owe**, and **sending anything off the machine**. Security po
 ```bash
 npm install     # dev tooling only; the product itself has zero runtime dependencies
 npm test        # node --test, no test framework
-npm run lint
+npm run lint && npm run format:check && npm run typecheck
 npm run demo    # a synthetic floor in a temp directory, for screenshots
 ```
 

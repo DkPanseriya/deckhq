@@ -19,6 +19,17 @@
   **Reveal file** do what they say. Nothing is uploaded or sent anywhere, and making a picture
   changes no session's state. See the guide, "Share a picture of your floor".
 
+### Changed
+
+- **One line describes DeckHQ everywhere: "An office for your AI coding agents".** It is the
+  site's, and it is now also the first line of `deckhq --help`, the last line of
+  `deckhq doctor --share`, the package's description on npm, the plugin's, and the description an
+  installed app and a Linux menu entry carry. Nothing else about those outputs changed.
+- **`deckhq --help` and `deckhq look` no longer say there are six styles.** There are eleven, and
+  `deckhq look presets` lists them; the help names no count. The notice `deckhq shortcut` and
+  `deckhq autostart` print on macOS and Linux no longer points at a document that is not in the
+  repository.
+
 ### Fixed
 
 - **A Studio handover is no longer lost when the board is busy.** When a hired session handed its

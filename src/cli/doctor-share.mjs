@@ -28,8 +28,7 @@ import { plural, describeDeck, describeRuntime, ago, group } from './doctor-repo
  * export rather than a string buried in a template.
  */
 export const PITCH =
-  'DeckHQ — every AI coding session on your machine, on one office floor. ' +
-  'npx deckhq · local, private, MIT.';
+  'DeckHQ — an office for your AI coding agents. npx deckhq · local, private, MIT.';
 
 /** How wide the share block's label gutter is. The report's width, unindented. */
 export const SHARE_LABEL_WIDTH = 16;
