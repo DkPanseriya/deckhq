@@ -18,10 +18,13 @@ npx deckhq doctor   # count the sessions on your disk, finished ones included
 npx deckhq app      # the floor, in a window of its own
 ```
 
-Both need Node 18 or newer and nothing else. `doctor` only reports: it starts nothing, opens
-nothing and makes no outbound call, and the one thing it writes is a probe file in `~/.deckhq`,
-deleted at once. `app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and
-the first time asks once whether you want a Desktop and Start Menu icon.
+`doctor` only reports. A real run on 3 September 2026 read `on the floor 77 ← 71 sessions have
+already finished; the agent view no longer lists them`; yours will differ. It starts no daemon,
+opens no window and makes no outbound call of its own; it asks `claude` what is running, and the
+one thing it writes is a probe file in `~/.deckhq`, deleted at once.
+
+`app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and the first time
+asks once whether you want a Desktop and Start Menu icon. Both need Node 18 or newer, nothing else.
 
 - **Local.** The daemon binds `127.0.0.1` and nothing else (`HOST` in
   [`src/daemon.mjs`](src/daemon.mjs)) and makes no outbound call. No account, no telemetry.
@@ -66,8 +69,8 @@ view's own count beside its own.
 
 <table>
   <tr>
-    <td valign="top"><img src="docs/media/site/loop-crew.gif" width="430" alt="A crew, moving: a lead robot named Elif at its desk with five juniors sitting in an arc behind it, each with a laptop and a cable running to the desk." /><br />Capture: a lead and its crew.</td>
-    <td valign="top"><img src="docs/media/site/panel.png" width="270" alt="The review panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a block reading npm test, 214 passing, the files that changed, and three buttons: 1 Reply, 2 Approve, 3 Bench." /><br />Capture: the review card.</td>
+    <td valign="top"><img src="docs/media/site/loop-crew.gif" width="400" alt="A crew, moving: a lead robot named Elif at its desk with five juniors sitting in an arc behind it, each with a laptop and a cable running to the desk." /><br />Capture: a lead and its crew.</td>
+    <td valign="top"><img src="docs/media/site/panel.png" width="260" alt="The review panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a block reading npm test, 214 passing, the files that changed, and three buttons: 1 Reply, 2 Approve, 3 Bench." /><br />Capture: the review card.</td>
   </tr>
 </table>
 
@@ -77,10 +80,8 @@ rest, with a picture each: [the features](https://deckhq.dev/features.html).
 
 ## Install, the other ways
 
-`npx deckhq app` is the whole install if you have Node 18 or newer.
-
 <details>
-<summary><strong>No Node, one line at a time, or an installer you can read first</strong></summary>
+<summary><strong>No Node on the machine, a step at a time, or an installer to double-click</strong></summary>
 
 **No Node on the machine?** Paste the line for your shell:
 
@@ -146,8 +147,8 @@ deckhq autostart --install --yes  # the daemon, quietly, when you log in
 ```
 
 `deckhq app` reuses a running DeckHQ or starts one, and closing its window stops nothing: the
-daemon outlives it. Both installers print every path they would write and the exact command each
-will run **before** `--yes`, tag every file they create, and remove only what they tagged.
+daemon outlives it. Both commands above print every path they would write and the exact command
+each will run **before** `--yes`, tag every file they create, and remove only what they tagged.
 **Windows is the platform this was run on.** The macOS bundle and the Linux desktop entries are
 written from Apple's and freedesktop.org's documentation and have never been executed on a machine.
 A machine with neither Chrome nor Edge gets its default browser, and is told so.
@@ -182,8 +183,7 @@ _unverified launch_. All of it: [the site](https://deckhq.dev/features.html#stud
 | [`LICENSE`](LICENSE)                   | MIT                                                                     |
 | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | For anyone adding support for another coding tool                       |
 
-[deckhq.dev](https://deckhq.dev/) is the product site: what it does, how it looks, how to install
-it, and the answers to the questions it gets asked.
+[deckhq.dev](https://deckhq.dev/) is the product site: what it does, how it looks, how to install.
 
 ## Honest limits
 
