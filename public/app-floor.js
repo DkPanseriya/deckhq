@@ -94,7 +94,7 @@ export function applyTendencies(map) {
 
 /**
  * @param {{normaliseHit:(hit:unknown) => any, selectAgent:(id:string|null) => void,
- *   filterToProject:(id:string|null) => void, openNewAgentDialog:(id:string) => void,
+ *   openRoomSettings:(id:string) => void, openNewAgentDialog:(id:string) => void,
  *   showWhiteboard:(id:string) => void, revealProjectFolder:(id:string) => Promise<void>,
  *   runProjectDashboard:(id:string) => Promise<void>,
  *   showTooltip:(id:string|null) => void, openResting:() => void}} actions
@@ -104,7 +104,7 @@ export function applyTendencies(map) {
 export async function loadRenderModules({
   normaliseHit,
   selectAgent,
-  filterToProject,
+  openRoomSettings,
   openNewAgentDialog,
   showWhiteboard,
   revealProjectFolder,
@@ -186,7 +186,9 @@ export async function loadRenderModules({
         onSelect: (hit) => {
           const sel = normaliseHit(hit);
           if (!sel) return selectAgent(null);
-          if (sel.kind === 'project') return filterToProject(sel.id);
+          // A press on a project room's title bar opens that room's own
+          // settings; "show only this room" is a row in there now.
+          if (sel.kind === 'project') return openRoomSettings(sel.id);
           if (sel.kind === 'new-agent') return openNewAgentDialog(sel.id);
           if (sel.kind === 'whiteboard') return showWhiteboard(sel.id);
           if (sel.kind === 'shelf') return revealProjectFolder(sel.id);

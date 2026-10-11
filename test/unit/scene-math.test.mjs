@@ -41,7 +41,6 @@ import {
 import {
   doingEntriesFor,
   PLATE_DOING_CHARS,
-  PLATE_ROWS,
   platePlanFor,
   resolveBadgeCollisions,
 } from '../../public/render/scene-labels.js';
@@ -1613,14 +1612,6 @@ test('WP-81: the doing line is the adapter’s own tool summary, cut but never i
   assert.equal(doingEntriesFor(null).length, 0);
 });
 
-test('WP-81: the plate’s type scale is stated once, and nothing is set under 11 px', () => {
-  assert.equal(PLATE_ROWS.length, 4);
-  assert.ok(PLATE_ROWS.every((r) => r.px >= 11));
-  assert.ok(PLATE_ROWS[1].px > PLATE_ROWS[0].px, 'the hero must outrank the name');
-  // Every row's leading is positive, so the rows can only ever run downward.
-  assert.ok(PLATE_ROWS.every((r) => r.lead > 0));
-});
-
 // ------------------------------------------- the bitmap, one pixel to one
 
 test('the fit scale is moved so the floor is a whole number of device pixels wide', () => {
@@ -1783,8 +1774,5 @@ test('a name is haloed by a share of its type, never under a device pixel and a 
   assert.equal(labelHaloWidth(6, 2), 0.96);
   assert.equal(labelHaloWidth(4, 2) * 2, 1.5, 'in DEVICE pixels, whatever the ratio');
   // Under a quarter of the glyph at every size the floor sets: the counters stay open.
-  for (const row of PLATE_ROWS) {
-    assert.ok(Math.abs(row.halo - row.px * 0.16) < 1e-9, `${row.px} px is haloed ${row.halo}`);
-    assert.ok(labelHaloWidth(row.px, 1) / row.px < 0.2);
-  }
+  for (const px of [11, 12.5, 14]) assert.ok(labelHaloWidth(px, 1) / px < 0.2);
 });

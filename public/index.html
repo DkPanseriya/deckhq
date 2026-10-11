@@ -592,6 +592,10 @@
       </div>
     </dialog>
 
+    <!-- A project room's own settings: the popover its title bar opens on the
+         floor. Filled by public/room-menu.js; this is only its shell. -->
+    <div class="look-popover room-popover" id="room-popover" role="dialog" hidden></div>
+
     <dialog id="new-agent-dialog" class="dialog" aria-labelledby="new-agent-title">
       <form method="dialog" class="dialog-head">
         <h2 id="new-agent-title">New agent</h2>
@@ -602,27 +606,39 @@
       <div class="dialog-body">
         <p id="new-agent-intro">Starts another session in this project.</p>
 
-        <div class="field">
-          <span class="field-label">Short name (optional)</span>
-          <div class="picker" id="new-agent-name-picker" role="group" aria-label="Short name"></div>
-        </div>
-
-        <div class="field">
-          <span class="field-label">Avatar (optional)</span>
-          <div class="picker" id="new-agent-avatar-picker" role="group" aria-label="Avatar"></div>
-        </div>
-
         <label class="field">
-          <span class="field-label">Instructions (optional)</span>
+          <span class="field-label">What should it start on? (optional)</span>
           <textarea
             id="new-agent-instructions"
             class="field-input"
             rows="3"
-            placeholder="What should this session start on?"
+            placeholder="A first instruction. Leave it empty to start a blank session."
           ></textarea>
         </label>
 
-        <p class="dialog-error" id="new-agent-error" hidden></p>
+        <div class="field">
+          <span class="field-label" id="new-agent-name-label">Name on the floor (optional)</span>
+          <div
+            class="picker"
+            id="new-agent-name-picker"
+            role="group"
+            aria-labelledby="new-agent-name-label"
+          ></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label" id="new-agent-badge-label">Chest badge (optional)</span>
+          <div
+            class="picker"
+            id="new-agent-avatar-picker"
+            role="group"
+            aria-labelledby="new-agent-badge-label"
+          ></div>
+          <span class="field-hint">The small mark on its chest. Project is the room's own.</span>
+        </div>
+
+        <p class="dialog-note" id="new-agent-runtime"></p>
+        <p class="dialog-error" id="new-agent-error" role="alert" hidden></p>
       </div>
       <div class="dialog-foot">
         <button type="button" class="btn btn--primary" id="new-agent-go">Start agent</button>
@@ -631,7 +647,7 @@
 
     <dialog id="identity-dialog" class="dialog" aria-labelledby="identity-title">
       <form method="dialog" class="dialog-head">
-        <h2 id="identity-title">Rename agent</h2>
+        <h2 id="identity-title">Name and badge</h2>
         <button type="submit" class="icon-btn" id="identity-close" aria-label="Close">
           &times;
         </button>
@@ -640,16 +656,27 @@
         <p id="identity-intro">Sets what this agent is called on the floor.</p>
 
         <div class="field">
-          <span class="field-label">Short name</span>
-          <div class="picker" id="identity-name-picker" role="group" aria-label="Short name"></div>
+          <span class="field-label" id="identity-name-label">Name on the floor</span>
+          <div
+            class="picker"
+            id="identity-name-picker"
+            role="group"
+            aria-labelledby="identity-name-label"
+          ></div>
         </div>
 
         <div class="field">
-          <span class="field-label">Avatar</span>
-          <div class="picker" id="identity-avatar-picker" role="group" aria-label="Avatar"></div>
+          <span class="field-label" id="identity-badge-label">Chest badge</span>
+          <div
+            class="picker"
+            id="identity-avatar-picker"
+            role="group"
+            aria-labelledby="identity-badge-label"
+          ></div>
+          <span class="field-hint">The small mark on its chest. Project is the room's own.</span>
         </div>
 
-        <p class="dialog-error" id="identity-error" hidden></p>
+        <p class="dialog-error" id="identity-error" role="alert" hidden></p>
       </div>
       <div class="dialog-foot">
         <button type="button" class="btn btn--primary" id="identity-go">Save</button>

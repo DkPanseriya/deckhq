@@ -150,8 +150,15 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // one-line hint under the header's Look button has been shown. A fact, set
   // once by dismissing it or by using the button, and read by
   // `public/look-ui-bar.js`.
+  //
+  // `rooms` is the twelfth, and the one that is exempt because it HAS a
+  // control, somewhere better than the sheet: each project room's own choices
+  // are made from that room's title bar on the floor (`public/room-menu.js`),
+  // where the room is. A sheet row per project would be a list of every repo
+  // on the machine. `room-menu.test.mjs` holds that the popover writes it.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
+    'rooms',
     'approveText',
     'onboarded',
     'seenLookHint',

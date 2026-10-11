@@ -26,6 +26,8 @@ import { FALLBACK_AVATAR_GLYPHS, el, latestSnapshot, palette, toast } from './ap
  * would go. Changing this line changes nothing else.
  */
 const NEW_SESSION_RUNTIME = 'claude-code';
+/** …and what that runtime is called where the sheet says which it is. */
+const NEW_SESSION_LABEL = 'Claude Code';
 
 //
 // The three flows in CONTRACTS-WP15.md §6 / WP15 task C, all in the GUI, all
@@ -163,7 +165,7 @@ export function buildNamePicker(host, taken, current) {
   const names = availableNames(taken);
   if (current && !names.includes(current)) names.unshift(current);
   const options = [
-    { value: null, label: 'No name (MK tag)' },
+    { value: null, label: 'No name' },
     ...names.map((n) => ({ value: n, label: n })),
   ];
   return buildPicker(host, options, current);
@@ -182,6 +184,34 @@ const GLYPH_PATHS = {
   cross: 'M8 1 H12 V8 H19 V12 H12 V19 H8 V12 H1 V8 H8 Z',
 };
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** What each badge is called where a person reads it. */
+const BADGE_LABELS = Object.freeze({
+  hex: 'Hex',
+  triangle: 'Triangle',
+  square: 'Square',
+  diamond: 'Diamond',
+  drop: 'Drop',
+  star: 'Star',
+  cross: 'Cross',
+  ring: 'Ring',
+});
+
+/**
+ * The floor's own painter for a badge's picture, fetched the first time a
+ * sheet opens and kept. It pulls in the rig, so it is never on the shell's
+ * critical path; where it does not arrive the pickers draw their outlines.
+ * @type {any}
+ */
+let thumbs = null;
+const thumbsReady = import('./agent-thumb.js').then(
+  (mod) => (thumbs = mod),
+  () => null,
+);
+
+/** A picture of a robot of project `mk` wearing a badge. @param {number} mk */
+const badgePicture = (mk) => (/** @type {string|null} */ glyph) =>
+  thumbs ? thumbs.agentThumb(document, { glyph, projectMk: mk }) : null;
 
 /** @param {string} name */
 export function glyphIcon(name) {
@@ -209,15 +239,22 @@ export function glyphIcon(name) {
 /**
  * @param {HTMLElement} host
  * @param {string[]} glyphs the known vocabulary (render/palette.js's AVATAR_GLYPHS)
+ * @param {(glyph:string|null) => any} [picture] a picture of a robot wearing that
+ *   badge, or nothing where there is none
  * @param {string|null} current the agent's own current avatar, always offered
  *   even if it falls outside `glyphs` (e.g. a stale value from before the
  *   vocabulary changed) — same defensiveness as buildNamePicker.
  */
-export function buildAvatarPicker(host, glyphs, current) {
+export function buildAvatarPicker(host, glyphs, current, picture) {
   const list = current && !glyphs.includes(current) ? [current, ...glyphs] : glyphs;
+  // Each choice is the thing itself — a robot wearing that badge, drawn by the
+  // floor's painter (`agent-thumb.js`) — and the bare outline only where the
+  // painter has not arrived. `Project` is the badge the room's own project has.
+  const node = (/** @type {string|null} */ name) =>
+    (picture && picture(name)) || (name ? glyphIcon(name) : undefined);
   const options = [
-    { value: null, label: 'Default' },
-    ...list.map((name) => ({ value: name, label: name, node: glyphIcon(name) })),
+    { value: null, label: 'Project', node: node(null) },
+    ...list.map((name) => ({ value: name, label: BADGE_LABELS[name] || name, node: node(name) })),
   ];
   const getValue = buildPicker(host, options, current);
   for (const btn of host.querySelectorAll('.picker-btn')) btn.classList.add('avatar-btn');
@@ -232,7 +269,9 @@ export function buildAvatarPicker(host, glyphs, current) {
 
 let newAgentProjectId = null;
 let getNewAgentName = () => null;
-let getNewAgentAvatar = () => null;
+/** No badge chosen yet. */
+const NOTHING = () => null;
+let getNewAgentAvatar = NOTHING;
 
 /** @param {string} projectId */
 export function openNewAgentDialog(projectId) {
@@ -242,19 +281,31 @@ export function openNewAgentDialog(projectId) {
     return;
   }
   newAgentProjectId = projectId;
+  // The project is the room whose `+` was pressed, and the sheet says so.
   el.newAgentIntro.textContent = `Starts another session in ${project.name}.`;
+  el.newAgentRuntime.textContent = `It runs in ${NEW_SESSION_LABEL}, in a terminal of its own.`;
   el.newAgentInstructions.value = '';
   el.newAgentError.hidden = true;
 
   const taken = (latestSnapshot.agents || []).map((a) => a.displayName).filter(Boolean);
   getNewAgentName = buildNamePicker(el.newAgentNamePicker, taken, null);
-  getNewAgentAvatar = buildAvatarPicker(
-    el.newAgentAvatarPicker,
-    palette?.AVATAR_GLYPHS || FALLBACK_AVATAR_GLYPHS,
-    null,
-  );
+  const drawBadges = () => {
+    getNewAgentAvatar = buildAvatarPicker(
+      el.newAgentAvatarPicker,
+      palette?.AVATAR_GLYPHS || FALLBACK_AVATAR_GLYPHS,
+      getNewAgentAvatar === NOTHING ? null : getNewAgentAvatar(),
+      badgePicture(project.projectMk),
+    );
+  };
+  getNewAgentAvatar = NOTHING;
+  drawBadges();
+  // The painter may land after the sheet is up: the cards are drawn again
+  // with their pictures, on the choice already made.
+  if (!thumbs) void thumbsReady.then(() => el.newAgentDialog.open && drawBadges());
 
   el.newAgentDialog.showModal();
+  // The one field most people fill: the keyboard starts in it.
+  el.newAgentInstructions.focus();
 }
 
 async function submitNewAgent() {
@@ -299,6 +350,14 @@ async function submitNewAgent() {
 }
 
 el.newAgentGo.addEventListener('click', submitNewAgent);
+// Ctrl+Enter (Cmd+Enter) starts it from anywhere in the sheet; a bare Enter in
+// the instruction is a new line, as it is in every text area.
+el.newAgentDialog.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    void submitNewAgent();
+  }
+});
 
 // -------------------------------------------------- rename / re-avatar
 
@@ -309,7 +368,7 @@ let getIdentityAvatar = () => null;
 /** @param {any} agent */
 export function openIdentityDialog(agent) {
   identityAgentId = agent.id;
-  el.identityIntro.textContent = `Sets what ${agent.mk || agent.title} is called on the floor.`;
+  el.identityIntro.textContent = `What ${agent.displayName || agent.mk || agent.title} is called on the floor, and the badge on its chest.`;
   el.identityError.hidden = true;
 
   // Every OTHER agent's name is taken; this agent's own current name stays
@@ -319,11 +378,18 @@ export function openIdentityDialog(agent) {
     .map((a) => a.displayName)
     .filter(Boolean);
   getIdentityName = buildNamePicker(el.identityNamePicker, taken, agent.displayName ?? null);
-  getIdentityAvatar = buildAvatarPicker(
-    el.identityAvatarPicker,
-    palette?.AVATAR_GLYPHS || FALLBACK_AVATAR_GLYPHS,
-    agent.avatar ?? null,
-  );
+  let drawn = false;
+  const drawBadges = () => {
+    getIdentityAvatar = buildAvatarPicker(
+      el.identityAvatarPicker,
+      palette?.AVATAR_GLYPHS || FALLBACK_AVATAR_GLYPHS,
+      drawn ? getIdentityAvatar() : (agent.avatar ?? null),
+      badgePicture(agent.projectMk),
+    );
+    drawn = true;
+  };
+  drawBadges();
+  if (!thumbs) void thumbsReady.then(() => el.identityDialog.open && drawBadges());
 
   el.identityDialog.showModal();
 }
@@ -357,3 +423,9 @@ async function submitIdentity() {
 }
 
 el.identityGo.addEventListener('click', submitIdentity);
+el.identityDialog.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    void submitIdentity();
+  }
+});

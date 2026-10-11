@@ -36,10 +36,44 @@ _Capture: the running product on its demo floor, 11 October 2026. The projects a
 
 **Read it in one glance.** The header counts what needs you. Your Office, top left, holds the
 sessions that are waiting on you — finished and waiting on your reply, or **hand up** and blocked
-on a question — oldest first, with how long they have been waiting. Each project is a room with
-its own session count and token spend on the plate, and the people in it are that project's
-sessions: typing if they are working, slumped if they have gone quiet. The lounge holds agents you
+on a question — oldest first, with how long they have been waiting. Each project is a room, and
+the people in it are that project's sessions: typing if they are working, slumped if they have gone
+quiet. The lounge holds agents you
 have reviewed and benched — available capacity, resting, ready for the next job.
+
+**Every room has a header.** Across the top of each room is a **title bar** with the room's name
+— the repository's — and under it a **status strip**: a symbol and a number in fixed places, with
+no words, so that once you know the symbols you read a room without reading.
+
+| Room         | Left to right                                                    |
+| ------------ | ---------------------------------------------------------------- |
+| A project   | bell: need you · three bars: working · hourglass: stalled · coins: tokens today (`5.8M`) |
+| Your Office | bell: waiting on you · hand: hands up · tick: for review |
+| The Lounge  | moon: resting · house: went home |
+
+The symbols are drawn, not typed: each is a different shape, so a state is never told by its
+colour alone. A slot
+whose number is zero **stays in its place**, dimmed, so nothing ever moves sideways. A room too
+narrow for every slot loses them from the right; its title bar is never dropped, and a name too
+long is cut with an ellipsis. A pinned room shows a small pin after its name. **Point at a header
+for the words**: every slot said in a sentence, with the longest wait, what the room is doing, the
+day's tokens in full and how many sessions the room has had.
+
+**Press a project room's title bar for that room's settings** — or `⌘K`, _Room settings: name_:
+
+| Row                 | What it does                                                             |
+| ------------------- | ------------------------------------------------------------------------ |
+| Show only this room | Scopes the queue and the panel to this project                           |
+| New agent here      | Opens the new-agent sheet for this project (the `+` on the bar does too) |
+| Pin this room       | Keeps the room when nobody is in it; `Unpin` on a pinned one             |
+| Room colour         | Auto, or one of six hues for this room, where Room colours is on in Look |
+| Open the board      | The room's board: who is in it and what each is doing                    |
+| Open folder         | The project on disk                                                      |
+
+A room's own choices are kept in `state.json`, by project. They are **not part of a look**: a look
+you export names no project and no path, and still does not. The **board** on a room's left wall is
+lit and shows a line for each state somebody in the room is in; it and everything else on the floor
+that can be pressed are outlined under the pointer.
 
 **How the floor is shared out.** The project rooms get most of the building: at least 55% of it
 where the rooms are not already as large as a room may be (two projects are 54% of a 1440 × 1000
@@ -1035,7 +1069,7 @@ Floor, Look, Data, Hooks — jumps to each. Neither key does anything while you 
 
 `I` opens the list of repos nobody is working in — a quiet chip in the corner of the floor, and the
 names behind it. **Pinning one keeps it a room** even with nothing running in it: the small room in
-its row, one desk, nobody at it, the lights off, and a plate that says `pinned`. It becomes a lit
+its row, one desk, nobody at it, the lights off, and a pin beside its name. It becomes a lit
 room of its own size the moment you start a session there. `P` on a row pins and unpins; so does `Pin` / `Unpin` in `⌘K`. The pin lives
 in `state.json` and nothing your agents do can clear it.
 

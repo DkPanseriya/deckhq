@@ -27,7 +27,7 @@ import { createIdlePopover } from './idle-projects.js';
 import { exportLayout, importLayout } from './app-layout.js';
 import { createLookPort, createThemingPort, lookPaletteActions, lookPresets } from './app-look.js';
 import { wireLookBar } from './app-lookbar.js';
-import { setProjectArchived, setProjectPinned } from './app-rooms.js';
+import { setProjectArchived, setProjectPinned, wireRoomMenu } from './app-rooms.js';
 import { createClearedTracker } from './office-cleared.js';
 import { FALLBACK_STATE_COLORS } from './state-palette.js';
 import {
@@ -254,6 +254,7 @@ function handleSnapshot(snapshot) {
   if (coachMarks.isRunning()) coachMarks.reposition();
   if (first) maybeShowOnboarding(snapshot.settings);
   lookBar.refresh(); // after the tour has had its chance to start
+  roomMenu.refresh();
 }
 
 /** GET /api/state once at boot, retrying with backoff if the daemon is unreachable. */
@@ -569,6 +570,9 @@ function startNewAgent(projectId) {
   paletteUI.open('new agent in ');
 }
 
+// A project room's own settings: the popover its title bar opens (`app-rooms.js`).
+const roomMenu = wireRoomMenu(filterToProject, startNewAgent, showWhiteboard, revealProjectFolder);
+
 // Clicking the scrim — anywhere but the board itself — closes the board.
 el.whiteboardOverlay.addEventListener('click', (e) => {
   if (e.target === el.whiteboardOverlay) hideWhiteboard();
@@ -739,6 +743,7 @@ const paletteUI = createPalette({
     runDashboard: runProjectDashboard,
     archiveProject: setProjectArchived,
     pinProject: setProjectPinned, // WP-77
+    roomSettings: (id) => roomMenu.open(id),
     newAgent: startNewAgent,
     newProject: openNewProject,
     floatOffice, // WP-39
@@ -875,7 +880,7 @@ async function main() {
     loadRenderModules({
       normaliseHit,
       selectAgent,
-      filterToProject,
+      openRoomSettings: (id) => roomMenu.open(id),
       openNewAgentDialog,
       showWhiteboard,
       revealProjectFolder,

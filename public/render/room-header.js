@@ -41,7 +41,7 @@
 import { worldToScreen } from './agents.js';
 import { PALETTE, STATE_COLORS, mixHex, relativeLuminanceOf } from './palette.js';
 import { PLATE_BAND } from './plan-units.js';
-import { textWidth } from './text-metrics.js';
+import { ellipsise, textWidth } from './text-metrics.js';
 import { opaqueOf, textPaint, typeFont } from './floor-type.js';
 import { SYMBOLS, drawSymbol } from './room-symbols.js';
 
@@ -225,7 +225,7 @@ export function layoutHeader(ctx, room, header, camera, k) {
   const font = typeFont('roomName', px, true);
   const pinR = header.pinned ? px * 0.42 : 0;
   const room4title = w - pad * 2 - (plus ? barH : 0) - (pinR ? pinR * 2 + GAP * k : 0);
-  const title = fitText(ctx, header.title, Math.max(0, room4title), font);
+  const title = ellipsise(ctx, header.title, Math.max(0, room4title), font);
   const titleW = title ? textWidth(ctx, font, title) : 0;
   const pin = pinR ? { cx: x + pad + titleW + GAP * k + pinR, cy: y + barH / 2, r: pinR } : null;
 
@@ -255,19 +255,6 @@ export function layoutHeader(ctx, room, header, camera, k) {
     num: { font: numFont, px: numPx, symbolR: stripH * 0.3, gap: GAP * k * fit },
     dropped: header.slots.length - slots.length,
   };
-}
-
-/** Cut a line with an ellipsis until it fits; `''` where not even one glyph does. */
-function fitText(/** @type {any} */ ctx, /** @type {string} */ text, maxW, font) {
-  if (textWidth(ctx, font, text) <= maxW) return text;
-  let lo = 0;
-  let hi = text.length;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (textWidth(ctx, font, `${text.slice(0, mid)}…`) <= maxW) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo > 0 ? `${text.slice(0, lo)}…` : '';
 }
 
 /**

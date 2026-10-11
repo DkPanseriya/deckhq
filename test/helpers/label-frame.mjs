@@ -26,12 +26,8 @@ import {
   planFrameLabels,
   wallBoxes,
 } from '../../public/render/scene-frame-labels.js';
-import {
-  layoutPlate,
-  platePlanFor,
-  plateLimit,
-  resolveBadgeCollisions,
-} from '../../public/render/scene-labels.js';
+import { plateScaleFor, resolveBadgeCollisions } from '../../public/render/scene-labels.js';
+import { layoutHeader, roomHeaderFor } from '../../public/render/room-header.js';
 import { figureBox } from '../../public/render/leader-line.js';
 import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
@@ -180,17 +176,17 @@ export function frameAt(viewW, viewH, floor = largeFloor, opts = {}) {
       crewsFrom(agents, { now: LARGE_NOW }).map((c) => [c.parentId, c.count]),
     );
     const { badgePlan, badgeBoxes } = waitBadges(ctx, badges ? records : [], camera, charU, uOf);
-    // After the badges, as the floor lays them: a plate stops short of one.
+    // The room headers, as the floor lays them: across the top of every room.
     const plates = plan.rooms
       .filter((r) => r.kind !== 'corridor')
       .map((room) => ({
         room,
-        ...layoutPlate(
+        ...layoutHeader(
           ctx,
           room,
-          platePlanFor(room, snapshot, plan),
+          roomHeaderFor(room, snapshot, plan),
           camera,
-          plateLimit(room, badgeBoxes, camera),
+          plateScaleFor(camera.zoom * camera.U),
         ),
       }));
     const lod = lodForFigure(rigHeight(charU));

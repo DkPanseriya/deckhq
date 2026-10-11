@@ -17,6 +17,7 @@ import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
 import { DEFAULT_LOOK, sanitizeLook } from './look.mjs';
 import { sanitizeAvatarSetName } from './avatars.mjs';
+import { sanitizeRooms } from './room-settings.mjs';
 
 /**
  * @typedef {'app'|'terminal'} ResumeTarget
@@ -88,6 +89,8 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       name from `core/themes.mjs`, never a
  *                                       path and never a colour: the document
  *                                       lives in the build, not in state.json.
+ * @property {Record<string, Record<string, string>>} rooms  per-project room
+ *   choices, by project id (`room-settings.mjs`)
  * @property {string} avatarSet          which avatar set the agents are dressed
  *                                       from (WP-45), or `''` for the tables
  *                                       this build ships. A name from an
@@ -190,6 +193,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // (`appearanceRng`), so installing a pack offers a set and choosing one
   // applies it; nothing happens because a file appeared in a directory.
   avatarSet: '',
+  // WHAT EACH PROJECT ROOM IS SET TO (`room-settings.mjs`): a map of project id
+  // to that room's own choices — today its colour — made from the room's title
+  // bar. Empty on every install. It is a setting and never part of the look: a
+  // look names no project, and this is keyed by one.
+  rooms: Object.freeze({}),
   // WP-83. WHETHER ANY CURRENCY FIGURE APPEARS ANYWHERE. Ships OFF.
   //
   // The owner, 14 September 2026: "mostly people will have subscriptions, so
@@ -444,6 +452,7 @@ export function sanitizeSettings(raw) {
   s.theme = sanitizeThemeName(s.theme);
   s.look = sanitizeLook(s.look);
   s.avatarSet = sanitizeAvatarSetName(s.avatarSet);
+  s.rooms = sanitizeRooms(s.rooms);
   s.postcardDay = sanitizeShownKey(s.postcardDay);
   s.wrappedShown = sanitizeShownKey(s.wrappedShown);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);

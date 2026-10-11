@@ -81,3 +81,28 @@ export function textWidth(ctx, font, text) {
   }
   return w;
 }
+
+/**
+ * Trim text with an ellipsis until it fits maxW at the context's current
+ * font. Binary search rather than character-by-character, so a long room name
+ * costs a handful of measureText calls per frame, not dozens.
+ * @param {{font?:string, measureText:(t:string)=>{width:number}}} ctx
+ * @param {string} text
+ * @param {number} maxW
+ * @param {string} [font] the font it is set in: given, every width is kept and
+ *   asked once (`text-metrics.js`) and the context's font is left alone
+ */
+export function ellipsise(ctx, text, maxW, font) {
+  if (maxW <= 0) return '';
+  const wide = (/** @type {string} */ t) =>
+    font ? textWidth(/** @type {any} */ (ctx), font, t) : ctx.measureText(t).width;
+  if (wide(text) <= maxW) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (wide(text.slice(0, mid) + '…') <= maxW) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? text.slice(0, lo) + '…' : '';
+}

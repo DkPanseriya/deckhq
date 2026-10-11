@@ -17,7 +17,6 @@
 import { formatTokens, plateHeroLine, plateTertiaryLine, restingChipLine } from './plan.js';
 // Straight from the dimensions module rather than through `plan.js`: this is a
 // leaf of pure numbers, and `plan.js` is already at the 900-line ceiling.
-import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { formatElapsed } from './rig.js';
 import { snapPx, snapWidth } from './device-px.js';
@@ -33,16 +32,6 @@ import { SceneBake } from './scene-bake.js';
 import { now as clockNow } from '../clock.js';
 
 export { MAX_LABEL_OFFSET_ATTEMPTS, resolveLabelCollisions } from './label-spots.js';
-
-/**
- * A PLATE'S FOUR ROWS, as type roles and as kinds of text (`floor-type.js`):
- * which face each is set in, and what each is painted with. Every number is in
- * the NUMERIC role — a family whose figures are tabular — which is how a count
- * stays still on a canvas, where there is no `font-variant-numeric`. It was a
- * bold monospace, and that is what made a room's plate read as a terminal.
- */
-export const PLATE_ROLES = Object.freeze(['roomName', 'roomCount', 'roomDoing', 'roomTokens']);
-export const PLATE_KINDS = Object.freeze(['plateName', 'plateCount', 'plateDoing', 'plateTokens']);
 
 /**
  * THE PLATE SCALES WITH THE PLAN (WP-59).
@@ -72,31 +61,6 @@ export const PLATE_MAX_GROWTH = 1.6;
 export function plateScaleFor(worldScale) {
   const s = Number(worldScale) || 0;
   return Math.min(PLATE_MAX_GROWTH, Math.max(1, s / PLATE_BASE_SCALE));
-}
-
-/**
- * Trim text with an ellipsis until it fits maxW at the context's current
- * font. Binary search rather than character-by-character, so a long room name
- * costs a handful of measureText calls per frame, not dozens.
- * @param {{font?:string, measureText:(t:string)=>{width:number}}} ctx
- * @param {string} text
- * @param {number} maxW
- * @param {string} [font] the font it is set in: given, every width is kept and
- *   asked once (`text-metrics.js`) and the context's font is left alone
- */
-export function ellipsise(ctx, text, maxW, font) {
-  if (maxW <= 0) return '';
-  const wide = (/** @type {string} */ t) =>
-    font ? textWidth(/** @type {any} */ (ctx), font, t) : ctx.measureText(t).width;
-  if (wide(text) <= maxW) return text;
-  let lo = 0;
-  let hi = text.length;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (wide(text.slice(0, mid) + '…') <= maxW) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo > 0 ? text.slice(0, lo) + '…' : '';
 }
 
 /**
@@ -527,182 +491,6 @@ export function resolveBadgeCollisions(items, bodies = []) {
   return { drawn, short, pills };
 }
 
-/**
- * THE FOUR TYPE SIZES A PLATE IS SET IN, AND THE BASELINE EACH SITS ON
- * (WP-81, `docs/plan/10-INTERIOR-DESIGN.md` §3.8).
- *
- * Every number is stated at `PLATE_BASE_SCALE` and multiplied by
- * `plateScaleFor` at draw time, exactly as the two sizes before them were.
- * The baselines are measured from the room's own top edge — the top of
- * `PLATE_BAND` — which is what lets `_drawRoomPlate` decide how many of them
- * the band can hold before it draws any.
- *
- * §3.8 asked for three sizes. There are four here because there are four
- * ranks, and the fourth costs no legibility: the hero is a size ABOVE the
- * name rather than a fourth size below it, and nothing is set under 11 px,
- * which is the floor §3.8 set. That the hero outranks the room's own name is
- * the whole point of the package — the name says which room, the hero says
- * whether to get up.
- *
- * `halo` is 0.16 of the size, a figure's name's own share (`labelHaloWidth`).
- * It was 0.23, which closed the counters of the 11 px rows.
- */
-export const PLATE_ROWS = Object.freeze([
-  { px: 12.5, lead: 12, halo: 2 }, // 0 title — `roomName`
-  { px: 14, lead: 16, halo: 2.24 }, // 1 hero — `roomCount`
-  { px: 11, lead: 12, halo: 1.76 }, // 2 doing — `roomDoing`
-  { px: 11, lead: 11, halo: 1.76 }, // 3 tertiary — `roomTokens`
-]);
-
-/** How far a row's descenders reach below its baseline, for the band fit. */
-const PLATE_DESCENT = 3;
-
-/**
- * THE SMALLEST A PLATE ROW IS EVER SET (audit F1/F8). A plate whose band is
- * too short for its rows at their stated size is set tighter, down to these,
- * before a row is dropped: 11 px is §3.8's floor and the name label's, so a
- * plate at its tightest is still read at the size every name on the floor is.
- */
-export const PLATE_MIN_ROWS = Object.freeze([
-  { px: 11, lead: 11 }, // 0 title
-  { px: 11.5, lead: 12 }, // 1 hero
-  { px: 11, lead: 11 }, // 2 doing
-  { px: 11, lead: 11 }, // 3 tertiary
-]);
-const PLATE_MIN_DESCENT = 2.5;
-
-/**
- * THE COLLAPSE ORDER, WRITTEN DOWN (audit F8): which rows a plate keeps, from
- * most rows to fewest. The title and the hero are never dropped. When the band
- * cannot hold all four, the doing line goes first — each figure already says
- * what it is doing in its own bubble — and the tokens line, which is said
- * nowhere else on the floor, goes last. So a band with room for two lines under
- * the title carries the hero and the tokens.
- */
-export const PLATE_KEEP_ORDER = Object.freeze([
-  Object.freeze([0, 1, 2, 3]),
-  Object.freeze([0, 1, 3]),
-  Object.freeze([0, 1]),
-]);
-
-/**
- * Where a room's plate must stop: the left edge of the first wait badge (or
- * pill) drawn inside its band, or `Infinity` when the band is its own.
- * @param {any} room
- * @param {{x:number, y:number, w:number, h:number}[]} badgeBoxes on screen
- * @param {{zoom:number, panX:number, panY:number, U:number}} camera
- */
-export function plateLimit(room, badgeBoxes, camera) {
-  const at = worldToScreen({ x: room.x, y: room.y }, camera);
-  const scale = camera.zoom * camera.U;
-  const bottom = at.y + (Number(room.plateBand) || PLATE_BAND) * scale;
-  const right = at.x + room.w * scale;
-  let limit = Infinity;
-  for (const b of badgeBoxes || []) {
-    if (b.y < bottom && b.y + b.h > at.y && b.x > at.x && b.x < right) limit = Math.min(limit, b.x);
-  }
-  return limit;
-}
-
-/** The gap the hero's state dot leaves before its first glyph. */
-const PLATE_DOT_GAP = 9;
-
-/**
- * WHERE EVERY ROW OF ONE PLATE GOES, without drawing anything, so the frame's
- * label pass can treat the plate as an obstacle before a single name is set.
- *
- * The rows are chosen by `PLATE_KEEP_ORDER` against the band's height in px.
- * A set of rows that does not fit at its stated size is set tighter, towards
- * `PLATE_MIN_ROWS`, before the next set down is tried; the last set — title
- * and hero — is drawn at its tightest whatever the band says, because it is
- * never dropped. Across, a hero too wide for the plate loses its `· oldest`
- * tail, then collapses to the state dot and its count.
- *
- * `limitX` is where the plate has to stop short of: the first wait badge drawn
- * inside its band (`plateLimit`). The reception's first cushion is under its
- * plate, and `16 waiting · oldest 1d 2h` ran through the badge that says so.
- *
- * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
- * @param {any} room
- * @param {PlatePlan} plate
- * @param {{zoom:number, panX:number, panY:number, U:number}} camera
- * @param {number} [limitX] a screen x no row of the plate may reach
- */
-export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
-  const topLeft = worldToScreen({ x: room.x, y: room.y }, camera);
-  const worldScale = camera.zoom * camera.U;
-  const roomW = room.w * worldScale;
-  const k = plateScaleFor(worldScale);
-  // The east end of the band belongs to the in-room "+" (`PLUS_CLEAR_U`).
-  const plusClear = room.kind === 'project' ? PLUS_CLEAR_U * worldScale : 0;
-  const x = topLeft.x + 6 * k;
-  const reach = Number.isFinite(limitX) ? limitX - x - 4 * k : Infinity;
-  const maxW = Math.max(
-    40 * k,
-    Math.min(reach, Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear))),
-  );
-  const bandPx = (Number(room.plateBand) || PLATE_BAND) * worldScale;
-  const present = (i) => i < 2 || !!plate.lines[i];
-
-  let keep = PLATE_KEEP_ORDER[PLATE_KEEP_ORDER.length - 1];
-  let t = 1;
-  for (const set of PLATE_KEEP_ORDER) {
-    const rows = set.filter(present);
-    const full = rows.reduce((s, i) => s + PLATE_ROWS[i].lead * k, PLATE_DESCENT * k);
-    const tight = rows.reduce((s, i) => s + PLATE_MIN_ROWS[i].lead, PLATE_MIN_DESCENT);
-    if (full <= bandPx) {
-      keep = set;
-      t = 0;
-      break;
-    }
-    if (tight <= bandPx) {
-      keep = set;
-      t = full > tight ? (full - bandPx) / (full - tight) : 0;
-      break;
-    }
-  }
-  const size = (i, key) => {
-    const stated = PLATE_ROWS[i][key] * k;
-    return stated + (Math.min(stated, PLATE_MIN_ROWS[i][key]) - stated) * t;
-  };
-  const descent = PLATE_DESCENT * k + (PLATE_MIN_DESCENT - PLATE_DESCENT * k) * t;
-
-  const rows = [];
-  let widest = 0;
-  let cursor = 0;
-  let top = null;
-  let bottom = topLeft.y;
-  for (const i of keep) {
-    let text = plate.lines[i] || '';
-    if (!text) continue;
-    const row = PLATE_ROWS[i];
-    const px = size(i, 'px');
-    cursor += size(i, 'lead');
-    const y = topLeft.y + cursor;
-    const font = typeFont(/** @type {any} */ (PLATE_ROLES[i]), px, true);
-    const wide = (/** @type {string} */ s) => textWidth(ctx, font, s);
-    const dotted = i === 1 && plate.dot ? PLATE_DOT_GAP * k : 0;
-    // The hero shortens rather than truncates: a cut number is a wrong number.
-    if (i === 1 && wide(text) + dotted > maxW) text = plate.heroHead;
-    if (i === 1 && dotted && wide(text) + dotted > maxW) {
-      const count = /^\d+/.exec(text);
-      if (count) text = count[0];
-    }
-    if (i === 2 && plate.doing.length > 1 && wide(text) > maxW) {
-      text = plate.doing[0];
-    }
-    text = ellipsise(ctx, text, maxW - dotted, font);
-    if (!text) continue;
-    const w = wide(text) + dotted;
-    widest = Math.max(widest, w);
-    if (top === null) top = y - px;
-    bottom = y + descent;
-    rows.push({ i, text, font, x, y, px, dotted, halo: row.halo * (px / row.px) });
-  }
-  const y0 = top ?? topLeft.y;
-  return { rows, k, rect: { x, y: y0, w: widest, h: Math.max(0, bottom - y0) } };
-}
-
 export class SceneLabels extends SceneBake {
   /**
    * A ROOM'S HEADER: its title bar and, under it, its strip of symbols and
@@ -811,9 +599,5 @@ export class SceneLabels extends SceneBake {
     const plate = this._platePlanFor(room);
     const more = [...plate.lines.slice(1), plate.tooltip].filter(Boolean);
     return { ...header, tooltip: [header.tooltip, ...more].join(' · ') };
-  }
-
-  _plateLinesFor(room) {
-    return plateLinesFor(room, this._snapshot, this._plan);
   }
 }

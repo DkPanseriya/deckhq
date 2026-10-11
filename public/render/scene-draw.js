@@ -124,6 +124,8 @@ export function planSignatureParts(snapshot) {
     // `applyLook` may land after the first snapshot, and a signature that could
     // not see the difference would keep the medium bake.
     `a${LOOK.agentSize || ''}`,
+    // A room's own colour (`settings.rooms`) repaints that room's floor.
+    `r${JSON.stringify((snapshot && snapshot.settings && snapshot.settings.rooms) || '')}`,
   ];
   return {
     geometry,

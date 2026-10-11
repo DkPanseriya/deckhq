@@ -116,19 +116,29 @@ export function drawSymbol(ctx, name, cx, cy, r, colour) {
  */
 function drawMore(ctx, name, X, Y, r, cx, cy) {
   switch (name) {
-    case 'hand':
-      // A raised palm: four fingers over a rounded heel, the thumb to one side.
-      for (const x of [-0.45, -0.15, 0.15, 0.45]) {
-        ctx.moveTo(X(x), Y(-0.1));
-        ctx.lineTo(X(x), Y(x === -0.45 || x === 0.45 ? -0.62 : -0.85));
-      }
-      ctx.moveTo(X(-0.45), Y(-0.1));
-      ctx.quadraticCurveTo(X(-0.5), Y(0.85), X(0.05), Y(0.85));
-      ctx.quadraticCurveTo(X(0.5), Y(0.85), X(0.45), Y(-0.1));
-      ctx.moveTo(X(0.45), Y(0.25));
-      ctx.lineTo(X(0.85), Y(-0.15));
+    case 'hand': {
+      // AN OPEN PALM, AS ONE SHAPE: a solid heel, four fingers standing out of
+      // it close enough to read as one mass at 11 px — a mitt, flat on top and
+      // square, where the bell beside it is a dome on a flared rim — with the
+      // gaps between them opening as it grows, and the thumb out to one side.
+      ctx.moveTo(X(-0.56), Y(-0.05));
+      ctx.lineTo(X(0.56), Y(-0.05));
+      ctx.quadraticCurveTo(X(0.6), Y(0.9), X(0), Y(0.9));
+      ctx.quadraticCurveTo(X(-0.6), Y(0.9), X(-0.56), Y(-0.05));
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.lineWidth = r * 0.25;
+      const tops = [-0.66, -0.9, -0.84, -0.6];
+      [-0.43, -0.145, 0.145, 0.43].forEach((x, i) => {
+        ctx.moveTo(X(x), Y(0));
+        ctx.lineTo(X(x), Y(tops[i]));
+      });
+      ctx.moveTo(X(0.5), Y(0.42));
+      ctx.lineTo(X(0.88), Y(0.02));
       ctx.stroke();
       return;
+    }
     case 'coin':
       // A stack of two: the top one's face, and the edge of the one under it.
       ctx.ellipse(cx, Y(-0.25), r * 0.8, r * 0.42, 0, 0, TAU);

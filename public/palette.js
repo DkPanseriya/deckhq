@@ -329,6 +329,15 @@ function buildProjectEntries(ctx) {
         run: () => actions.jumpToProject(p.id),
       },
       {
+        // What a press on the room's title bar opens, for a hand on the keys.
+        ...base,
+        id: `proj:settings:${p.id}`,
+        label: `Room settings: ${name}`,
+        hint: 'pin, room colour, new agent here',
+        keywords: ['room', 'settings', 'colour', 'color', 'pin'],
+        run: () => actions.roomSettings(p.id),
+      },
+      {
         ...base,
         id: `proj:filter:${p.id}`,
         label: `Filter to ${name}`,
@@ -338,8 +347,9 @@ function buildProjectEntries(ctx) {
       {
         ...base,
         id: `proj:board:${p.id}`,
-        label: `Whiteboard for ${name}`,
+        label: `Open the board: ${name}`,
         hint: 'sessions, tokens, estimated cost',
+        keywords: ['whiteboard', 'board', 'wall'],
         run: () => actions.showWhiteboard(p.id),
       },
       {

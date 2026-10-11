@@ -264,3 +264,18 @@ test('the header paints its own ground, and the board is lit by the states the r
     );
   }
 });
+
+test('ONE RHYTHM: every count slot is one width on every bar, and only the token count is wider', () => {
+  const widths = new Map(Object.entries(HEADER_SLOT_SPECS).map(([id, s]) => [id, s.w]));
+  const counts = [...widths].filter(([id]) => id !== 'spend').map(([, w]) => w);
+  assert.equal(new Set(counts).size, 1, `count slots are ${[...new Set(counts)]} wide`);
+  assert.ok(widths.get('spend') > counts[0], 'four characters need more room than three');
+  // So the second slot starts at the same place in a project room and the office.
+  const project = lay(ROOM, roomHeaderFor(ROOM, snapshot()), 17.5);
+  const officeRoom = { ...ROOM, id: 'o', kind: 'office', name: 'Your Office' };
+  const office = lay(officeRoom, roomHeaderFor(officeRoom, snapshot()), 17.5);
+  assert.deepEqual(
+    office.slots.map((s) => s.x),
+    project.slots.slice(0, 3).map((s) => s.x),
+  );
+});

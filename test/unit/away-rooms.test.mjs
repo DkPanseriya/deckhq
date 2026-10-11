@@ -21,7 +21,8 @@ import { awayFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
-import { layoutPlate, platePlanFor } from '../../public/render/scene-labels.js';
+import { platePlanFor } from '../../public/render/scene-labels.js';
+import { layoutHeader, roomHeaderFor } from '../../public/render/room-header.js';
 import { plateHeroLine } from '../../public/render/plan-plate.js';
 import { awayRooms, floorPopulation } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
@@ -120,11 +121,11 @@ test('an away room keeps its plate: the need-you line is the one a live room wou
       assert.deepEqual(plate, platePlanFor(asLive, snapshot, plan), id);
       assert.equal(plate.heroHead, plateHeroLine(project), id);
       assert.match(plate.lines[1], new RegExp(`^${project.needsYou} need you`), id);
-      const hero = layoutPlate(ctx, room, plate, camera).rows.find((r) => r.i === 1);
-      assert.ok(
-        hero && hero.text.startsWith(`${project.needsYou} need you`),
-        `${id}: ${hero?.text}`,
-      );
+      // And its header says so in the first slot, as a live room's does.
+      const header = roomHeaderFor(room, snapshot, plan);
+      const laid = layoutHeader(ctx, room, header, camera, 1);
+      assert.equal(laid.slots[0].id, 'needs', id);
+      assert.equal(laid.slots[0].text, String(project.needsYou), id);
     }
   } finally {
     adoptSnapshotClock(null);

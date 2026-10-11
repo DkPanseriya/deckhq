@@ -402,7 +402,7 @@ export function roomFloorFor(resolved, n, accent) {
   const tint = resolved.roomTint;
   if (tint.zoned) {
     const count = tint.tints.length;
-    return tint.tints[(((Math.round(n) - 1) % count) + count) % count];
+    return tint.tints[zoneIndex(n, count)];
   }
   return tint.wash > 0 ? washedCarpet(field, accent, tint.wash) : field;
 }
@@ -410,7 +410,49 @@ export function roomFloorFor(resolved, n, accent) {
 /** Which of the six hues the n-th project room takes. @param {number} n @param {number} count */
 function zoneIndex(n, count) {
   const at = Number.isFinite(Number(n)) ? Math.round(Number(n)) : 1;
+  const own = ROOM_HUES.get(at);
+  if (own !== undefined && own < count) return own;
   return (((at - 1) % count) + count) % count;
+}
+
+/**
+ * THE ROOMS THAT HAVE A COLOUR OF THEIR OWN: project number to the index of
+ * the hue it was given from its title bar (`settings.rooms`, by way of
+ * `setRoomColours`). A room that is not here takes the hue its number deals
+ * it, as every room did before. It only decides WHICH of the six a room is
+ * where rooms are coloured at all — the look's room tint still decides
+ * whether they are.
+ * @type {Map<number, number>}
+ */
+const ROOM_HUES = new Map();
+
+/**
+ * One zone hue as a small swatch on the floor now in force: the accent a
+ * zoned room's wall panel takes, which is the hue at its most itself.
+ * @param {string} id a `ZONE_HUES` id @returns {string} a colour, or `''`
+ */
+export function roomSwatchFor(id) {
+  const hue = ZONE_HUES.find((h) => h.id === id);
+  return hue ? zoneAccent(hue.hue, PALETTE.wallFill) : '';
+}
+
+/**
+ * Tell the painters which rooms have a colour of their own.
+ * @param {Array<{projectMk:number, colour:string}>} rooms
+ * @returns {boolean} whether anything changed (the floor is then baked again)
+ */
+export function setRoomColours(rooms) {
+  const next = new Map();
+  for (const r of rooms || []) {
+    const at = ZONE_HUES.findIndex((h) => h.id === r.colour);
+    if (at >= 0 && Number.isFinite(Number(r.projectMk))) next.set(Math.round(r.projectMk), at);
+  }
+  const same =
+    next.size === ROOM_HUES.size && [...next].every(([mk, at]) => ROOM_HUES.get(mk) === at);
+  if (same) return false;
+  ROOM_HUES.clear();
+  for (const [mk, at] of next) ROOM_HUES.set(mk, at);
+  return true;
 }
 
 /** One room's tint, memoised: a floor of boards asks for the same four tones per room. */
