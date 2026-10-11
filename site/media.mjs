@@ -64,9 +64,12 @@ export const BUDGET = {
    * Chrome's encoder makes it without softening it, and it measures 798 KB.
    * The picture is on the page sooner than it was: its first frame and
    * everything before it are 212 KB of that, and the video plays over it as
-   * it arrives.
+   * it arrives. It was 850 KB until 12 October 2026, when the 3D window went
+   * to the top of the home page at the owner's instruction: its four pictures
+   * (332 KB at the dense size) are now sent before a reader scrolls, and the
+   * page measures 1137 KB. Whoever has asked for less motion is sent 551.
    */
-  firstView: 850 * 1024,
+  firstView: 1200 * 1024,
   /**
    * A clip of the 3D office: 1280 pixels wide at sixty frames a second, made
    * somewhere else and brought in finished. This build cannot make one

@@ -424,7 +424,7 @@ function shell(page) {
   ${head(page)}
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
-    ${announceBar()}
+    ${page.slug === 'index' ? '' : announceBar()}
     <header class="site-head">
       <div class="wrap head-inner">
         <a class="brand" href="index.html">

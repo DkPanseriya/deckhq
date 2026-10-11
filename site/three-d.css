@@ -98,29 +98,107 @@
   font-size: 0.6875rem;
 }
 
-/* ------------------------------------------ the strip under the first screen */
+/* ----------------------------------------------- the window at the top */
 
-/* Half a screen at most: one sentence, two buttons and a row of pictures, so
-   a reader who came for the office in 3D finds it without scrolling for it. */
+/* The first thing on the home page, straight under the menu: a band in the
+   one bright colour the site has, cut into the dark page like a window, with
+   the office in 3D behind it. A reader who came from a picture of the 3D
+   office sees it before anything else. Nothing else on the page is this
+   colour, which is the whole of its loudness; the home page carries no
+   announcement line because this is one. */
 .strip3d {
-  padding-block: var(--s-5);
-  background: var(--surface);
-  border-top: 1px solid var(--line);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-block: var(--s-4) var(--s-5);
+  color: var(--on-accent);
+  background:
+    radial-gradient(
+      90% 130% at 10% -30%,
+      color-mix(in srgb, var(--ink) 38%, var(--accent)),
+      transparent 62%
+    ),
+    linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 84%, var(--crimson)));
+  /* The dark page above and below falls into the opening: that is the depth. */
+  box-shadow:
+    inset 0 20px 26px -18px color-mix(in srgb, var(--on-accent) 78%, transparent),
+    inset 0 -26px 30px -20px color-mix(in srgb, var(--on-accent) 82%, transparent);
+}
+
+/* One slow sweep of light across the glass when the page arrives. */
+.strip3d::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    color-mix(in srgb, var(--ink) 30%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .strip3d::before {
+    animation: sweep 1600ms var(--ease) 400ms both;
+  }
 }
 
 .strip3d-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
   gap: var(--s-2) var(--s-4);
   margin-bottom: var(--s-3);
 }
 
+.strip3d-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.35rem;
+  color: var(--on-accent);
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .strip3d h2 {
-  font-size: var(--t-sub);
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  color: var(--on-accent);
+  font-size: var(--t-head);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+/* On the bright ground the two buttons and the tag turn over: dark on it. */
+.strip3d .btn {
+  color: var(--accent);
+  background: var(--on-accent);
+  border-color: var(--on-accent);
+  box-shadow: 0 10px 18px -10px color-mix(in srgb, var(--on-accent) 80%, transparent);
+}
+
+.strip3d .btn--ghost {
+  color: var(--on-accent);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--on-accent) 70%, transparent);
+  box-shadow: none;
+}
+
+.strip3d .btn--ghost:hover {
+  border-color: var(--on-accent);
+}
+
+.strip3d .tag--coming {
+  color: var(--accent);
+  background: var(--on-accent);
+  border-color: var(--on-accent);
 }
 
 .strip3d-shots {
@@ -129,13 +207,46 @@
   gap: var(--s-3);
 }
 
+/* Each picture is a pane set into the band: a dark frame, and a shadow that
+   lifts it off the colour. */
 .strip3d-shots a {
   display: block;
+  overflow: hidden;
+  background: var(--bg-2);
+  border: 2px solid var(--on-accent);
+  border-radius: var(--radius);
+  box-shadow:
+    0 26px 36px -20px color-mix(in srgb, var(--on-accent) 90%, transparent),
+    0 4px 10px -4px color-mix(in srgb, var(--on-accent) 55%, transparent);
+  transition:
+    transform 320ms var(--ease),
+    box-shadow 320ms var(--ease);
+}
+
+.strip3d-shots a:hover,
+.strip3d-shots a:focus-visible {
+  transform: translateY(-5px) scale(1.012);
+  box-shadow:
+    0 34px 44px -22px color-mix(in srgb, var(--on-accent) 95%, transparent),
+    0 6px 14px -6px color-mix(in srgb, var(--on-accent) 60%, transparent);
+}
+
+.strip3d-shots a:focus-visible {
+  outline: 3px solid var(--on-accent);
+  outline-offset: 3px;
+}
+
+.strip3d .shot img {
+  display: block;
+  border: 0;
+  border-radius: 0;
 }
 
 .strip3d figcaption {
-  margin-top: var(--s-1);
+  margin-top: 0.7rem;
+  color: var(--on-accent);
   font-size: var(--t-micro);
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -143,7 +254,7 @@
    along by hand: four pictures a thumb wide would show nothing. */
 @media (max-width: 55.99rem) {
   .strip3d {
-    padding-block: var(--s-3);
+    padding-block: var(--s-3) var(--s-4);
   }
 
   .strip3d-shots {
@@ -152,7 +263,7 @@
     grid-auto-columns: min(62%, 20rem);
     gap: var(--s-2);
     margin-inline: calc(var(--gutter) * -1);
-    padding-inline: var(--gutter);
+    padding: 0 var(--gutter) var(--s-3);
     overflow-x: auto;
     scroll-snap-type: x proximity;
     scroll-padding-inline: var(--gutter);
