@@ -251,16 +251,11 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow-wrap: anywhere;
-}
-
-/* A report is a label and a value. Each row is its own line, and a value too
-   long for the box goes on under the value above it, not under the label:
-   two spaces and a sixteen-character label are the eighteen it hangs by. The
-   rows carry the line breaks, so the ones between them in the markup are
-   folded away. */
-.term {
   white-space: normal;
 }
+
+/* A row of a report is a line of its own, and a value too long for the box
+   goes on under the value, not under the eighteen characters of its label. */
 
 .term > i,
 .term > span {
@@ -273,8 +268,7 @@
   text-indent: -18ch;
 }
 
-/* On a phone the value column is twenty characters wide at the body's small
-   size, and a path does not fit in twenty. One step down the scale it does. */
+/* A step smaller on a phone, where a path would not fit the value column. */
 @media (max-width: 39.99rem) {
   .term {
     padding: var(--s-2);
@@ -319,9 +313,7 @@
   font-size: var(--t-small);
 }
 
-/* The way with the two longest lines sets them a step smaller, to fit. So
-   does a command in a row of three or four columns, where
-   `deckhq autostart --install --yes` was cut off at its last word. */
+/* The longest lines are set a step smaller, to fit their column. */
 .way--wide .cmd code,
 .cols .cmd code {
   font-size: var(--t-micro);
@@ -649,9 +641,7 @@ tbody th {
     font-size: var(--t-small);
   }
 
-  /* The third table, a name, a status and a sentence: the first two share a
-     line and the sentence runs under them, so this one does not scroll
-     sideways either. */
+  /* A name and a status share a line; the sentence runs under them. */
   .runtimes {
     display: block;
     min-width: 0;
@@ -847,8 +837,7 @@ tbody th {
   color: var(--ink);
 }
 
-/* A paragraph is held to a measure; this one is the footer's last row and
-   starts where its columns do, so it takes the wrap's width back. */
+/* The footer's last row starts where its columns do. */
 .foot-note {
   margin-top: var(--s-6);
   max-width: calc(var(--wrap) + 2 * var(--gutter));
