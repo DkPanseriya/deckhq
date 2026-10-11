@@ -7,6 +7,14 @@
  * whoever sits across it. A name, a wait badge and a crew's chip are what the
  * reader came for, and a cloud says only "thinking" — so the cloud yields.
  *
+ * AND TO A TOOL BUBBLE. A bubble over one head is wide enough to reach the
+ * cloud beside the next; the bubble says what a session is doing and the
+ * cloud only that one is thinking, so the bubbles are set first and a cloud
+ * treats its neighbours' as it treats a name. And to THE CLOUD BESIDE IT:
+ * mirrored to its left, one head's cloud is where the next head's is on its
+ * right, so a cloud keeps clear of the cloud of anybody set before it whose
+ * turn is open (`thinks`).
+ *
  * THE RULE. Once every name has been set (`scene-frame-labels.js`), each
  * figure's cloud is tried on its own side, the right; then mirrored to the
  * left; and where both are over a name, a role chip, a wait badge or a crew's
@@ -81,21 +89,31 @@ export function placedLabelBoxes(labels, plan) {
 
 /**
  * WHICH SIDE EVERY FIGURE'S CLOUD IS ON THIS FRAME.
- * @param {{id:string, x:number, y:number, u:number}[]} figures feet and scale
+ * @param {{id:string, x:number, y:number, u:number, thinks?:boolean}[]} figures
+ *   feet and scale, in the order they are painted; `thinks`: a turn is open,
+ *   so a cloud may open over this one and the next keeps clear of it too
  * @param {Rect[]} taken what a cloud may not cover: every name set this frame
  *   (role chips included), every wait badge and pill, every crew's chip
+ * @param {(Rect & {id:string})[]} [bubbles] every tool bubble drawn this frame,
+ *   by figure (`bubble-spots.js`). A cloud keeps clear of its neighbours'; its
+ *   own figure's is not in its way, because a figure in a tool has no cloud
  * @returns {Map<string, 1|-1|0>} `1` right, `-1` left, `0` no cloud this frame
  */
-export function placeClouds(figures, taken) {
+export function placeClouds(figures, taken, bubbles = []) {
   /** @type {Map<string, 1|-1|0>} */
   const out = new Map();
+  /** @type {Rect[]} the clouds of the figures set so far that may be thinking */
+  const set = [];
   for (const f of figures) {
     /** @type {1|-1|0} */
     let side = 0;
     for (const s of /** @type {const} */ ([1, -1])) {
       const box = cloudBox(f.x, f.y, f.u, s);
       if (taken.some((t) => overlaps(box, t))) continue;
+      if (bubbles.some((b) => b.id !== f.id && overlaps(box, b))) continue;
+      if (set.some((c) => overlaps(box, c))) continue;
       side = s;
+      if (f.thinks) set.push(box);
       break;
     }
     out.set(f.id, side);

@@ -87,6 +87,25 @@ export function leaderOf(item, spot) {
 }
 
 /**
+ * Every leader of a frame, as the box each of its segments runs in: what a
+ * thought cloud is not opened across (`planFrameLabels`).
+ * @param {any} f a frame from `frameAt`
+ * @returns {{id:string, x:number, y:number, w:number, h:number}[]}
+ */
+export function tiesOf(f) {
+  const out = [];
+  for (const it of f.labels.labels) {
+    const line = leaderOf(it, f.labels.plan.get(it.id));
+    for (let i = 0; line && i + 3 < line.length; i += 2) {
+      const [ax, ay, bx, by] = line.slice(i, i + 4);
+      const at = { x: Math.min(ax, bx) - 0.5, y: Math.min(ay, by) - 0.5 };
+      out.push({ id: `tie:${it.id}`, ...at, w: Math.abs(bx - ax) + 1, h: Math.abs(by - ay) + 1 });
+    }
+  }
+  return out;
+}
+
+/**
  * Every figure of a frame as the body that is drawn (`figureBox`), by id.
  * @param {any} f a frame from `frameAt`
  * @returns {{id:string, x:number, y:number, w:number, h:number}[]}

@@ -113,6 +113,21 @@ export function fitOneLine(ctx, text, maxW, font) {
 }
 
 /**
+ * HOW HIGH OVER THE FEET A BUBBLE IS, whatever it says: its foot and its top,
+ * in screen px. One line of type and its padding over a fixed offset, so the
+ * frame's label pass can keep a name over a head clear of the bubble that may
+ * open under it (`bubble-spots.js`) without knowing the line.
+ * @param {number} u the scale the figure is drawn at
+ * @returns {{foot:number, top:number}}
+ */
+export function toolBubbleSpan(u) {
+  const fontPx = Math.max(9, u * 0.5);
+  const padY = Math.max(2, u * 0.14);
+  const foot = u * (CHROME_BUBBLE_U - 0.3);
+  return { foot, top: foot + fontPx * 1.25 + padY * 2 };
+}
+
+/**
  * The bubble's box and its already-truncated one-line text, without drawing
  * anything — the same measure-then-paint split as {@link labelBox}, so a unit
  * test can assert the fit rule against a stubbed context.
@@ -125,17 +140,17 @@ export function toolBubbleBox(ctx, ox, oy, u, summary) {
   const fontPx = Math.max(9, u * 0.5);
   const font = sansFont(fontPx);
   const padX = Math.max(4, u * 0.28);
-  const padY = Math.max(2, u * 0.14);
   const maxTextW = Math.max(
     BUBBLE_MIN_W_PX,
     Math.min(BUBBLE_MAX_W_U * u, BUBBLE_MAX_W_PX) - padX * 2,
   );
   const text = fitOneLine(ctx, String(summary || '').trim(), maxTextW, font);
   const w = textWidth(ctx, font, text) + padX * 2;
-  const h = fontPx * 1.25 + padY * 2;
   // Sits clear of the crown (`BODY_HEIGHT_U` above the feet since WP-79), with
   // the trail below filling the gap.
-  const y = oy - u * (CHROME_BUBBLE_U - 0.3) - h;
+  const { foot, top } = toolBubbleSpan(u);
+  const h = top - foot;
+  const y = oy - top;
   return { text, x: ox - w / 2, y, w, h, fontPx };
 }
 

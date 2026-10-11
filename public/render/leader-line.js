@@ -143,3 +143,20 @@ export function leaderFor(rect, own, others) {
   const keep = Math.max(0, t * len - LEADER_SHORT_PX) / (len || 1);
   return { line: [ax, ay, ax + (bx - ax) * keep, ay + (by - ay) * keep], clear: false };
 }
+
+/**
+ * A line as far as the box it runs into: the same points up to where it first
+ * enters, and that point. A name over a head is tied to it through the slot
+ * its figure's tool bubble opens in, and while one is open the line stops at it.
+ * @param {number[]} line `[x0, y0, x1, y1, …]` @param {Rect} r
+ * @returns {number[]|null} null for a line that never enters the box
+ */
+export function lineUpTo(line, r) {
+  for (let i = 0; i + 3 < line.length; i += 2) {
+    const [ax, ay, bx, by] = [line[i], line[i + 1], line[i + 2], line[i + 3]];
+    const t = segmentEnters(ax, ay, bx, by, r);
+    if (t === null) continue;
+    return [...line.slice(0, i + 2), ax + (bx - ax) * t, ay + (by - ay) * t];
+  }
+  return null;
+}

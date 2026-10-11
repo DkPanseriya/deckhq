@@ -22,6 +22,18 @@
   and under itself, and a tag that has to leave its junior goes to that junior's own side of the
   crew's arc — over the head of one that sits above the desk, to the right of one on the right —
   before it goes anywhere on the desk's side.
+- **A tool bubble and a thought cloud are no longer drawn one on the other.** The bubble over one
+  robot reached the cloud beside the next, and two neighbours both in a tool drew two bubbles
+  across each other. The bubbles are now set first, each clear of the ones before it, and where
+  that leaves one with no place the bubble in its way is cut shorter. A cloud then goes to the
+  other side of its head when a neighbour's bubble or cloud, or the line that ties a name to its
+  robot, is on its own side, and is not drawn when one is on both.
+- **A name over a robot's head no longer costs it its tool bubble.** A junior whose tag had been
+  set over its own head was given no bubble and no thought cloud, because its own name was where
+  they open. A name over a head now starts above everything that opens there, and the line that
+  ties it to its robot stops at the bubble while one is open. Under somebody else's name — two
+  rows across one desk, zoomed in — the bubble is set beside the name, shortened if it has to be,
+  for as long as its near edge is still over its own body. It is still never over a name.
 
 ## 1.7.1 — 2026-10-11
 

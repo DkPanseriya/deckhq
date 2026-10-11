@@ -46,10 +46,11 @@ import {
   TAG_GAP_PX,
   WALL_CLEAR_PX,
 } from './label-spots.js';
-import { figureBox } from './leader-line.js';
+import { figureBox, lineUpTo } from './leader-line.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
-import { placeBubbles } from './bubble-spots.js';
+import { bubbleBoxes, overHeadTop, placeBubbles } from './bubble-spots.js';
 import { toolBubbleText } from './rig-bubble.js';
+import { turnIsOpen } from './life.js';
 import { WALL_PX, wallPieces } from './backdrop-floor.js';
 import { U_DEFAULT } from './backdrop-paint.js';
 import { JUNIOR_MARK, bareName, roleWordFor } from '../names.js';
@@ -377,9 +378,10 @@ export function planFrameLabels(ctx, view) {
       // On a cushion between two taken ones: the second level (`label-spots.js`).
       lower: !!(rec.targetSeat && rec.targetSeat.nameRow === 1),
       alts,
-      // Over the head, clear of the icon-and-badge slot: where a name goes when
-      // the floor under its feet is a wall, a plate or somebody else's name.
-      up: s.y - u * CHROME_BADGE_U - box.h - box.y,
+      // Over the head, clear of the whole slot over it — the icon, and the
+      // bubble or the cloud that may open there (`overHeadTop`): where a name
+      // goes when the floor under its feet is a wall, a plate or somebody else's.
+      up: s.y - overHeadTop(u) - box.h - box.y,
       // The near ring is measured from here: the feet, the body's height and
       // its half-width, at the scale this figure is drawn at.
       feet: { x: s.x, y: s.y },
@@ -405,30 +407,20 @@ export function planFrameLabels(ctx, view) {
   }
   const labels = tiers.flat();
   const plan = resolveLabelCollisions([...obstacles, ...labels], view.bounds);
-  // THE CLOUDS, LAST, AND BELOW EVERYTHING ABOVE: a thought cloud goes beside
-  // its head where no name, role chip, wait badge or crew's chip already is —
-  // the other side if its own is taken, and nowhere if both are
-  // (`cloud-spots.js`). Decided here because it is a function of the same
-  // things the names are, so it is laid out when they are and not per frame.
+  // WHAT HANGS OVER A HEAD, LAST, AND BELOW EVERYTHING ABOVE: a tool bubble
+  // and a thought cloud go where no name, role chip, wait badge or crew's chip
+  // already is. Decided here because it is a function of the same things the
+  // names are, so it is laid out when they are and not per frame.
   const taken = [
     ...placedLabelBoxes(labels, plan),
     ...obstacles.filter((o) => /^(badge|pill|chip):/.test(String(o.id))),
   ];
-  const clouds = placeClouds(
-    records.map((rec) => ({
-      id: rec.id,
-      x: at.get(rec.id).x,
-      y: at.get(rec.id).y,
-      u: view.uOf ? view.uOf(rec) : charU,
-    })),
-    taken,
-  );
-  // AND THE TOOL BUBBLES, BY THE SAME RULE (`bubble-spots.js`): a bubble takes
-  // the cloud's place while a tool runs, and is as wide as its line — wide
-  // enough to reach the name of whoever sits at the next chair. Only where one
-  // is drawn at all: the rig's own gate, asked here so the two cannot disagree.
-  const bubbles = placeBubbles(
-    ctx,
+  // THE TOOL BUBBLES FIRST (`bubble-spots.js`): a bubble takes the cloud's
+  // place while a tool runs, and is as wide as its line — wide enough to reach
+  // the name of whoever sits at the next chair, or the bubble over it. Only
+  // where one is drawn at all: the rig's own gate, asked here so the two
+  // cannot disagree.
+  const inTool =
     view.reduced === true || !(Number(view.lod) >= 1)
       ? []
       : records.flatMap((rec) => {
@@ -437,8 +429,47 @@ export function planFrameLabels(ctx, view) {
           if (!text || iconForAgent(agent) || badged.has(String(rec.id))) return [];
           const s = at.get(rec.id);
           return [{ id: rec.id, x: s.x, y: s.y, u: view.uOf ? view.uOf(rec) : charU, text }];
-        }),
-    taken,
+        });
+  const bubbles = placeBubbles(ctx, inTool, taken);
+  const open = bubbleBoxes(ctx, inTool, bubbles);
+  // A name over a head is tied to it through the slot its own bubble opens
+  // in: while one is open the line stops at the bubble, which the bubble's
+  // own trail ties to the head.
+  for (const b of open) {
+    const spot = plan.get(b.id);
+    const s = at.get(b.id);
+    if (!spot || !spot.line) continue;
+    const cut = lineUpTo(spot.line, { x: b.x - s.x, y: b.y - s.y, w: b.w, h: b.h });
+    if (cut) plan.set(b.id, { ...spot, line: cut });
+  }
+  // Every leader, as the box it runs in: a cloud is not opened across one.
+  const ties = labels.flatMap((it) => {
+    const line = plan.get(it.id)?.line;
+    const out = [];
+    for (let i = 0; line && i + 3 < line.length; i += 2) {
+      const [ax, ay, bx, by] = [line[i], line[i + 1], line[i + 2], line[i + 3]];
+      out.push({
+        x: it.feet.x + Math.min(ax, bx) - 0.5,
+        y: it.feet.y + Math.min(ay, by) - 0.5,
+        w: Math.abs(bx - ax) + 1,
+        h: Math.abs(by - ay) + 1,
+      });
+    }
+    return out;
+  });
+  // THEN THE CLOUDS, which yield to all of it (`cloud-spots.js`): beside the
+  // head, on the other side if a name, a leader or a neighbour's bubble is on
+  // its own, and nowhere if one is on both.
+  const clouds = placeClouds(
+    records.map((rec) => ({
+      id: rec.id,
+      x: at.get(rec.id).x,
+      y: at.get(rec.id).y,
+      u: view.uOf ? view.uOf(rec) : charU,
+      thinks: turnIsOpen(view.agentsById.get(rec.id) || rec.agent),
+    })),
+    [...taken, ...ties],
+    open,
   );
   return { plan, texts, roles, obstacles, labels, clouds, bubbles };
 }

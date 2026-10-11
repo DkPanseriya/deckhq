@@ -19,12 +19,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { LARGE_NOW, populationFloor } from '../helpers/large-floor.mjs';
-import { drawnBox, frameAt, hits, measuringCtx } from '../helpers/label-frame.mjs';
+import { drawnBox, frameAt, hits, leaderOf, measuringCtx } from '../helpers/label-frame.mjs';
 import { paintRecorder } from '../helpers/paint-recorder.mjs';
 import { fakeId } from '../../scripts/demo-write.mjs';
 import { AgentRuntime, assignSeats, worldToScreen } from '../../public/render/agents.js';
-import { BUBBLE_CLEAR_PX, BUBBLE_STEP, placeBubbles } from '../../public/render/bubble-spots.js';
+import {
+  BUBBLE_CLEAR_PX,
+  BUBBLE_STEP,
+  bubbleBoxes,
+  overHeadTop,
+  placeBubbles,
+} from '../../public/render/bubble-spots.js';
+import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
 import { toolBubbleBox } from '../../public/render/rig-bubble.js';
+import { BODY_HEIGHT_U, SELECTION_RING_R } from '../../public/render/rig-metrics.js';
+import { segmentEnters } from '../../public/render/leader-line.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { LIFE } from '../../public/render/life.js';
 import { drawCharacter, drawLabel } from '../../public/render/rig.js';
@@ -277,7 +286,7 @@ test('`need.office`: the bubble over the session running `npm test` is clear of 
 });
 
 test('no tool bubble is over a name, a role chip, a wait badge or a crew chip', () => {
-  const seen = { natural: 0, aside: 0, shorter: 0, none: 0, wouldCover: 0 };
+  const seen = { natural: 0, aside: 0, shorter: 0, none: 0, wouldCover: 0, gaveWay: 0 };
   for (const name of ['pair', 'crew', 'demo', 'crowded']) {
     for (const [w, h, zoom] of [
       [1420, 690, 1],
@@ -289,8 +298,13 @@ test('no tool bubble is over a name, a role chip, a wait badge or a crew chip', 
       for (const summary of ['Bash npm test', long]) {
         const f = frameAt(w, h, () => busyFloor(name, summary), { badges: true, zoom });
         if (f.lod < 1) continue;
-        const taken = takenOf(f);
+        const names = takenOf(f);
+        // And the bubbles set before it, in the order the figures are painted:
+        // everybody here is in a tool, and a bubble keeps clear of those too.
+        /** @type {any[]} */
+        const set = [];
         for (const rec of f.records) {
+          const taken = [...names, ...set];
           const s = worldToScreen(rec, f.camera);
           const spot = f.labels.bubbles.get(rec.id);
           if (!rec.agent.currentTool) {
@@ -309,22 +323,34 @@ test('no tool bubble is over a name, a role chip, a wait badge or a crew chip', 
             seen.none++;
             continue;
           }
-          // Where nothing is in its way, nothing about it changes.
-          if (!covers) assert.deepEqual(spot, { dx: 0, text: natural.text }, where);
+          // Where nothing is in its way it stays where it was, and whole — unless
+          // it was cut for the bubble beside it, which would have had no place
+          // and is drawn where the whole line would have been.
           const box = bubbleAt(f, rec, spot);
+          if (!covers && spot.text !== natural.text) {
+            const wide = { ...reach, h: natural.h + c * 2 };
+            const beside = bubblesOf(f).find((b) => b.id !== rec.id && hits(wide, b));
+            assert.ok(beside && spot.dx === 0, `${where} was cut, and for nobody`);
+            seen.gaveWay++;
+            set.push({ id: `bubble:${rec.id}`, ...box });
+            continue;
+          }
+          if (!covers) assert.deepEqual(spot, { dx: 0, text: natural.text }, where);
           const over = taken.find((t) => hits(box, t));
           assert.equal(over, undefined, `${where}: its bubble is over ${over?.id}`);
-          // Never farther than the other side of the head, and never a longer line.
-          assert.ok(box.x <= s.x + 0.01 && box.x + box.w >= s.x - 0.01, `${where} left its head`);
+          // Never farther than the edge of its own body, and never a longer line.
+          const edge = (SELECTION_RING_R * f.uOf(rec)) / 2 + 0.01;
+          assert.ok(box.x <= s.x + edge && box.x + box.w >= s.x - edge, `${where} left its body`);
           assert.ok(box.w <= natural.w + 0.01, where);
           if (spot.text !== natural.text) seen.shorter++;
           else if (spot.dx !== 0) seen.aside++;
           else seen.natural++;
+          set.push({ id: `bubble:${rec.id}`, ...box });
         }
       }
     }
   }
-  assert.ok(seen.wouldCover > 0, 'unplaced, a bubble covers a name on these floors');
+  assert.ok(seen.wouldCover > 0, 'unplaced, a bubble covers a name or a bubble on these floors');
   assert.ok(seen.aside > 0, `some step aside: ${JSON.stringify(seen)}`);
   assert.ok(seen.natural > seen.none * 4, `and few have none: ${JSON.stringify(seen)}`);
   assert.equal(seen.wouldCover, seen.aside + seen.shorter + seen.none);
@@ -358,9 +384,10 @@ test('a bubble is whole over its head, then a step aside, then shorter, then not
 
   // A name across the whole of its head: neither side is clear, at any length.
   assert.equal(place([name(whole.x - 60, whole.w + 120)]), null);
-  // Never farther than the other side of the head.
+  // Never farther than the edge of its own body: a name wider than that, over
+  // the head itself, is not stepped round.
   const over = name(fig.x - 20, 40);
-  assert.equal(place([over]), null, 'a name over the head itself is not stepped round');
+  assert.equal(place([over]), null);
 });
 
 test('the rig draws the bubble where the pass set it, and none where the pass found no room', () => {
@@ -408,4 +435,198 @@ test('under reduced motion, or at L0, a tool is an icon and nobody is given a bu
   const small = frameAt(1420, 690, () => busyFloor('large'), { badges: true });
   assert.equal(small.lod, 0);
   assert.equal(small.labels.bubbles.size, 0);
+});
+
+// ------------------------------- 4 · a bubble and a cloud are never one on the other
+
+/** A demo floor on which the working sessions `pick` chooses are in the middle of a tool call. */
+function toolFloor(name, pick, summary = 'Bash npm test') {
+  const floor = demoFloor(name);
+  floor.agents
+    .filter((a) => a.ackState === 'active' && a.activityState === 'working')
+    .forEach((a, i) => {
+      if (pick(i)) a.currentTool = { name: 'Bash', summary };
+    });
+  return floor;
+}
+
+/** Every bubble a frame draws, as the box it is drawn in, by figure. */
+function bubblesOf(f) {
+  return f.records.flatMap((rec) => {
+    const spot = f.labels.bubbles.get(rec.id);
+    return spot ? [{ id: rec.id, ...bubbleAt(f, rec, spot) }] : [];
+  });
+}
+
+test('no tool bubble is over another bubble, and a thought cloud yields to the bubble beside it', () => {
+  const seen = { bubbles: 0, onBubble: 0, onCloud: 0, mirrored: 0, dropped: 0 };
+  for (const name of ['pair', 'crew', 'three', 'lead']) {
+    const working = toolFloor(name, () => true).agents.filter((a) => a.currentTool).length;
+    for (const [w, h, zoom] of [
+      [1420, 690, 1],
+      [1600, 900, 1],
+      [2000, 1024, 1],
+      [1600, 900, 2.5],
+    ]) {
+      // Everybody in a tool at once (-1), then each one alone with the rest thinking.
+      for (let k = -1; k < working; k++) {
+        const floor = () => toolFloor(name, (i) => k === -1 || i === k);
+        const f = frameAt(w, h, floor, { badges: true, zoom });
+        if (f.lod < 1) continue;
+        const where = `${name} ${w}x${h} x${zoom}`;
+        const label = (id) => f.agentsById.get(id).label;
+        const drawn = bubblesOf(f);
+        seen.bubbles += drawn.length;
+        // Centred and whole, as every bubble was set until now.
+        const natural = f.records
+          .filter((rec) => f.labels.bubbles.get(rec.id))
+          .map((rec) => {
+            const s = worldToScreen(rec, f.camera);
+            return toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), 'Bash npm test');
+          });
+        for (const [i, a] of drawn.entries()) {
+          for (const [j, b] of drawn.entries()) {
+            if (j <= i) continue;
+            if (hits(natural[i], natural[j])) seen.onBubble++;
+            assert.ok(!hits(a, b), `${where}: the bubbles of ${label(a.id)} and ${label(b.id)}`);
+          }
+        }
+        for (const rec of f.records) {
+          if (rec.agent.currentTool) continue;
+          const s = worldToScreen(rec, f.camera);
+          const side = f.labels.clouds.get(rec.id);
+          const own = cloudBox(s.x, s.y, f.uOf(rec), 1);
+          const under = drawn.some((b) => hits(own, b));
+          if (under) seen.onCloud++;
+          if (under && side === -1) seen.mirrored++;
+          if (under && side === 0) seen.dropped++;
+          if (side === 0) continue;
+          const box = cloudBox(s.x, s.y, f.uOf(rec), side);
+          const over = drawn.find((b) => hits(box, b));
+          assert.equal(
+            over,
+            undefined,
+            `${where}: ${label(rec.id)}'s cloud, ${over && label(over.id)}'s bubble`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(seen.bubbles > 100, JSON.stringify(seen));
+  assert.ok(seen.onBubble > 0, 'centred and whole, two bubbles overlap on these floors');
+  assert.ok(seen.onCloud > 0, 'and a cloud on its own side is under a neighbour’s bubble');
+  assert.equal(seen.onCloud, seen.mirrored + seen.dropped, 'the cloud is what yields');
+});
+
+test('a bubble steps aside for the bubble set before it, and a cloud for either', () => {
+  const ctx = measuringCtx();
+  const a = { id: 'a', x: 200, y: 300, u: 20, text: 'Bash npm test' };
+  const b = { ...a, id: 'b', x: 260 };
+  const whole = toolBubbleBox(ctx, a.x, a.y, a.u, a.text);
+  assert.ok(whole.w > 60, 'two heads sixty pixels apart are closer than one bubble is wide');
+  const spots = placeBubbles(ctx, [a, b], []);
+  assert.deepEqual(spots.get('a'), { dx: 0, text: 'Bash npm test' }, 'the first is where it was');
+  const boxes = bubbleBoxes(ctx, [a, b], spots);
+  assert.equal(boxes.length, 2, 'and the second is drawn too');
+  assert.ok(!hits(boxes[0], boxes[1]) && boxes[1].x >= boxes[0].x + boxes[0].w + BUBBLE_CLEAR_PX);
+  // A cloud beside a bubble: the other side of its own head, then none; its own bubble is not in its way.
+  const me = { id: 'c', x: 200, y: 300, u: 20 };
+  const right = { id: 'n', ...cloudBox(200, 300, 20, 1) };
+  const left = { id: 'm', ...cloudBox(200, 300, 20, -1) };
+  assert.equal(placeClouds([me], [], [right]).get('c'), -1);
+  assert.equal(placeClouds([me], [], [right, left]).get('c'), 0);
+  assert.equal(placeClouds([me], [], [{ ...right, id: 'c' }]).get('c'), 1);
+});
+
+// --------------------------------- 5 · a name over a head does not cost the bubble
+
+test('a figure whose own name is over its head still has its bubble, whole, under the name', () => {
+  let cases = 0;
+  for (const name of ['crew', 'lead', 'crew-waiting']) {
+    for (const [w, h, zoom] of [
+      [1420, 690, 1],
+      [1600, 900, 1],
+      [2000, 1024, 1],
+      [1600, 900, 2.5],
+    ]) {
+      const f = frameAt(w, h, () => busyFloor(name), { badges: true, zoom });
+      if (f.lod < 1) continue;
+      for (const rec of f.records) {
+        const it = f.labels.labels.find((l) => l.id === rec.id);
+        const placed = it && f.labels.plan.get(rec.id);
+        if (!placed || !rec.agent.currentTool) continue;
+        const s = worldToScreen(rec, f.camera);
+        const tag = drawnBox(it, placed);
+        const crown = s.y - f.uOf(rec) * BODY_HEIGHT_U;
+        // Over its own head: above the crown, and across the head's centre line.
+        if (!(tag.y + tag.h <= crown && tag.x < s.x && tag.x + tag.w > s.x)) continue;
+        cases++;
+        const where = `${name} ${w}x${h} x${zoom}: ${rec.agent.label}`;
+        const whole = toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), 'Bash npm test');
+        assert.ok(!hits(whole, tag), `${where}: its own name is where its bubble opens`);
+        // The slot over a head is clear of the name over it, cloud and all.
+        assert.ok(tag.y + tag.h <= s.y - overHeadTop(f.uOf(rec)) + 0.01, where);
+        const spot = f.labels.bubbles.get(rec.id);
+        if (!spot) continue;
+        // And the line that ties the name to its figure stops at the bubble.
+        const line = leaderOf(it, placed);
+        const bubble = bubbleAt(f, rec, spot);
+        for (let i = 0; line && i + 3 < line.length; i += 2) {
+          const over = segmentEnters(line[i], line[i + 1], line[i + 2], line[i + 3], bubble);
+          assert.equal(over, null, `${where}: its leader runs across its own bubble`);
+        }
+      }
+    }
+  }
+  assert.ok(cases >= 6, `these floors set names over heads: ${cases}`);
+  // The one it was reported on: the junior at the top of the arc, in a tool.
+  const f = frameAt(1600, 900, () => busyFloor('crew'), { badges: true });
+  const top = f.records.filter((r) => r.agent.subagent === true).sort((a, b) => a.y - b.y)[0];
+  assert.deepEqual(f.labels.bubbles.get(top.id), { dx: 0, text: 'Bash npm test' });
+});
+
+test('under somebody else’s name a bubble is set beside it, as far as the edge of its own body', () => {
+  const ctx = measuringCtx();
+  const fig = { id: 'a', x: 200, y: 300, u: 20, text: 'Bash npm test' };
+  const whole = toolBubbleBox(ctx, fig.x, fig.y, fig.u, fig.text);
+  const reach = (SELECTION_RING_R * fig.u) / 2;
+  const name = (x, w) => ({ x, y: whole.y, w, h: whole.h });
+  // A short name across the head: half a width aside does not clear it, and it was not drawn.
+  const spot = placeBubbles(ctx, [fig], [name(fig.x - 8, 16)]).get('a');
+  assert.ok(spot, 'it is drawn');
+  assert.equal(spot.text, 'Bash npm test', 'whole: beside the name there is room for all of it');
+  const near = whole.x + spot.dx - fig.x;
+  assert.ok(
+    near >= 8 + BUBBLE_CLEAR_PX && near <= reach,
+    `its near edge at ${near}, body ${reach}`,
+  );
+  // A name wider than the body: beside it would be over somebody else. Not drawn.
+  assert.equal(placeBubbles(ctx, [fig], [name(fig.x - 20, 40)]).get('a'), null);
+  // On the floor that showed it: two rows across one desk, closed in.
+  let beside = 0;
+  for (const pop of ['pair', 'crowded']) {
+    const f = frameAt(1600, 900, () => busyFloor(pop), { badges: true, zoom: 2.5 });
+    const taken = takenOf(f);
+    for (const rec of f.records) {
+      const s = worldToScreen(rec, f.camera);
+      if (!rec.agent.currentTool) continue;
+      const natural = toolBubbleBox(f.ctx, s.x, s.y, f.uOf(rec), 'Bash npm test');
+      const over = taken.find(
+        (t) => t.id !== rec.id && hits(natural, t) && t.x < s.x && t.x + t.w > s.x,
+      );
+      if (!over) continue;
+      const got = f.labels.bubbles.get(rec.id);
+      const edge = (SELECTION_RING_R * f.uOf(rec)) / 2;
+      if (over.w / 2 + BUBBLE_CLEAR_PX > edge) continue;
+      beside++;
+      assert.ok(got, `${pop}: ${rec.agent.label} is under ${over.id} and has no bubble`);
+      const box = bubbleAt(f, rec, got);
+      assert.equal(taken.find((t) => hits(box, t))?.id, undefined);
+      assert.ok(
+        box.x <= s.x + edge + 0.01 && box.x + box.w >= s.x - edge - 0.01,
+        'it left its body',
+      );
+    }
+  }
+  assert.ok(beside >= 2, `these floors seat somebody under a name: ${beside}`);
 });
