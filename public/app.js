@@ -91,7 +91,7 @@ import {
 } from './app-launchers.js';
 import { studioActions, studioPalette } from './app-studio.js';
 import { adoptSnapshotClock, now as clockNow } from './clock.js';
-import { restingAgentsOf } from './floor-resting.js';
+import { finishedJuniorsOf, restingAgentsOf } from './floor-resting.js';
 
 // -------------------------------------------------------------- app state
 /**
@@ -469,6 +469,7 @@ setDeckUI(
     loadUsage,
     getUsageNames: usageNames,
     getResting: () => restingAgentsOf(latestSnapshot, { now: clockNow() }),
+    getFinishedJuniors: () => finishedJuniorsOf(latestSnapshot),
   }),
 );
 

@@ -114,6 +114,8 @@ const CHIP_GAP = 8;
  *   whole Usage tab from a fixture.
  * @param {() => any[]} [opts.getResting] everybody in the lounge, most recent
  *   first (`floor-resting.js`): the Resting tab's rows
+ * @param {() => any[]} [opts.getFinishedJuniors] the juniors that have finished
+ *   (`finishedJuniorsOf`): a second group under those rows
  * @param {() => {projectNames:Record<string,string>, sessionNames:Record<string,string>}}
  *   [opts.getUsageNames] the two lookups that turn a ledger hash into a name.
  *   A key with nothing on the floor stays a hash, which is honest.
@@ -373,7 +375,10 @@ export function createDeckUI(opts) {
   function paintResting() {
     bodyEl.textContent = '';
     const resting = opts.getResting?.() || [];
-    if (resting.length === 0) {
+    // And under them, the juniors that have finished: not in the lounge, not
+    // on the floor, and still a row each (`finishedJuniorsOf`).
+    const juniors = opts.getFinishedJuniors?.() || [];
+    if (resting.length === 0 && juniors.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'deck-empty';
       empty.textContent = 'Nobody is resting.';
@@ -383,7 +388,7 @@ export function createDeckUI(opts) {
     const scroller = document.createElement('div');
     scroller.className = 'deck-scroll';
     const view = { now: clockNow(), selectedId: getSelectedId() };
-    scroller.appendChild(renderRestingTable(resting, view, document));
+    scroller.appendChild(renderRestingTable(resting, view, document, juniors));
     bodyEl.appendChild(scroller);
     for (const row of bodyEl.querySelectorAll('.deck-row')) {
       const id = row.getAttribute('data-id');
