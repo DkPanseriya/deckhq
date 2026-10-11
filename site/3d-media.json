@@ -3,30 +3,30 @@
     {
       "name": "bale.png",
       "kind": "still",
-      "width": 640,
-      "height": 360,
-      "bytes": 110170
+      "width": 960,
+      "height": 540,
+      "bytes": 98102
     },
     {
       "name": "bale@2x.png",
       "kind": "still",
-      "width": 1280,
-      "height": 720,
-      "bytes": 364430
+      "width": 1920,
+      "height": 1080,
+      "bytes": 320490
     },
     {
       "name": "brick.png",
       "kind": "still",
-      "width": 640,
-      "height": 360,
-      "bytes": 111089
+      "width": 960,
+      "height": 540,
+      "bytes": 99676
     },
     {
       "name": "brick@2x.png",
       "kind": "still",
-      "width": 1280,
-      "height": 720,
-      "bytes": 387247
+      "width": 1920,
+      "height": 1080,
+      "bytes": 324235
     },
     {
       "name": "clip-bale.mp4",
@@ -213,16 +213,16 @@
     {
       "name": "mote.png",
       "kind": "still",
-      "width": 640,
-      "height": 360,
-      "bytes": 110369
+      "width": 960,
+      "height": 540,
+      "bytes": 91523
     },
     {
       "name": "mote@2x.png",
       "kind": "still",
-      "width": 1280,
-      "height": 720,
-      "bytes": 375927
+      "width": 1920,
+      "height": 1080,
+      "bytes": 285982
     },
     {
       "name": "night.png",
@@ -283,16 +283,16 @@
     {
       "name": "stem.png",
       "kind": "still",
-      "width": 640,
-      "height": 360,
-      "bytes": 107084
+      "width": 960,
+      "height": 540,
+      "bytes": 94260
     },
     {
       "name": "stem@2x.png",
       "kind": "still",
-      "width": 1280,
-      "height": 720,
-      "bytes": 384167
+      "width": 1920,
+      "height": 1080,
+      "bytes": 339226
     },
     {
       "name": "thumb-night.png",
@@ -341,14 +341,14 @@
       "kind": "still",
       "width": 320,
       "height": 180,
-      "bytes": 34859
+      "bytes": 16357
     },
     {
       "name": "thumb-stem@2x.png",
       "kind": "still",
       "width": 640,
       "height": 360,
-      "bytes": 107084
+      "bytes": 47158
     }
   ]
 }
