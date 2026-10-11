@@ -10,6 +10,9 @@
 
 import { buildPlan } from '../../public/render/plan.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
+import { AgentRuntime } from '../../public/render/agents.js';
+import { JuniorHold, syncFloor } from '../../public/render/junior-hold.js';
+import { sameBuilding } from '../../public/render/plan-hold.js';
 
 export const NOW = 1_800_000_000_000;
 export const MIN = 60_000;
@@ -65,6 +68,55 @@ export function crewFloor(n, leadOver = {}) {
 export const planFor = (projects, agents) =>
   buildPlan(projects, agents, { stage: STAGE, now: NOW });
 
+/** The same floor with one agent's fields changed. */
+export const withOne = (agents, id, over) =>
+  agents.map((a) => (a.id === id ? { ...a, ...over } : a));
+
+/**
+ * A FLOOR DRIVEN THE WAY THE SCENE DRIVES IT: one lead and `n` juniors, the
+ * runtime, the junior hold, and `syncFloor` on every snapshot.
+ *
+ * `roomFor` furnishes the room for a larger crew than it starts with, as the
+ * furnishing hold does on a live floor. `sync(list, true)` plans the building
+ * again for that snapshot first, and bridges it as `Scene#setState` does:
+ * everybody seated where they were in the new plan, then the snapshot.
+ * @param {number} n @param {{roomFor?:number}} [opts]
+ */
+export function drivenFloor(n, opts = {}) {
+  const { agents, projects } = crewFloor(n);
+  const rt = new AgentRuntime();
+  const hold = new JuniorHold();
+  const f = {
+    agents,
+    plan: planFor(projects, crewFloor(Math.max(n, opts.roomFor ?? n)).agents),
+    rt,
+    hold,
+    t: NOW,
+    last: agents,
+    room: (kind, id) => roomOf(f.plan, kind, id),
+    sync(list, replan = false) {
+      if (replan) {
+        const old = f.plan;
+        f.plan = planFor(projects, list);
+        syncFloor(rt, hold, f.plan, f.last, { now: f.t, steady: sameBuilding(old, f.plan) });
+      }
+      f.last = list;
+      return syncFloor(rt, hold, f.plan, list, { now: f.t });
+    },
+    /** Run `ms` of frames, a tenth of a second each; `each` is asked after every one. */
+    run(ms, reduced = false, each = null) {
+      for (let left = ms; left > 0; left -= 100) {
+        f.t += 100;
+        rt.step(0.1, { plan: f.plan, now: f.t, reduced });
+        if (each) each();
+      }
+    },
+    at: (id) => ({ x: rt.get(id).x, y: rt.get(id).y }),
+  };
+  f.sync(agents);
+  return f;
+}
+
 /** @param {any} plan @param {string} kind @param {string} [id] */
 export const roomOf = (plan, kind, id) =>
   plan.rooms.find((r) => r.kind === kind && (id === undefined || r.id === id));
@@ -113,7 +165,9 @@ export function cablesOf(records, agents, opts = {}) {
     agentsById: new Map(agents.map((a) => [a.id, a])),
     camera: CAMERA,
     scale: 20,
-    charU: 20,
+    // A figure one unit to the unit, as the camera is: the last run of a cable
+    // goes into the laptop at its junior's knees, and that is measured in this.
+    charU: 1,
     lod: 2,
     reduced: opts.reduced === true,
     pinned: null,

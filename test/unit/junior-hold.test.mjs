@@ -9,53 +9,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AgentRuntime } from '../../public/render/agents.js';
-import { JUNIOR_DONE_HOLD_MS, JuniorHold, syncFloor } from '../../public/render/junior-hold.js';
+import { JUNIOR_DONE_HOLD_MS } from '../../public/render/junior-hold.js';
 import { LIFE, characterLife } from '../../public/render/life.js';
 import { crewCableExtent } from '../../public/render/crew.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import {
   LEAD,
-  NOW,
   cablesOf,
-  crewFloor,
+  drivenFloor,
   inside,
   jid,
   junior,
-  planFor,
-  roomOf,
+  withOne,
 } from '../helpers/junior-floor.mjs';
 
 const FOLD_MS = LIFE.despawn.period * 1000;
 
-/** The same floor with one agent's fields changed. */
-const withOne = (agents, id, over) => agents.map((a) => (a.id === id ? { ...a, ...over } : a));
-
-/** A floor of one lead and `n` juniors, and the scene's own way of driving it. */
+/** One lead and `n` juniors, driven as the scene drives them, and their room. */
 function floor(n, opts = {}) {
-  const { agents, projects } = crewFloor(n);
-  const plan = planFor(projects, crewFloor(Math.max(n, opts.roomFor ?? n)).agents);
-  const rt = new AgentRuntime();
-  const hold = new JuniorHold();
-  const f = {
-    agents,
-    plan,
-    rt,
-    hold,
-    t: NOW,
-    career: roomOf(plan, 'project', 'career-ops'),
-    sync: (list) => syncFloor(rt, hold, plan, list, { now: f.t }),
-    /** Run `ms` of frames, a tenth of a second each. */
-    run(ms, reduced = false) {
-      for (let left = ms; left > 0; left -= 100) {
-        f.t += 100;
-        rt.step(0.1, { plan, now: f.t, reduced });
-      }
-    },
-    at: (id) => ({ x: rt.get(id).x, y: rt.get(id).y }),
-  };
-  f.sync(agents);
-  return f;
+  const f = drivenFloor(n, opts);
+  return Object.assign(f, { career: f.room('project', 'career-ops') });
 }
 
 /** How one record is drawn this instant: its size and its opacity. */
