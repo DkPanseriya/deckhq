@@ -8,34 +8,21 @@
     {
       "name": "deckhq",
       "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "bin/deckhq.mjs",
-        "--no-open",
-        "--port",
-        "4318"
-      ],
+      "runtimeArgs": ["bin/deckhq.mjs", "--no-open", "--port", "4318"],
       "port": 4318,
       "autoPort": false
     },
     {
       "name": "deckhq-demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "scripts/demo-floor.mjs",
-        "--port",
-        "4499"
-      ],
+      "runtimeArgs": ["scripts/demo-floor.mjs", "--port", "4499"],
       "port": 4499,
       "autoPort": false
     },
     {
       "name": "site",
       "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "scripts/site-serve.mjs",
-        "--port",
-        "4390"
-      ],
+      "runtimeArgs": ["scripts/site-serve.mjs", "--port", "4390"],
       "port": 4390,
       "autoPort": false
     }
