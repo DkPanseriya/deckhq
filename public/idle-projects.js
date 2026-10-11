@@ -104,8 +104,10 @@ function lastSeen(project, now) {
 /**
  * What the chip says.
  *
- * The count is the whole of it. "14 idle" is a fact you can take in without
- * reading, which is the entire reason the names are behind it.
+ * The count and what it counts. "14 idle projects" is a fact you can take in
+ * without reading, which is the entire reason the names are behind it. It said
+ * "14 idle" until the header's counts were about sessions and this one, beside
+ * them, was about repositories: a bare "1 idle" read as one idle session.
  *
  * @param {number} count
  * @returns {string}
@@ -117,7 +119,7 @@ export function idleChipLabel(count, pinnedCount = 0) {
   // to count, and the chip is still the only way back to the pin. So it says
   // what it has: `2 pinned` rather than a `0 idle` that reads as "nothing here".
   if (n === 0 && pinned > 0) return `${pinned} pinned`;
-  return `${n} idle`;
+  return `${n} idle ${n === 1 ? 'project' : 'projects'}`;
 }
 
 /**

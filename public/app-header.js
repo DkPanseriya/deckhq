@@ -10,6 +10,7 @@
  */
 
 import { queueOrder } from './deck.js';
+import { floorCounts } from './floor-counts.js';
 import { applyMotionPreference } from './settings-ui.js';
 import {
   announce,
@@ -177,13 +178,13 @@ export function degradedNotes(degraded) {
 export function localDescribeFloor(s) {
   if (!s) return 'Floor loading.';
   const c = s.counts || {};
-  const drawn = c.drawn || {};
+  const floor = floorCounts(c);
   return (
     `${formatNumber(c.needsYou)} sessions need you: ` +
     `${formatNumber(c.handsUp)} hands up, ${formatNumber(c.stalled)} stalled, ` +
     `${formatNumber(c.forReview)} for review. ` +
-    `${formatNumber(drawn.atDesk ?? c.atDesk)} at their desks, ` +
-    `${formatNumber(drawn.benched ?? c.benched)} benched.`
+    `${formatNumber(floor.atDesk)} at their desks, ` +
+    `${formatNumber(floor.resting)} resting in the lounge.`
   );
 }
 
@@ -228,13 +229,16 @@ export function renderHeader(snapshot) {
   // drawn are named rather than folded in: they are still in the panel, still
   // in the deck, and still one keystroke away. `drawn` is absent from a
   // snapshot pushed by an older daemon, in which case the old numbers stand.
-  const drawn = c.drawn || {};
-  el.atDesk.textContent = formatNumber(drawn.atDesk ?? c.atDesk);
-  el.benched.textContent = formatNumber(drawn.benched ?? c.benched);
-  el.finished.textContent = formatNumber(drawn.finished);
-  el.finishedWrap.hidden = !drawn.finished;
-  el.wentHome.textContent = formatNumber(drawn.wentHome);
-  el.wentHomeWrap.hidden = !drawn.wentHome;
+  const floor = floorCounts(c);
+  el.atDesk.textContent = formatNumber(floor.atDesk);
+  // The Lounge's own number, so the header and the plate say one thing; what it
+  // is made of is the tooltip (`floor-counts.js`).
+  el.resting.textContent = formatNumber(floor.resting);
+  el.restingWrap.title = floor.restingTitle;
+  el.finished.textContent = formatNumber(floor.finished);
+  el.finishedWrap.hidden = !floor.finished;
+  el.wentHome.textContent = formatNumber(floor.wentHome);
+  el.wentHomeWrap.hidden = !floor.wentHome;
 
   document.title = c.needsYou > 0 ? `(${formatNumber(c.needsYou)}) DeckHQ` : 'DeckHQ';
   // WP-16 · begin — the dock/taskbar badge of an installed DeckHQ. Unsupported

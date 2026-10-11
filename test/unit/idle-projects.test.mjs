@@ -111,13 +111,13 @@ const IDLE = [
 // ---------------------------------------------------------------- the chip
 
 test('the chip is a count and the word, at one and at many', () => {
-  assert.equal(idleChipLabel(14), '14 idle');
-  assert.equal(idleChipLabel(1), '1 idle');
+  assert.equal(idleChipLabel(14), '14 idle projects');
+  assert.equal(idleChipLabel(1), '1 idle project');
   // Never rendered — the chip is hidden at nought — but it must still read as a
   // sentence rather than as `NaN idle` if it ever is.
-  assert.equal(idleChipLabel(0), '0 idle');
-  assert.equal(idleChipLabel(undefined), '0 idle');
-  assert.equal(idleChipLabel(-3), '0 idle');
+  assert.equal(idleChipLabel(0), '0 idle projects');
+  assert.equal(idleChipLabel(undefined), '0 idle projects');
+  assert.equal(idleChipLabel(-3), '0 idle projects');
 });
 
 // ----------------------------------------------------------------- a row

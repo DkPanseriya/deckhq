@@ -6,6 +6,16 @@
 
 ## Unreleased
 
+### Changed
+
+- **The header says "resting", and it is the Lounge's number.** The third floor count read "9
+  benched" over a Lounge whose own plate read "15 resting": the header counted only the sessions
+  you had benched, the plate everybody resting there, the benched and the ended together. The
+  header now carries the plate's number under the plate's word, and its tooltip says what it is
+  made of ("In the Lounge: 9 you benched, 6 ended.").
+- **The idle chip says what it counts.** "1 idle" beside counts of sessions read as one idle
+  session. It is repositories nobody is working in, and it now reads "1 idle project".
+
 ### Fixed
 
 - **The line that ties a name to its robot no longer runs across a robot.** A name that has had to

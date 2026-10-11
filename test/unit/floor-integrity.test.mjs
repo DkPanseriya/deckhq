@@ -39,6 +39,7 @@ import {
   SERVICE_W_STEP,
 } from '../../public/render/plan-units.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
+import { floorCounts } from '../../public/floor-counts.js';
 import {
   agentIndex,
   CREW_DRAW_CAP,
@@ -1931,6 +1932,12 @@ test('the header floor counts equal the plan’s drawn totals', () => {
         ? `${c.drawn.lounge} resting · ${c.drawn.wentHome} went home`
         : `${c.drawn.lounge} resting`;
     assert.equal(lounge.plateLines[1], expected);
+    // The header's third count IS that plate's number, under the plate's word
+    // (`public/floor-counts.js`). It read "9 benched" over "15 resting" once.
+    const header = floorCounts(c);
+    assert.equal(header.resting, c.drawn.lounge);
+    assert.equal(header.benched + header.ended, header.resting);
+    assert.ok(lounge.plateLines[1].startsWith(`${header.resting} resting`));
 
     // And nobody has been lost: every session is still counted somewhere.
     assert.equal(c.drawn.benched + c.drawn.wentHome, c.benched);

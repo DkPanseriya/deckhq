@@ -83,9 +83,10 @@
       </div>
 
       <!-- The floor counts describe what the FLOOR DRAWS, not what the deck
-           holds (WP-55). "at desk" is the sessions drawn at a desk; the three
-           that follow are the ones that are not, and each is hidden when it is
-           nought rather than stating an absence. -->
+           holds (WP-55). "at desk" is the sessions drawn at a desk; "resting"
+           is the number on the Lounge's own plate, the benched and the ended
+           together (public/floor-counts.js); "finished" and "went home" are
+           the ones drawn nowhere, each hidden when it is nought. -->
       <p class="floor-counts" id="floor-counts">
         <span class="num" id="stat-at-desk">0</span> at desk
         <span class="floor-count" id="floor-count-finished" hidden>
@@ -93,7 +94,7 @@
           <span class="num" id="stat-finished">0</span> finished
         </span>
         <span class="sep" aria-hidden="true">·</span>
-        <span class="num" id="stat-benched">0</span> benched
+        <span id="floor-count-resting"><span class="num" id="stat-resting">0</span> resting</span>
         <span class="floor-count" id="floor-count-went-home" hidden>
           <span class="sep" aria-hidden="true">·</span>
           <span class="num" id="stat-went-home">0</span> went home
