@@ -72,6 +72,28 @@ export async function download(url) {
 }
 
 /**
+ * The environment Windows PowerShell 5.1 is started with.
+ *
+ * `PSModulePath` is left out. A step that runs under PowerShell 7 (GitHub's
+ * default shell on Windows) hands its own module path down to every child, and
+ * 5.1 started with 7's path finds `Microsoft.PowerShell.Security` and cannot
+ * load it: the first build in CI stopped there, with a signature check that
+ * never ran. Without the variable 5.1 uses its own, on any shell.
+ *
+ * @param {NodeJS.ProcessEnv} env @param {string[]} files
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function authenticodeEnv(env, files) {
+  /** @type {NodeJS.ProcessEnv} */
+  const out = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (key.toLowerCase() !== 'psmodulepath') out[key] = value;
+  }
+  out.DECKHQ_AUTHENTICODE_FILES = JSON.stringify(files);
+  return out;
+}
+
+/**
  * What Windows says about each file's Authenticode signature.
  *
  * `Get-AuthenticodeSignature` is the operating system's own verdict: the chain
@@ -99,7 +121,7 @@ export function authenticode(files) {
     {
       encoding: 'utf8',
       windowsHide: true,
-      env: { ...process.env, DECKHQ_AUTHENTICODE_FILES: JSON.stringify(files) },
+      env: authenticodeEnv(process.env, files),
     },
   );
   return JSON.parse(out.trim());

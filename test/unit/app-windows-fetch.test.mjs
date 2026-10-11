@@ -232,3 +232,16 @@ test('SECURITY: the Node zip is refused unless it matches SHASUMS256.txt, pins.j
   fs.appendFileSync(path.join(good.outDir, 'node.exe'), 'tampered');
   assert.equal(fetchedNode({ pins: pinsNow, outDir: good.outDir }), null);
 });
+
+test('Windows PowerShell 5.1 is started without the calling shell’s module path', async () => {
+  // A step under PowerShell 7 hands its PSModulePath to every child, and 5.1
+  // started with it cannot load the module `Get-AuthenticodeSignature` lives
+  // in. The first build in CI stopped exactly there.
+  const { authenticodeEnv } = await import('../../app/windows/lib/verify.mjs');
+  const env = authenticodeEnv(
+    { PSModulePath: 'C:\pwsh7\Modules', psmodulepath: 'x', PATH: 'C:\Windows', TEMP: 't' },
+    ['C:\a.dll'],
+  );
+  assert.deepEqual(Object.keys(env).sort(), ['DECKHQ_AUTHENTICODE_FILES', 'PATH', 'TEMP']);
+  assert.equal(env.DECKHQ_AUTHENTICODE_FILES, '["C:\\a.dll"]');
+});
