@@ -146,11 +146,13 @@ export function readPng(bytes) {
  */
 export function checkClip(name, bytes) {
   kindOf(name, bytes);
-  const info = inspectMp4(bytes);
   const refuse = (why) => {
     throw new Error(`${name}: ${why}`);
   };
+  // Its weight before anything is read out of it: a file too heavy to take
+  // is not worth parsing.
   if (bytes.length > CLIP_BUDGET) refuse(`${Math.round(bytes.length / 1024)} KB, over 1.6 MB`);
+  const info = inspectMp4(bytes);
   if (info.fragmented || info.top.join(' ') !== 'ftyp moov mdat') refuse('not a plain MP4');
   if (info.codec !== 'avc1') refuse(`${info.codec}, not H.264`);
   if (info.fps !== 60 || !info.constantRate) refuse(`${info.fps} frames a second, not 60`);
@@ -161,20 +163,27 @@ export function checkClip(name, bytes) {
 }
 
 /**
- * A clip's first frame as the pair it lies over: the dense file the clip's
- * own size, so nothing moves when the clip takes over from it.
+ * The still a clip lies over, as a pair: the dense file the clip's own size,
+ * so the box does not move when the clip takes over from it. It is the frame
+ * whoever made the clip chose to stand for it, which need not be its first.
+ * One that is already the clip's size and inside the budget is kept byte for
+ * byte: written again against a new palette it would only be heavier.
  *
- * @param {string} name @param {{width: number, height: number, data: Uint8Array}} img
+ * @param {string} name @param {Buffer} bytes the still, as it arrived
  * @param {{width: number, height: number}} clip
  */
-export function posterPair(name, img, clip) {
+export function posterPair(name, bytes, clip) {
+  const img = readPng(bytes);
   const shape = (s) => s.width / s.height;
   if (img.width < clip.width || Math.abs(shape(img) / shape(clip) - 1) > 0.005) {
-    throw new Error(`${name}: its first frame is ${img.width}x${img.height}, not the clip's shape`);
+    throw new Error(`${name}: it is ${img.width}x${img.height}, not the clip's shape`);
   }
   const at = img.width === clip.width ? img : boxDownscale(img, clip.width);
-  if (at.height !== clip.height) throw new Error(`${name}: its first frame is another height`);
+  if (at.height !== clip.height) throw new Error(`${name}: it is not the clip's height`);
   const half = boxDownscale(img, clip.width / 2);
+  if (at === img && bytes.length <= STILL_BUDGET) {
+    return { plain: encodeIndexedPng(half, 256, { dither: true }), dense: bytes };
+  }
   for (const colours of [256, 128, 64, 32]) {
     const dense = encodeIndexedPng(at, colours, { dither: true });
     if (dense.length > STILL_BUDGET) continue;
@@ -250,6 +259,7 @@ function main(argv) {
     if (THUMBS.includes(still.to)) putPair(`thumb-${still.to}`, stillPair(img, [THUMB_WIDTH]));
   }
 
+  let refused = 0;
   for (const name of clips ? CLIPS : []) {
     if (only && !only.has(`clip-${name}`)) continue;
     const video = path.join(clips, `${name}.mp4`);
@@ -260,21 +270,28 @@ function main(argv) {
       );
       continue;
     }
-    const bytes = fs.readFileSync(video);
-    const info = checkClip(`${name}.mp4`, bytes);
-    const first = fs.readFileSync(frame);
-    kindOf(`${name}.png`, first);
-    putPair(`clip-${name}`, posterPair(`${name}.png`, readPng(first), info));
-    put(`clip-${name}.mp4`, bytes);
-    say(
-      `  ok   ${`clip-${name}.mp4`.padEnd(18)} ${info.width}x${info.height}  ${kb(bytes)}, copied`,
-    );
+    // A clip the site cannot play is refused with its reason and left out;
+    // the ones after it still come in, and the run ends as a failure.
+    try {
+      const bytes = fs.readFileSync(video);
+      const info = checkClip(`${name}.mp4`, bytes);
+      const still = fs.readFileSync(frame);
+      kindOf(`${name}.png`, still);
+      const pair = posterPair(`${name}.png`, still, info);
+      putPair(`clip-${name}`, pair);
+      put(`clip-${name}.mp4`, bytes);
+      say(`  ok   ${`clip-${name}.mp4`.padEnd(18)} ${info.width}x${info.height}  ${kb(bytes)}`);
+    } catch (error) {
+      refused++;
+      say(`  NO   ${`clip-${name}`.padEnd(18)} refused. ${error.message}`);
+    }
   }
 
   const manifest = manifestOf(OUT);
   fs.writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
   const count = (kind) => manifest.media.filter((m) => m.kind === kind).length;
-  say(`site/3d-media.json: ${count('still')} stills, ${count('clip')} clips`);
+  say(`site/3d-media.json: ${count('still')} stills, ${count('clip')} clips, ${refused} refused`);
+  if (refused) process.exitCode = 1;
 }
 
 // Running the file imports; importing it, which is what the site's test does

@@ -29,6 +29,111 @@
       "bytes": 387247
     },
     {
+      "name": "clip-bale.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1309212
+    },
+    {
+      "name": "clip-bale.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 88145
+    },
+    {
+      "name": "clip-bale@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 177721
+    },
+    {
+      "name": "clip-brick.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1308301
+    },
+    {
+      "name": "clip-brick.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 87557
+    },
+    {
+      "name": "clip-brick@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 181898
+    },
+    {
+      "name": "clip-rise.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1341793
+    },
+    {
+      "name": "clip-rise.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 97962
+    },
+    {
+      "name": "clip-rise@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 197221
+    },
+    {
+      "name": "clip-states.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1245335
+    },
+    {
+      "name": "clip-states.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 84272
+    },
+    {
+      "name": "clip-states@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 99564
+    },
+    {
+      "name": "clip-stem.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1325189
+    },
+    {
+      "name": "clip-stem.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 87977
+    },
+    {
+      "name": "clip-stem@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 180714
+    },
+    {
       "name": "hand-up.png",
       "kind": "still",
       "width": 480,

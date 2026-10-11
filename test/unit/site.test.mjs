@@ -68,8 +68,8 @@ const LINKABLE = [
  */
 const SELF = 'deckhq.dev';
 
-/** The stylesheet's two source files; `site/build.mjs` serves them as one. */
-const STYLE_SOURCES = ['style.css', 'components.css'];
+/** The stylesheet's three source files; `site/build.mjs` serves them as one. */
+const STYLE_SOURCES = ['style.css', 'components.css', 'three-d.css'];
 
 /** Every kind of picture the site serves: stills, and loops as video. */
 const PICTURES = ['.png', '.gif', '.mp4'];
@@ -136,6 +136,9 @@ test('the site builds every page it navigates to', () => {
     // states and the board sit beside the things they belong to.
     'features.html',
     'look.html',
+    // The office in 3D, which is not released: the one page that says so at
+    // length, and where the line across the top of every page leads.
+    '3d.html',
     'install.html',
     'privacy.html',
     'faq.html',
@@ -187,8 +190,8 @@ test('every internal link resolves to a file that exists', () => {
   const pages = walk(out, ['.html']);
   assert.equal(
     pages.length,
-    8 + Object.keys(FORWARDS).length,
-    'the site is eight pages and the addresses that forward to them',
+    9 + Object.keys(FORWARDS).length,
+    'the site is nine pages and the addresses that forward to them',
   );
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf8');
@@ -585,13 +588,16 @@ test('HONESTY: every picture is a declared capture, and the unreleased say so', 
   // a fixture floor by `scripts/site-assets.mjs` from `site/assets.json`. So a
   // file in the built site's `media/` has to be one that manifest declares.
   // Two kinds are let in by name and nothing else is: the composed card a link
-  // unfurls into, and pictures of something not released, which must sit in a
-  // figure whose caption carries the "Coming" tag.
+  // unfurls into, and pictures of the 3D office, which is not released. Those
+  // are under `media/3d/`, are listed in `site/3d-media.json`, and must each
+  // sit in a figure whose caption carries the "Coming" tag.
   const { declaredMedia, assertComingIsLabelled, COMING, PREVIEW, MEDIA_DIR } =
     await import('../../site/build.mjs');
   const { COMPOSED } = await import('../../site/media.mjs');
   const declared = declaredMedia();
-  const served = walk(path.join(out, 'media'), PICTURES).map((f) => path.basename(f));
+  const served = walk(path.join(out, 'media'), PICTURES).map((f) =>
+    path.relative(path.join(out, 'media'), f).replace(/\\/g, '/'),
+  );
   assert.ok(served.length > 30, `expected the site to carry pictures; found ${served.length}`);
   for (const file of served) {
     assert.ok(
@@ -620,36 +626,29 @@ test('HONESTY: every picture is a declared capture, and the unreleased say so', 
     );
   }
 
-  // The unreleased are only on the home page, in one band, and each is tagged.
+  // The unreleased are in two places: the strip under the home page's first
+  // screen, and the 3D page. Each picture is tagged where it is shown. On any
+  // other page nothing between the `<main>` tags shows one, carries the tag or
+  // speaks of 3D; the line across the top and the bar, which are on every
+  // page, are what send a reader to the page that does.
+  assert.ok(COMING.length >= 18, `expected the 3D pictures to be listed; found ${COMING.length}`);
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
-    const where = path.relative(out, page);
-    const shown = COMING.filter((file) => html.includes(`media/${file}`));
-    if (where !== 'index.html') {
+    const where = path.relative(out, page).replace(/\\/g, '/');
+    const main = html.slice(html.indexOf('<main id="main">'), html.indexOf('</main>'));
+    const shown = COMING.filter((file) => main.includes(`media/${file}`));
+    if (where !== 'index.html' && where !== '3d.html') {
       assert.deepEqual(shown, [], `${where} shows something unreleased`);
-      assert.ok(!/tag--coming/.test(html), `${where} carries a "Coming" tag`);
+      assert.ok(!/tag--coming/.test(main), `${where} carries a "Coming" tag in its page`);
       // The changelog is the release notes' own words and is not held to this.
-      if (where !== 'changelog.html') assert.ok(!/\b3D\b/.test(html), `${where} talks about 3D`);
+      if (where !== 'changelog.html') assert.ok(!/\b3D\b/.test(main), `${where} talks about 3D`);
       continue;
     }
-    if (shown.length === 0) continue;
-    assert.doesNotThrow(() => assertComingIsLabelled(where, html));
-    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+    assert.ok(shown.length >= 4, `${where} shows ${shown.length} pictures of the 3D office`);
+    assert.doesNotThrow(() => assertComingIsLabelled(where, main));
+    for (const figure of main.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
       if (!COMING.some((file) => figure[0].includes(`media/${file}`))) continue;
       assert.match(figure[0], /<span class="tag tag--coming">Coming<\/span>/);
-    }
-    // What is never said beside it: a date, a price, a tier, or a first.
-    const band = html.slice(html.indexOf('The same office, stood up.'));
-    const words = band.slice(0, band.indexOf('</section>')).replace(/<[^>]*>/g, ' ');
-    for (const never of [
-      /\bPro\b/,
-      /\bfirst\b/i,
-      /\bonly\b/i,
-      /\bsoon\b/i,
-      /\b20\d\d\b/,
-      /[$€£]/,
-    ]) {
-      assert.ok(!never.test(words), `the Coming band says ${never}`);
     }
   }
 
@@ -856,10 +855,14 @@ test('WEIGHT: every picture is inside the budget for what it is', async () => {
   const { BUDGET } = await import('../../site/build.mjs');
   assert.ok(BUDGET.still <= 400 * 1024, 'the budget for a still was raised');
   assert.ok(BUDGET.loop <= 1024 * 1024, 'the budget for a loop was raised');
+  // A clip of the 3D office is not made here and cannot be made lighter
+  // here: 1280 pixels at sixty frames a second, held to 1.6 MB.
+  assert.ok(BUDGET.clip <= 1.6 * 1024 * 1024, 'the budget for a 3D clip was raised');
   let checked = 0;
   for (const file of walk(path.join(out, 'media'), PICTURES)) {
     const size = fs.statSync(file).size;
-    const budget = /\.(gif|mp4)$/.test(file) ? BUDGET.loop : BUDGET.still;
+    const clip = file.endsWith('.mp4') && path.basename(path.dirname(file)) === '3d';
+    const budget = clip ? BUDGET.clip : /\.(gif|mp4)$/.test(file) ? BUDGET.loop : BUDGET.still;
     checked++;
     assert.ok(
       size <= budget,
@@ -967,9 +970,10 @@ test('MOTION: every loop is a video at sixty frames a second, and it moves', asy
       assert.ok(!/\ssrc=/.test(attrs), `${where}: a video names its file where no query guards it`);
       // One source, or two where the loop has a narrow file: that one first,
       // for a screen under 40rem. Every source is guarded by the motion query.
+      // (A clip of the 3D office is one directory down, under `media/3d/`.)
       const sources = [
         ...inner.matchAll(
-          /<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>/g,
+          /<source src="media\/((?:3d\/)?[\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>/g,
         ),
       ];
       assert.equal(sources.map((s) => s[0]).join(''), inner, `${where}: an unguarded source`);
@@ -1217,7 +1221,12 @@ test('the stylesheet and the script stay inside their budgets', () => {
     );
   }
   const js = fs.statSync(path.join(siteDir, 'site.js')).size;
-  assert.ok(css <= 32 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 32 KB`);
+  // 40 KB. It was 32 KB while the stylesheet was two files, and they had
+  // filled it: 32.5 KB of the 32.8. The third file is the line across every
+  // page, the strip under the home page's first screen and the 3D page, and
+  // the three together measure 36.9 KB (11 October 2026). The script did not
+  // grow: the line's light is a keyframe, and nothing in it needs a script.
+  assert.ok(css <= 40 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 40 KB`);
   assert.ok(js <= 6 * 1024, `site.js is ${(js / 1024).toFixed(1)} KB, over 6 KB`);
 });
 
@@ -1264,9 +1273,22 @@ test('every page has a title, a description and a card of its own', async () => 
       assert.match(html, new RegExp(`<meta property="${tag}" content="[^"]+"`), `${where}: ${tag}`);
     }
     assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
+    // The card is the composed one on every page but the 3D page, whose link
+    // unfurls into the floor today beside the same floor in 3D.
+    const card = page.card ? page.card.file : PREVIEW;
+    assert.equal(Boolean(page.card), page.slug === '3d', `${where}: a card of its own`);
+    for (const tag of ['<meta name="twitter:image"', '<meta property="og:image"']) {
+      assert.ok(
+        html.includes(`${tag} content="${SITE_ORIGIN}/media/${card}"`),
+        `${where}: no card picture`,
+      );
+    }
+    const drawn = imageSize(path.join(out, 'media', card));
+    assert.ok(drawn, `${where}: its card, media/${card}, was not built`);
     assert.ok(
-      html.includes(`<meta name="twitter:image" content="${SITE_ORIGIN}/media/${PREVIEW}"`),
-      `${where}: no card picture`,
+      html.includes(`<meta property="og:image:width" content="${drawn.width}" />`) &&
+        html.includes(`<meta property="og:image:height" content="${drawn.height}" />`),
+      `${where}: the card's size is not the file's`,
     );
     assert.match(html, /<link rel="icon" href="deckhq-mark\.svg" type="image\/svg\+xml" \/>/);
     // A page that can be found says where it lives; the 404 page says not to.
@@ -1321,13 +1343,14 @@ test('the page works with its script removed', () => {
   // Nothing waits for a scroll to appear: there is no reveal on this site.
   assert.ok(!/data-reveal|js-reveal/.test(css), 'the stylesheet carries a scroll reveal');
   // A rule may hide something only in the state the script itself sets
-  // (`.is-live`), or to swap the bar for the menu at a narrow width.
+  // (`.is-live`), or to swap the bar for the menu at a narrow width, or to
+  // show the line across the top in the one of its two wordings that fits.
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [, selector, body] = m;
     if (!/display:\s*none|visibility:\s*hidden|opacity:\s*0(\.0+)?\s*;/.test(body)) continue;
     assert.match(
       selector,
-      /\.is-live|\.site-nav|\.nav-toggle|details-marker/,
+      /\.is-live|\.site-nav|\.nav-toggle|details-marker|\.announce-(long|short)/,
       `"${selector.trim()}" hides content without waiting for the script`,
     );
   }
@@ -1445,9 +1468,17 @@ test('the home page leads with the walk, and every band picture is lazy', async 
       const dense = src.replace(/\.png$/, '@2x.png');
       if (src.endsWith('.png') && fs.existsSync(path.resolve(path.dirname(page), dense))) {
         pairs++;
-        assert.ok(
-          tag[0].includes(` srcset="${src} 1x, ${dense} 2x"`),
-          `${where} does not offer ${dense} to a dense screen`,
+        // A picture of the 3D office is offered by width, with the room it
+        // has: its plain file is narrower than the column, so by density an
+        // ordinary screen would be sent 640 pixels to fill 1216.
+        const offer = src.startsWith('media/3d/')
+          ? ` srcset="${src} ${size.width}w, ${dense} ${size.width * 2}w"`
+          : ` srcset="${src} 1x, ${dense} 2x"`;
+        assert.ok(tag[0].includes(offer), `${where} does not offer ${dense} to a dense screen`);
+        assert.equal(
+          /\ssizes="[^"]+"/.test(tag[0]),
+          src.startsWith('media/3d/'),
+          `${where}: sizes`,
         );
       }
     }
@@ -1547,22 +1578,27 @@ test('ORDER: what a reader can do sits above what they cannot have yet', () => {
     [...order].sort((a, b) => a - b),
     'the home page is out of order',
   );
-  // The unreleased band, when its pictures are in the repository: under
-  // Install, over Follow, half the height of an ordinary band, both pictures.
-  if (home.includes('The same office, stood up.')) {
-    const coming = at('The same office, stood up.');
-    assert.ok(coming > at('id="install"'), 'something not released sits above Install');
-    assert.ok(coming < at('id="follow"'), 'the unreleased band is under Follow');
-    const band = home.slice(
-      home.lastIndexOf('<section', coming),
-      home.indexOf('</section>', coming),
-    );
-    assert.match(band, /^<section class="band band--deep band--tight">/, 'the band is full height');
-    assert.equal((band.match(/class="tag tag--coming"/g) ?? []).length, 2, 'two Coming tags');
-    for (const file of ['coming-office.png', 'coming-robot.png']) {
-      assert.ok(band.includes(`media/${file}`), `the band lost ${file}`);
-    }
+  // What is not released was a band under Install until 11 October 2026.
+  // Posts that show the office in 3D send readers here, and they saw none of
+  // it for five screens. So it is a strip now, straight under the first
+  // screen and over everything else, and it is said once: the band is gone.
+  // The first screen itself did not move: the eyebrow, the line, the command,
+  // the way to the doctor and the walk are all above the strip.
+  const strip = at('<section class="strip3d" id="in-3d">');
+  const sections = [...home.matchAll(/<section\b/g)].map((m) => m.index);
+  assert.equal(sections[0], at('<section class="hero wrap">'), 'the hero is not the first section');
+  assert.equal(sections[1], strip, 'the 3D strip is not straight under the first screen');
+  for (const kept of [
+    'class="eyebrow"',
+    '<h1>',
+    '<code>npx deckhq app</code>',
+    'Or count yours first',
+    'media/hero-walk.mp4',
+  ]) {
+    assert.ok(at(kept) < strip, `${kept} is no longer on the first screen`);
   }
+  assert.ok(!home.includes('The same office, stood up.'), 'the old band says it a second time');
+  assert.equal((home.match(/<h2>[^<]*\b3D\b/g) ?? []).length, 0, 'a second band about 3D');
   // The doctor invitation is a block of its own, and the hero points at it.
   const doctor = home.slice(at('id="doctor"'), home.indexOf('</section>', at('id="doctor"')));
   assert.match(doctor, /<h2>Before you install anything\.<\/h2>/);
@@ -1834,4 +1870,414 @@ test('PLACEHOLDER: a lazy picture arrives into a box of its own tone', async () 
   assert.ok(panel && Math.max(...panel) < 80, `the panel measures ${panel}`);
   assert.equal(meanColour(Buffer.from('not a picture at all, just some bytes')), null);
   assert.equal(placeholderFor(path.join(MEDIA_DIR, 'no-such-picture.png'), tones), null);
+});
+
+/* ------------------------------------------------ the office in 3D, 11 Oct */
+
+/** One rule of the stylesheet, by its selector, comments gone. */
+function ruleOf(css, selector) {
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const at = code.indexOf(`\n${selector} {`);
+  assert.notEqual(at, -1, `the stylesheet has no rule for ${selector}`);
+  return code.slice(code.indexOf('{', at) + 1, code.indexOf('}', at));
+}
+
+/** The words a reader is shown: markup gone, and alt text with it. */
+const wordsOf = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+
+/** The home page's 3D strip, tags and all. */
+function stripOf() {
+  const home = mainOf('index.html');
+  const start = home.indexOf('<section class="strip3d" id="in-3d">');
+  assert.notEqual(start, -1, 'the home page has no 3D strip');
+  return home.slice(start, home.indexOf('</section>', start));
+}
+
+/** The 3D page's sections, in order, tags and all. */
+const sectionsOf3d = () =>
+  [...mainOf('3d.html').matchAll(/<section\b[\s\S]*?<\/section>/g)].map((m) => m[0]);
+
+test('BAR: every page opens under one line that says 3D is coming, and leads there', async () => {
+  const { announceBar } = await import('../../site/slots.mjs');
+  const bar = announceBar();
+  assert.match(bar, /^<a class="announce" href="3d\.html">/);
+  assert.equal(wordsOf(bar).trim(), 'Coming: the same office in 3D. Coming: DeckHQ in 3D · See it');
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    assert.equal(html.split(bar).length - 1, 1, `${where} does not carry the line once`);
+    // Over the header, so it is the first thing on the page and scrolls away.
+    assert.ok(
+      html.indexOf(bar) < html.indexOf('<header class="site-head">'),
+      `${where}: its place`,
+    );
+    assert.ok(
+      fs.existsSync(path.join(anchorOf(page, html), '3d.html')),
+      `${where}: it leads nowhere`,
+    );
+    // And the bar under it names the page, with the tag beside the name.
+    assert.equal(
+      (html.match(/>3D <span class="tag tag--coming">Coming<\/span><\/a>/g) ?? []).length,
+      2,
+      `${where}: the nav and the menu do not both name 3D as coming`,
+    );
+  }
+
+  // Bright, and readable: the accent as a ground, the page's dark as its ink.
+  // Measured here from the tokens, as every other colour on the site is.
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
+  const t = tokensOf(css, SCHEME_BLOCKS[0].selector);
+  const rule = ruleOf(css, '.announce');
+  assert.match(rule, /background: var\(--accent\);/);
+  assert.match(rule, /\scolor: var\(--on-accent\);/);
+  const ratio = contrast(t['--on-accent'], t['--accent']);
+  assert.ok(ratio >= 4.5, `the line's words are ${ratio.toFixed(2)}:1 on its ground`);
+  assert.equal(ratio.toFixed(2), '8.51', 'the measured figure moved; say the new one');
+
+  // It takes one line, once: not fixed, not sticky, and it does not wrap.
+  assert.ok(!/position: (sticky|fixed)/.test(rule), 'the line follows the reader down the page');
+  assert.match(rule, /white-space: nowrap;/);
+  // A phone gets the shorter wording, by width; neither is hidden for a script.
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(
+    code,
+    /@media \(max-width: 39\.99rem\) \{[^@]*\.announce-long \{\s*display: none;\s*\}\s*\.announce-short \{\s*display: inline;/,
+  );
+  // The light that crosses it runs once and only for a reader who did not ask
+  // for less motion; it is parked off the edge otherwise, and costs no script.
+  assert.match(
+    code,
+    /@media \(prefers-reduced-motion: no-preference\) \{\s*\.announce::after \{\s*animation: sweep [^;]*\bboth;/,
+  );
+  assert.equal((code.match(/animation: sweep/g) ?? []).length, 1, 'the light runs somewhere else');
+  assert.match(ruleOf(css, '.announce::after'), /transform: translateX\(-1\d\d%\);/);
+  assert.ok(!/announce/.test(fs.readFileSync(path.join(siteDir, 'site.js'), 'utf8')));
+});
+
+test('3D: every picture of the 3D office is one its list has, in the two places that show them', async () => {
+  const { media3d, MEDIA_DIR, imageSize, BUDGET } = await import('../../site/build.mjs');
+  const { manifestOf, knownNames, MAX_WIDTH, STILL_BUDGET, CLIP_BUDGET, OUT } =
+    await import('../../scripts/site-3d-import.mjs');
+  const listed = media3d();
+  assert.ok(listed.size >= 18, `site/3d-media.json lists ${listed.size} files`);
+
+  // The list is the folder: every file, with the size it really is. Written
+  // by the import and by nothing else, so the two cannot drift apart.
+  assert.equal(OUT, path.join(MEDIA_DIR, '3d'));
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(siteDir, '3d-media.json'), 'utf8')),
+    manifestOf(OUT),
+    'site/3d-media.json is not what is in docs/media/site/3d: run scripts/site-3d-import.mjs',
+  );
+  assert.equal(MAX_WIDTH, 2000);
+  assert.equal(STILL_BUDGET, BUDGET.still);
+  assert.equal(CLIP_BUDGET, BUDGET.clip);
+  const known = knownNames();
+  for (const [name, m] of listed) {
+    assert.ok(known.has(name), `${name} is not a name the import writes`);
+    assert.match(name, /^(clip-|thumb-)?[a-z-]+(@2x)?\.(png|mp4)$/, `${name}: its name`);
+    assert.ok(m.width <= MAX_WIDTH, `${name} is ${m.width} px wide; no 3D picture is over 2000`);
+    assert.ok(
+      m.bytes <= (m.kind === 'clip' ? CLIP_BUDGET : STILL_BUDGET),
+      `${name} is ${Math.round(m.bytes / 1024)} KB`,
+    );
+    // A still is a pair, the plain file half the dense one; a clip has both
+    // under it, the dense one its own size.
+    if (name.endsWith('@2x.png')) {
+      const plain = listed.get(name.replace('@2x', ''));
+      assert.ok(plain && plain.width * 2 === m.width, `${name} is not twice its plain file`);
+    } else if (m.kind === 'still') {
+      assert.ok(listed.has(name.replace('.png', '@2x.png')), `${name} has no dense file`);
+    } else {
+      const under = listed.get(name.replace('.mp4', '@2x.png'));
+      assert.deepEqual(
+        under && [under.width, under.height],
+        [m.width, m.height],
+        `${name} does not lie over a first frame of its own size`,
+      );
+    }
+  }
+  // Nothing that is a sheet of frames, a grid of poses or a flat view has a name.
+  for (const name of known) assert.ok(!/frames|sheet|grid|pose|front|side|top/.test(name), name);
+
+  // On the site: two pages show them, every one they show is on the list and
+  // is the repository's file, and every one is at most 2000 pixels wide.
+  let shown = 0;
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page).replace(/\\/g, '/');
+    const body = html.slice(html.indexOf('<body'));
+    const names = [...body.matchAll(/media\/3d\/([\w@.-]+\.(?:png|mp4))/g)].map((m) => m[1]);
+    if (where !== 'index.html' && where !== '3d.html') {
+      assert.deepEqual(names, [], `${where} shows the 3D office`);
+      continue;
+    }
+    assert.ok(names.length > 0, `${where} shows none of the 3D office`);
+    for (const name of names) {
+      shown++;
+      assert.ok(listed.has(name), `${where} shows media/3d/${name}, which the list does not have`);
+      assert.deepEqual(
+        fs.readFileSync(path.join(out, 'media', '3d', name)),
+        fs.readFileSync(path.join(MEDIA_DIR, '3d', name)),
+        `media/3d/${name} is not the file in the repository`,
+      );
+      assert.ok(imageSize(path.join(out, 'media', '3d', name)).width <= MAX_WIDTH, name);
+    }
+  }
+  assert.ok(shown >= 20, `expected the two pages to show the 3D office; found ${shown} mentions`);
+  // The strip's pictures are the small ones, so a row of them costs a row.
+  const strip = stripOf();
+  const thumbs = [...strip.matchAll(/<img\b[^>]*\ssrc="media\/3d\/([\w-]+)\.png"[^>]*>/g)];
+  assert.ok(thumbs.length >= 3 && thumbs.length <= 4, `the strip shows ${thumbs.length} pictures`);
+  for (const [tag, name] of thumbs) {
+    assert.match(name, /^thumb-/, `the strip shows ${name} at full size`);
+    assert.match(tag, /loading="lazy"/, `the strip's ${name} is not lazy`);
+    assert.ok(listed.get(`${name}@2x.png`).width <= 640, `${name} is not a small picture`);
+  }
+});
+
+test('3D: what is coming says Coming, and promises nothing else', () => {
+  const sections = sectionsOf3d();
+  const ids = sections.map((s) => (s.match(/^<section\b[^>]*\sid="([\w-]+)"/) ?? ['', 'hero'])[1]);
+  assert.deepEqual(ids, ['hero', 'same-floor', 'states', 'robots', 'walk', 'today']);
+  const page = mainOf('3d.html');
+  assert.match(sections[0], /<h1>The same office\. In 3D\.<\/h1>/);
+  assert.match(
+    wordsOf(sections[0]),
+    /Every session a robot at a desk, the ones waiting on you on the sofa in your office\. Turn it, walk it, zoom in\. Coming\./,
+  );
+
+  // The word is in the line across the top, in the strip, and in every
+  // section of the page: a reader who lands in the middle is told too.
+  const strip = stripOf();
+  for (const [where, html] of [['the strip', strip], ...sections.map((s, i) => [ids[i], s])]) {
+    assert.match(
+      html,
+      /<span class="tag tag--coming">Coming<\/span>/,
+      `${where} has no Coming tag`,
+    );
+    assert.match(wordsOf(html), /\bComing\b/, `${where} does not say Coming`);
+  }
+  assert.match(strip, /<h2>The office you just saw, with a camera\. Coming\.<\/h2>/);
+  assert.match(strip, /<a class="btn" href="3d\.html">See the 3D office<\/a>/);
+
+  // What is never said about it, in these two places and nowhere else held to
+  // it: a price, a date, a tier, a trial, a platform, who gets it or when. The
+  // words are scoped to the strip and the page, alt text included, so "the
+  // first frame" in a caption on another page is nobody's promise.
+  const said = (html) => `${wordsOf(html)} ${[...html.matchAll(/\salt="([^"]*)"/g)].join(' ')}`;
+  const never = [
+    [/\bprices?\b|\bpricing\b|\bpaid\b|\bcosts?\b|[$€£]|\bUSD\b/i, 'a price'],
+    [/\b20\d\d\b|\bdates?\b|\bweeks?\b|\bmonths?\b|\bQ[1-4]\b|\bsoon\b|\btomorrow\b/i, 'a date'],
+    [/\bfirst\b/i, 'a first'],
+    [/\bonly\b/i, 'an only'],
+    [/\btrials?\b/i, 'a trial'],
+    [/\bPro\b|\bpremium\b|\btiers?\b|\bplans?\b|\bsubscri/i, 'a tier'],
+    [/\bmacOS\b|\bLinux\b|\bWindows\b|\biOS\b|\bAndroid\b|\bplatforms?\b/i, 'a platform'],
+    [/\bearly access\b|\bbeta\b|\bexclusive\b|\blimited\b/i, 'a queue'],
+    // And no count of the robots in words, nor which of them there will be.
+    [/\b(four|4|five|5) (robots|bodies|characters|models|kinds)\b/i, 'a count of robots'],
+    [/\bships?\b|\bshipping\b|\bat launch\b|\bincluded\b/i, 'what ships'],
+  ];
+  for (const [where, html] of [
+    ['the strip', strip],
+    ['3d.html', page],
+  ]) {
+    for (const [pattern, what] of never) {
+      const hit = pattern.exec(said(html));
+      assert.equal(hit, null, `${where} promises ${what}: "${hit && hit[0]}"`);
+    }
+  }
+  // The free office is the one thing on the page a reader can have, and it is
+  // said in so many words, with its command and the way back to it.
+  const today = sections[5];
+  assert.match(today, /<h2>The office from above is free and runs today\.<\/h2>/);
+  assert.match(today, /<code>npx deckhq app<\/code>/);
+  assert.match(today, /<a class="btn btn--ghost" href="index\.html">/);
+  // Privacy is claimed for that office and for no other: the page says what
+  // runs on your machine today, and sends a reader to the page that proves it.
+  const same = sections[1];
+  assert.match(wordsOf(same), /The office from above runs on your machine today/);
+  assert.match(same, /<a href="privacy\.html">/);
+  assert.ok(!/telemetry|analytics|never leaves|leaves your machine/i.test(wordsOf(page)));
+  // The robots are named, one card each, with a line and a picture.
+  for (const name of ['Stem', 'Bale', 'Brick', 'Mote']) {
+    assert.match(sections[3], new RegExp(`<h3>${name}</h3>\\s*<p>[^<]{4,40}</p>`), name);
+    assert.ok(
+      new RegExp(`media/3d/(clip-)?${name.toLowerCase()}\\.png`).test(sections[3]),
+      `${name} has no picture`,
+    );
+  }
+});
+
+test('3D: the e-mail button is on the strip and the 3D page when there is a form, and only then', async () => {
+  const { waitlistButton } = await import('../../site/slots.mjs');
+  // The one element, wherever it is: the Follow band's, with its own words.
+  assert.equal(waitlistButton({ url: '' }), '');
+  assert.equal(waitlistButton({ url: '', label: 'x', kind: 'btn--large' }), '');
+  const form = 'https://deckhq.kit.com/3d';
+  assert.equal(
+    waitlistButton({ url: form }),
+    `<a class="btn" href="${form}" target="_blank" rel="noopener">Tell me when 3D is ready</a>`,
+  );
+  assert.ok(
+    followBlock({ repo: 'https://github.com/x/y', url: form }).includes(
+      waitlistButton({ url: form }),
+    ),
+  );
+  assert.throws(() => waitlistButton({ url: 'http://deckhq.kit.com/3d' }), /not https/);
+
+  // The built pages are in whichever state the constant is in.
+  const button = (kind) =>
+    `<a class="btn ${kind}" href="${WAITLIST_URL}" target="_blank" rel="noopener">Tell me when it is ready</a>`;
+  const strip = stripOf();
+  const page = mainOf('3d.html');
+  const set = WAITLIST_URL !== '';
+  assert.equal(strip.includes('Tell me when'), set, 'the strip and the form disagree');
+  assert.equal(page.includes('Tell me when'), set, 'the 3D page and the form disagree');
+  assert.equal(/target="_blank"/.test(strip + page), set, 'a button with nowhere to go');
+  if (set) {
+    assert.equal(strip.split(button('btn--ghost')).length - 1, 1, 'the strip: one quiet button');
+    // Large, under the headline, and again at the foot of the page.
+    const sections = sectionsOf3d();
+    assert.equal(page.split(button('btn--large')).length - 1, 2, 'the 3D page: two large buttons');
+    assert.ok(sections[0].includes(button('btn--large')), 'the hero has no button');
+    assert.ok(sections[5].includes(button('btn--large')), 'the last section has no button');
+  }
+  // Either way the strip has its way to the page, and no slot marker is left.
+  assert.match(strip, /href="3d\.html">See the 3D office<\/a>/);
+  assert.ok(!/slot:/.test(strip + page));
+});
+
+test('WEIGHT: the 3D page before scrolling, and what the strip costs the home page', async () => {
+  const { BUDGET, pageWeight, media3d } = await import('../../site/build.mjs');
+  // 900 KB before a reader scrolls: the document, the stylesheet, the script,
+  // the mark and the first picture at its dense size. Measured at 403 KB with
+  // the still (11 October 2026). When the clip of the floor rising has been
+  // brought in, the first picture is its first frame and the clip plays over
+  // it; a clip is held to 1.6 MB of its own, is not in the 900, and a reader
+  // who asked for less motion is never sent it.
+  assert.ok(BUDGET.firstView3d <= 900 * 1024, 'the 3D first-view budget was raised');
+  const first = pageWeight(out, '3d.html', { dpr: 2, all: false, videos: false });
+  assert.ok(
+    first <= BUDGET.firstView3d,
+    `3d.html is ${(first / 1024).toFixed(0)} KB before scrolling`,
+  );
+  const withClip = pageWeight(out, '3d.html', { dpr: 2, all: false });
+  assert.ok(withClip - first <= BUDGET.clip, 'more than one clip plays before a reader scrolls');
+  assert.equal(withClip > first, media3d().has('clip-rise.mp4'), 'the first picture and its clip');
+  // One picture is asked for at once; every other, and every clip under the
+  // first, waits to be scrolled to.
+  const page = mainOf('3d.html');
+  const images = [...page.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+  assert.match(images[0], /fetchpriority="high"/);
+  for (const tag of images.slice(1)) assert.match(tag, /loading="lazy"/);
+  const videos = [...page.matchAll(/<video\b[^>]*>/g)].map((m) => m[0]);
+  for (const tag of videos.slice(page.includes('<video autoplay') ? 1 : 0)) {
+    assert.match(tag, /\spreload="none"/, 'a clip below the first is fetched before it is seen');
+    assert.ok(!/\sautoplay/.test(tag), 'a clip below the first plays by itself');
+  }
+  // The home page: the line and the strip are words and four lazy pictures.
+  // Its first view was 803 KB (452 KB on a phone) before them and measures
+  // 810 KB (458 KB) with them, inside the same 850 KB.
+  const home = pageWeight(out, 'index.html', { dpr: 2, all: false });
+  assert.ok(
+    home <= BUDGET.firstView,
+    `the home page's first view is ${(home / 1024).toFixed(0)} KB`,
+  );
+  for (const [tag] of stripOf().matchAll(/<img\b[^>]*>/g)) assert.match(tag, /loading="lazy"/);
+  assert.ok(!/<video\b/.test(stripOf()), 'the strip plays a clip on the home page');
+});
+
+test('3D: a still with a clip becomes the clip over its first frame, and is the still until then', async () => {
+  const { resolveClips } = await import('../../site/build.mjs');
+  const still =
+    '<img\n  src="media/3d/stem.png"\n  alt="A still."\n  data-clip="clip-stem"\n  data-clip-alt="A clip."\n/>';
+  // No clip yet: the still, as written, less the two authoring attributes.
+  assert.equal(
+    resolveClips(still, new Map()),
+    '<img\n  src="media/3d/stem.png"\n  alt="A still."\n/>',
+  );
+  // The clip has come in: its first frame, under its own words.
+  const moving = resolveClips(still, new Map([['clip-stem.mp4', {}]]));
+  assert.equal(moving, '<img\n  src="media/3d/clip-stem.png"\n  alt="A clip."\n/>');
+  assert.throws(
+    () => resolveClips('<img src="a" alt="b" data-clip="clip-x" />', new Map([['clip-x.mp4', {}]])),
+    /no words of its own/,
+  );
+  // A picture with no clip named is left alone.
+  assert.equal(
+    resolveClips('<img src="media/hero.png" alt="x" />'),
+    '<img src="media/hero.png" alt="x" />',
+  );
+  // No authoring attribute reaches a page, in either state.
+  for (const rel of ['index.html', '3d.html']) assert.ok(!/data-clip/.test(mainOf(rel)), rel);
+  // Every still on the 3D page that names a clip has words for it, so the day
+  // the clip arrives nothing has to be written.
+  const source = fs.readFileSync(path.join(siteDir, 'pages', '3d.html'), 'utf8');
+  const named = [...source.matchAll(/<img\b[^>]*\sdata-clip="([\w-]+)"[^>]*>/g)];
+  assert.ok(named.length >= 6, `expected the stills to name their clips; found ${named.length}`);
+  for (const [tag, clip] of named) {
+    assert.match(clip, /^clip-(rise|states|stem|bale|brick|mote)$/);
+    assert.match(tag, /\sdata-clip-alt="[^"]{40,}"/, `${clip} has no words of its own`);
+  }
+});
+
+test('3D: the import takes a PNG or an MP4 it knows by name, and nothing else', async () => {
+  const { kindOf, checkClip, stillPair, readPng, STILLS, CLIPS, THUMBS } =
+    await import('../../scripts/site-3d-import.mjs');
+  const { MEDIA_DIR } = await import('../../site/build.mjs');
+  const png = fs.readFileSync(path.join(MEDIA_DIR, '3d', 'thumb-office.png'));
+  const mp4 = fs.readFileSync(path.join(MEDIA_DIR, 'loop-office.mp4'));
+  assert.equal(kindOf('a.png', png), 'png');
+  assert.equal(kindOf('a.mp4', mp4), 'mp4');
+  // By its extension, and by its first bytes: a GIF, a JPEG, a WebP, a script,
+  // and a file that only says it is a PNG.
+  for (const [name, bytes] of [
+    ['orbit.gif', Buffer.from('GIF89a..........')],
+    ['office.jpg', png],
+    ['office.webp', png],
+    ['import.mjs', Buffer.from('export default 1;')],
+    ['office.png', Buffer.from('GIF89a..........')],
+    ['rise.mp4', png],
+    ['rise.png', mp4],
+  ]) {
+    assert.throws(() => kindOf(name, bytes), /not a PNG or an MP4/, name);
+  }
+  // A clip is what the site plays or it is refused, with the reason: here, a
+  // real loop of the site's own passes, and the same bytes cut short do not.
+  assert.equal(checkClip('loop-office.mp4', mp4).fps, 60);
+  assert.throws(
+    () => checkClip('big.mp4', Buffer.concat([mp4, Buffer.alloc(2 * 1024 * 1024)])),
+    /over 1\.6 MB/,
+  );
+  assert.throws(() => checkClip('a.gif', mp4), /not a PNG or an MP4/);
+  // The names are a list, and the list is the sections of the page.
+  assert.deepEqual(
+    STILLS.map((s) => s.to),
+    ['office', 'states', 'stem', 'bale', 'brick', 'mote', 'night', 'hand-up', 'panel'],
+  );
+  assert.deepEqual(CLIPS, [
+    'rise',
+    'walkthrough',
+    'states',
+    'stem',
+    'bale',
+    'brick',
+    'mote',
+    'orbit',
+  ]);
+  for (const name of THUMBS)
+    assert.ok(
+      STILLS.some((s) => s.to === name),
+      `${name} is no still`,
+    );
+  // A still comes out as a pair, the plain file half the dense one, and a
+  // palette file the import wrote is one it can read back.
+  const img = readPng(png);
+  assert.equal(img.width, 320);
+  const pair = stillPair(img, [320]);
+  assert.equal(readPng(pair.dense).width, 320);
+  assert.equal(readPng(pair.plain).width, 160);
+  assert.throws(() => stillPair(img, [2000]), /no width/);
 });
