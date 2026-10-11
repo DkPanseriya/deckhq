@@ -270,10 +270,10 @@
         "x": 1000,
         "y": 60,
         "w": 444,
-        "h": 712
+        "h": 432
       },
       "width": 1110,
-      "note": "the Look panel: six controls and eleven styles as pictures"
+      "note": "the Look panel: five controls, the styles as one row of pictures"
     },
     {
       "name": "rooms-subtle",

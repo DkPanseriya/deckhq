@@ -29,10 +29,11 @@ import {
   hqClip,
   hqHave,
   hqManifest,
+  hqStill,
   releaseUrl,
   sha256File,
 } from '../../site/hq.mjs';
-import { MOTION, NARROW, pageWeight } from '../../site/media.mjs';
+import { MOTION, NARROW, WIDE, pageWeight } from '../../site/media.mjs';
 import { checkHq, fetchHq, filesOf, importHq } from '../../scripts/site-hq.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -84,10 +85,17 @@ before(() => {
     path.join(clips3d, 'clip-rise@2x.png'),
     path.join(recorded, 'rise-first-2560.png'),
   );
+  // …and a still at two widths, in a folder of its own, as a recorder leaves those.
+  const stills = path.join(tmp, 'stills');
+  fs.mkdirSync(stills);
+  fs.copyFileSync(path.join(clips3d, 'office.png'), path.join(stills, 'office-2560.png'));
+  fs.copyFileSync(path.join(clips3d, 'office@2x.png'), path.join(stills, 'office-3840.png'));
   importHq(recorded, {
     tag: 'site-media-test-1',
     clips: ['rise', 'walkthrough', 'orbit'],
     midOnly: ['states'],
+    stills: ['office'],
+    stillsFrom: stills,
     dir,
     manifest,
   });
@@ -178,6 +186,8 @@ test('a recorder’s folder is brought in under the site’s names, measured and
       'clip-states-1440.mp4',
       'clip-walkthrough-1440.mp4',
       'clip-walkthrough-2160.mp4',
+      'office-2560.png',
+      'office-3840.png',
     ],
   );
   for (const entry of files.values()) {
@@ -197,10 +207,17 @@ test('a recorder’s folder is brought in under the site’s names, measured and
     () => importHq(recorded, { tag: 'No Tag', clips: [], midOnly: [], dir, manifest }),
     /--tag/,
   );
+  // A still that is asked for and not there is said, and nothing is listed.
+  const scratch = { dir: path.join(tmp, 'never'), manifest: path.join(tmp, 'never.json') };
+  assert.throws(
+    () => importHq(recorded, { tag: 't-1', clips: [], midOnly: [], stills: ['night'], ...scratch }),
+    /has no night-<width>\.png/,
+  );
+  assert.equal(fs.existsSync(scratch.manifest), false);
 });
 
 test('INVARIANT: the files are used when every one is here at its listed size, and not otherwise', () => {
-  assert.equal(hqHave({ dir, manifest }).size, 8);
+  assert.equal(hqHave({ dir, manifest }).size, 10);
   assert.equal(
     hqHave({ dir: null, manifest }).size,
     0,
@@ -233,8 +250,8 @@ test('SECURITY: a fetched file is kept only if it hashes to the listed value', a
     return fs.readFileSync(path.join(dir, path.basename(url)));
   };
   const done = await fetchHq({ dir: here, manifest, get: honest });
-  assert.deepEqual([done.fetched, done.kept], [8, 0]);
-  assert.deepEqual(checkHq({ dir: here, manifest }).ok.length, 8);
+  assert.deepEqual([done.fetched, done.kept], [10, 0]);
+  assert.deepEqual(checkHq({ dir: here, manifest }).ok.length, 10);
   // Every address is this repository's own release, named by the list's tag.
   for (const url of asked) {
     assert.ok(
@@ -248,7 +265,7 @@ test('SECURITY: a fetched file is kept only if it hashes to the listed value', a
   );
   // A second run asks for nothing.
   asked.length = 0;
-  assert.deepEqual(await fetchHq({ dir: here, manifest, get: honest }), { fetched: 0, kept: 8 });
+  assert.deepEqual(await fetchHq({ dir: here, manifest, get: honest }), { fetched: 0, kept: 10 });
   assert.deepEqual(asked, []);
 
   // A file that changed on disk is fetched again; one the release serves wrong
@@ -367,13 +384,35 @@ test('built with them, each clip is offered by screen, and every file a page nam
     by('rise')?.img ?? '',
     /srcset="[^"]*media\/3d\/hq\/clip-rise-first-2560\.png \d+w"/,
   );
+  // A STILL at full quality: every screen wider than a phone is offered its
+  // two widths in place of the 256-colour pair, which stays for a phone.
+  const office =
+    /<picture>(<source\b[^>]*>)(<img\b[^>]*src="media\/3d\/office\.png"[^>]*>)<\/picture>/.exec(
+      html,
+    );
+  assert.ok(office, 'the still that has full-quality files is not offered them');
+  assert.ok(office[1].includes(`media="${WIDE}"`), office[1]);
+  assert.match(
+    office[1],
+    /srcset="media\/3d\/hq\/office-2560\.png \d+w, media\/3d\/hq\/office-3840\.png \d+w"/,
+  );
+  assert.match(office[1], /\ssizes="[^"]+"/);
+  assert.match(office[2], /srcset="media\/3d\/office\.png \d+w, media\/3d\/office@2x\.png \d+w"/);
+  assert.match(office[2], /loading="lazy"/);
+  assert.deepEqual(
+    hqStill('office', hqHave({ dir, manifest })).map((s) => path.basename(s.src)),
+    ['office-2560.png', 'office-3840.png'],
+  );
+  // A clip's first frame is not one of a still's files, and no name is a prefix of another's.
+  assert.deepEqual(hqStill('clip-rise', hqHave({ dir, manifest })), []);
+  assert.deepEqual(hqStill('off', hqHave({ dir, manifest })), []);
   // Only the first clip plays before a reader scrolls; the rest are not fetched until then.
   assert.match(loops[0].video, /\sautoplay\s/);
   for (const loop of loops.slice(1)) assert.match(loop.video, /preload="none"/);
 
   // Every address under hq/ is a file of the site, byte for byte the listed one.
   const named = new Set([...html.matchAll(/media\/3d\/hq\/[\w.-]+/g)].map((m) => m[0]));
-  assert.equal(named.size, 8);
+  assert.equal(named.size, 10);
   const listed = hqManifest(manifest).files;
   for (const address of named) {
     const entry = listed.get(path.basename(address));
@@ -397,7 +436,7 @@ test('WEIGHT: the full-quality files are counted on their own, and a phone’s p
   }
   // Their own ceilings: one file, and all of them.
   assert.ok(HQ_BUDGET.file <= 80 * 1024 * 1024, 'the ceiling on one full-quality file was raised');
-  assert.ok(HQ_BUDGET.total <= 400 * 1024 * 1024, 'the ceiling on all of them was raised');
+  assert.ok(HQ_BUDGET.total <= 600 * 1024 * 1024, 'the ceiling on all of them was raised');
   const over = path.join(tmp, 'over.json');
   const { tag, files } = hqManifest(manifest);
   const heavy = [...files.values()].map((f, i) => (i ? f : { ...f, bytes: HQ_BUDGET.file + 1 }));
@@ -416,7 +455,12 @@ test('the list in the repository, when there is one, is a set this site can serv
     assert.ok(entry.bytes <= HQ_BUDGET.file, `${entry.name} is over the ceiling for one file`);
     total += entry.bytes;
     const clip = /^(clip-[a-z]+)-/.exec(entry.name)?.[1];
-    assert.ok(clip && page.includes(clip), `${entry.name} is of a clip the 3D page does not show`);
+    const still = /^([a-z-]+)-\d+\.png$/.exec(entry.name)?.[1];
+    assert.ok(
+      (clip && page.includes(clip)) || (still && page.includes(`media/3d/${still}.png`)),
+      `${entry.name} is of a picture the 3D page does not show`,
+    );
+    if (!clip) assert.equal(entry.kind, 'still', entry.name);
     if (entry.kind === 'clip') {
       const height = Number(/-(\d+)\.mp4$/.exec(entry.name)?.[1]);
       assert.equal(entry.height, height, `${entry.name} is not ${height} pixels tall`);

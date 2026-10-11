@@ -37,6 +37,7 @@ import {
   clipSources,
   hqClip,
   hqHave,
+  hqStill,
   publishHq,
 } from './hq.mjs';
 
@@ -429,6 +430,19 @@ export function dressImages(body, outDir, tones = {}, have = new Map()) {
     }
     if (wide) return `<picture>${wide}${img}</picture>`;
     const loop = loopOf(src, loops, listed);
+    // A still of the 3D office this build has at full quality: every screen
+    // wider than a phone is offered those files, by width, in place of the
+    // 256-colour pair, which a phone still takes.
+    const sharp =
+      !loop && is3d(src.replace(/^media\//, '')) ? hqStill(path.basename(src, '.png'), have) : [];
+    if (sharp.length) {
+      const room = attr(tag, 'sizes') || (cinema ? ROOM_CINEMA : ROOM_3D);
+      return (
+        `<picture><source media="${WIDE}" srcset="` +
+        sharp.map((s) => `${s.src} ${s.width}w`).join(', ') +
+        `" sizes="${room}" width="${size.width}" height="${size.height}" />${img}</picture>`
+      );
+    }
     if (loop) {
       // The video is laid over its own first frame and takes no room of its
       // own, so the still is what holds the box, what is described, and what

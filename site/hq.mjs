@@ -16,6 +16,11 @@
  * CI's test job — builds the same pages with the 1280-pixel clips that are in
  * the repository, and nothing on a page points at a file that is not there.
  *
+ * THE STILLS TOO. A picture of the 3D office in the repository is at most 1440
+ * pixels wide in 256 colours, which is what a 400 KB still can be. The same
+ * picture at 2560 and 3840 pixels, in full colour, is in this set, and every
+ * screen wider than a phone is offered those instead (`hqStill`).
+ *
  * WHO IS SENT WHAT (`clipSources`), for a clip that has them:
  *
  *   a phone (under 40rem)            the 1280 x 720 clip in the repository
@@ -47,10 +52,11 @@ export const HQ_REPO = 'DkPanseriya/deckhq';
 /**
  * What one may weigh, and all of them together. A 3840 x 2160 clip of ten
  * seconds measures 75 MB at the bitrate where a still frame of it is the
- * photographed frame; the set the 3D page shows measures 290 MB. GitHub Pages
+ * photographed frame; the clips the 3D page shows measure 263 MB, and its
+ * stills at 2560 and 3840 pixels in full colour are the rest. GitHub Pages
  * serves a site of up to 1 GB.
  */
-export const HQ_BUDGET = { file: 80 * 1024 * 1024, total: 400 * 1024 * 1024 };
+export const HQ_BUDGET = { file: 80 * 1024 * 1024, total: 600 * 1024 * 1024 };
 
 /**
  * The screens on which the wide stage (`.shot--cinema`, up to 120rem) is more
@@ -145,6 +151,26 @@ export function hqClip(clip, have) {
     }
   }
   return { mid: address(`${clip}-1440.mp4`), big: address(`${clip}-2160.mp4`), first };
+}
+
+/**
+ * What the full-quality set holds for one STILL of the 3D office: its files,
+ * narrowest first. `office` has `office-2560.png` and `office-3840.png`; the
+ * number is the file's width. (A clip's first frame is `…-first-<width>.png`
+ * and is not one of these: `hqClip` answers for it.)
+ *
+ * @param {string} name `office`
+ * @param {Map<string, HqFile>} have `hqHave()`
+ * @returns {Array<{src: string, width: number, height: number}>}
+ */
+export function hqStill(name, have) {
+  const out = [];
+  for (const entry of have.values()) {
+    if (entry.kind !== 'still' || !entry.name.startsWith(`${name}-`)) continue;
+    if (!/^\d+\.png$/.test(entry.name.slice(name.length + 1))) continue;
+    out.push({ src: `${HQ_OUT}/${entry.name}`, width: entry.width, height: entry.height });
+  }
+  return out.sort((a, b) => a.width - b.width);
 }
 
 /**

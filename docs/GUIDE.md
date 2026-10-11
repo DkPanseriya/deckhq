@@ -1016,7 +1016,7 @@ These are real, and listed here rather than discovered later.
 | `G`                 | Step through the agents who went home, newest activity first             |
 | `O`                 | Go to the session — the window it is running in, or resume it            |
 | `I`                 | The repos nobody is working in — `P` on a row pins one a room of its own |
-| `L`                 | Look — agent size, theme, style and density, from the header button      |
+| `L`                 | Look — agent size, light, style and density, from the header button      |
 | `,`                 | Settings — the whole sheet, its sections named across the top            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk  |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot     |

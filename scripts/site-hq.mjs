@@ -8,6 +8,7 @@
  *
  *   node scripts/site-hq.mjs import <folder> --tag <tag> --clips rise,walkthrough,orbit
  *                                            [--mid-only states]
+ *                                            [--stills office,night --stills-from <folder>]
  *       Copy `<name>-1440.mp4`, `<name>-2160.mp4` and `<name>-first-<width>.png`
  *       from <folder> into site/hq/ under the names the site uses
  *       (`clip-<name>-…`), measure and hash each, and write the list. A clip
@@ -65,7 +66,9 @@ export function filesOf(folder, name, midOnly) {
 
 /**
  * @param {string} folder
- * @param {{tag: string, clips: string[], midOnly: string[], dir?: string, manifest?: string}} o
+ * @param {{tag: string, clips: string[], midOnly: string[], dir?: string, manifest?: string,
+ *   stills?: string[], stillsFrom?: string}} o `stills` are taken from `stillsFrom` as
+ *   `<name>-<width>.png`, every width that is there, and keep their names
  */
 export function importHq(folder, o) {
   const dir = o.dir ?? HQ_DIR;
@@ -89,6 +92,30 @@ export function importHq(folder, o) {
         height: size.height,
         bytes,
         sha256: sha256File(from),
+      });
+      total += bytes;
+    }
+  }
+  for (const name of o.stills ?? []) {
+    const from = o.stillsFrom ?? folder;
+    const found = fs
+      .readdirSync(from)
+      .filter((file) => new RegExp(`^${name}-\\d+\\.png$`).test(file));
+    if (!found.length) throw new Error(`${from} has no ${name}-<width>.png`);
+    for (const file of found) {
+      const size = imageSize(path.join(from, file));
+      if (!size) throw new Error(`${file} is not a picture this build can measure`);
+      const bytes = fs.statSync(path.join(from, file)).size;
+      if (bytes > HQ_BUDGET.file)
+        throw new Error(`${file} is ${mb(bytes)}, over ${mb(HQ_BUDGET.file)}`);
+      fs.copyFileSync(path.join(from, file), path.join(dir, file));
+      files.push({
+        name: file,
+        kind: 'still',
+        width: size.width,
+        height: size.height,
+        bytes,
+        sha256: sha256File(path.join(from, file)),
       });
       total += bytes;
     }
@@ -171,6 +198,8 @@ async function main() {
       tag: opt('--tag') ?? '',
       clips: list('--clips'),
       midOnly: list('--mid-only'),
+      stills: list('--stills'),
+      stillsFrom: opt('--stills-from'),
       ...where,
     });
     for (const f of files) say(`${f.name}  ${f.width} x ${f.height}  ${mb(f.bytes)}`);
