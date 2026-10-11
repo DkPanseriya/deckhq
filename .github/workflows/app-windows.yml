@@ -1,0 +1,127 @@
+name: App (Windows)
+
+# Builds DeckHQ for Windows: the portable folder and DeckHQ-Setup-<version>.exe.
+#
+# Run it by hand from the Actions tab, or call it from another workflow
+# (`workflow_call`), which is how a release will come to attach the installer.
+# It publishes nothing: the two files are uploaded as artifacts of the run,
+# with their SHA-256 printed, and that is all.
+#
+# Everything here is `app/windows/`, and app/windows/README.md is the long form.
+# The runner already has the whole toolchain: Node, the .NET Framework C#
+# compiler that is part of Windows, and NSIS. Nothing is installed.
+#
+# This file downloads nothing itself. The two downloads the build makes are
+# made by the scripts it runs, each from its publisher and each refused unless
+# it matches a hash: the WebView2 SDK against the SHA-512 committed in
+# app/windows/pins.json, the Node zip against that release's SHASUMS256.txt
+# (and against pins.json too, once a hash is committed there). Both are then
+# held to their publisher's Authenticode signature.
+#
+# The output is NOT signed. Windows SmartScreen will warn on the installer
+# until it is; signing is a later step, and the reason nothing links to these
+# files yet.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The Node that RUNS the build scripts. The Node the app carries is
+          # the one pins.json names, fetched below.
+          node-version: 22
+
+      - name: Fetch the pinned WebView2 SDK, by hash, and check Microsoft signed it
+        run: node app/windows/fetch-webview2.mjs
+
+      - name: Fetch the pinned Node runtime, by hash, and check the OpenJS Foundation signed it
+        run: node app/windows/fetch-node.mjs
+
+      - name: Compile DeckHQ.exe with the Framework's own C# compiler
+        run: node app/windows/build-shell.mjs
+
+      - name: Assemble the portable folder
+        run: node app/windows/build.mjs
+
+      - name: The bundled Node runs the bundled DeckHQ, with no Node on the PATH
+        # The folder has to stand on its own: its node.exe, its core. A scratch
+        # home, so the runner's own profile is neither read nor written.
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP 'deckhq-app-home'
+          New-Item -ItemType Directory -Force $scratch | Out-Null
+          $env:USERPROFILE = $scratch
+          $env:HOME = $scratch
+          $env:DECKHQ_STATE_DIR = Join-Path $scratch '.deckhq'
+          $env:CLAUDE_CONFIG_DIR = Join-Path $scratch '.claude'
+          $env:PATH = "$env:SystemRoot\System32"
+          $app = 'dist\app\DeckHQ'
+          $version = & "$app\node\node.exe" "$app\core\bin\deckhq.mjs" --version
+          if ($LASTEXITCODE -ne 0) { throw 'the bundled CLI did not run' }
+          $expected = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version.Trim() -ne $expected) { throw "bundled CLI says $version, package.json says $expected" }
+          & "$app\node\node.exe" "$app\core\bin\deckhq.mjs" app --dry-run --no-window --port 4390
+          if ($LASTEXITCODE -ne 0) { throw 'deckhq app --dry-run failed in the folder' }
+          Get-Content "$app\VERSION"
+
+      - name: Compile the installer
+        id: installer
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) { $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe" }
+          if (-not (Test-Path $makensis)) { throw 'NSIS (makensis) is not on this runner' }
+          $out = Join-Path $PWD "dist\app\DeckHQ-Setup-$version.exe"
+          & $makensis /V2 /INPUTCHARSET UTF8 "/DVERSION=$version" "/DAPP_SRC=$PWD\dist\app\DeckHQ" `
+            "/DBUILD_DIR=$PWD\dist\app\_build" "/DOUT_FILE=$out" app\windows\installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis exited $LASTEXITCODE" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Zip the portable folder and print both SHA-256
+        env:
+          VERSION: ${{ steps.installer.outputs.version }}
+        run: |
+          $zip = "dist\app\DeckHQ-$env:VERSION-win-x64-portable.zip"
+          Compress-Archive -Path dist\app\DeckHQ -DestinationPath $zip -CompressionLevel Optimal
+          $lines = foreach ($file in @($zip, "dist\app\DeckHQ-Setup-$env:VERSION.exe")) {
+            $item = Get-Item $file
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($item.Name)  ($([math]::Round($item.Length / 1MB, 1)) MB)"
+          }
+          $lines
+          $lines -replace '  \(.*$', '' | Set-Content dist\app\SHA256SUMS.txt -Encoding utf8
+          "### DeckHQ for Windows $env:VERSION (unsigned)`n" >> $env:GITHUB_STEP_SUMMARY
+          $lines | ForEach-Object { "- ``$_``" } >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload the portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeckHQ-${{ steps.installer.outputs.version }}-win-x64-portable
+          path: |
+            dist/app/DeckHQ-${{ steps.installer.outputs.version }}-win-x64-portable.zip
+            dist/app/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeckHQ-Setup-${{ steps.installer.outputs.version }}
+          path: |
+            dist/app/DeckHQ-Setup-${{ steps.installer.outputs.version }}.exe
+            dist/app/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,32 @@
+{
+  "webview2": {
+    "version": "1.0.2903.40",
+    "sha512": "a432d2ae9ca66b7c723865e5c37028c32ed771e05d7896ee919cca2d574f085bf27e79fc3eb08bca5327e9ce39ea36b44dc38e6a5f0875009538d0d153638693",
+    "files": {
+      "lib/net462/Microsoft.Web.WebView2.Core.dll": {
+        "to": "Microsoft.Web.WebView2.Core.dll",
+        "sha256": "88a3b62f45225a811cdb85df6dfd95c2bff9a0e43e3b04f813b125eaca56cc9f"
+      },
+      "lib/net462/Microsoft.Web.WebView2.WinForms.dll": {
+        "to": "Microsoft.Web.WebView2.WinForms.dll",
+        "sha256": "29fc954c3fde1749817d158f3dd5ebe9efd3b3ce9708d86092fb1e9f023a1cb0"
+      },
+      "runtimes/win-x64/native/WebView2Loader.dll": {
+        "to": "runtimes/win-x64/native/WebView2Loader.dll",
+        "sha256": "462b36fd1be6ca9f7563466a89e57c41ef4a4def3e0a84fa885d203aea4a3aaf"
+      },
+      "runtimes/win-arm64/native/WebView2Loader.dll": {
+        "to": "runtimes/win-arm64/native/WebView2Loader.dll",
+        "sha256": "cb561ae4537e39bba5dd8af1f648f189d9562b1003fd110a9e889ace527fb4e8"
+      },
+      "LICENSE.txt": {
+        "to": "LICENSE.txt",
+        "sha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55"
+      }
+    }
+  },
+  "node": {
+    "version": "24.19.0",
+    "sha256": ""
+  }
+}
