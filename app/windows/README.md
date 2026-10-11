@@ -91,12 +91,12 @@ is Microsoft Edge's engine, and which is the one part of this app DeckHQ does no
 
 What the shell sets (`shell/Browser.cs`):
 
-| Setting                                                                                                                                                                                                                                                   | Kind                                                                        |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `IsReputationCheckingRequired = false`: no SmartScreen lookups                                                                                                                                                                                            | WebView2 API, supported                                                     |
-| `IsCustomCrashReportingEnabled = true`: crash dumps are not uploaded to Microsoft                                                                                                                                                                         | WebView2 API, supported                                                     |
-| `IsPasswordAutosaveEnabled`, `IsGeneralAutofillEnabled`, `IsSwipeNavigationEnabled`, `IsStatusBarEnabled` all `false`                                                                                                                                     | WebView2 API, supported                                                     |
-| `--disable-features=msSmartScreenProtection` `--disable-background-networking` `--disable-component-update` `--disable-domain-reliability` `--disable-client-side-phishing-detection` `--disable-sync` `--disable-breakpad` `--no-pings` `--no-first-run` | Chromium switches. Not a supported WebView2 surface; an update may drop one |
+| Setting                                                                                                                                                                                                                                                                                                                 | Kind                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `IsReputationCheckingRequired = false`: no SmartScreen lookups                                                                                                                                                                                                                                                          | WebView2 API, supported                                                     |
+| `IsCustomCrashReportingEnabled = true`: crash dumps are not uploaded to Microsoft                                                                                                                                                                                                                                       | WebView2 API, supported                                                     |
+| `IsPasswordAutosaveEnabled`, `IsGeneralAutofillEnabled`, `IsSwipeNavigationEnabled`, `IsStatusBarEnabled` all `false`                                                                                                                                                                                                   | WebView2 API, supported                                                     |
+| `--disable-features=msSmartScreenProtection` `--disable-background-networking` `--disable-component-update` `--disable-domain-reliability` `--disable-client-side-phishing-detection` `--disable-sync` `--disable-breakpad` `--no-pings` `--no-first-run` `--host-resolver-rules="MAP * ~NOTFOUND , EXCLUDE 127.0.0.1"` | Chromium switches. Not a supported WebView2 surface; an update may drop one |
 
 `AreBrowserAcceleratorKeysEnabled` is left on: reload, zoom and find are worth more than hiding them.
 
@@ -104,18 +104,19 @@ What the shell sets (`shell/Browser.cs`):
 
 - Every switch above was on the `msedgewebview2.exe` command line, with
   `--edge-webview-disable-crash-reporting=1` beside them.
-- Chromium's own network log (`--log-net-log`, two runs of about 80 seconds): every request the
-  page made went to `http://127.0.0.1:<port>`. Besides those it shows 8 to 10 name lookups for
-  `wpad` (proxy auto-discovery, on the local network) and UDP sockets connected to one Microsoft
-  IPv6 address on port 443 with no send or receive event after the connect.
-- The operating system's connection table, sampled about once a second for 85 seconds over the
-  shell, its daemon and its WebView2 processes: the daemon listened on `127.0.0.1` and nothing else;
-  `DeckHQ.exe` owned no connection at all.
+- Chromium's own network log (`--log-net-log`, three runs of about 80 seconds): every request the
+  page made went to `http://127.0.0.1:<port>`. Before `--host-resolver-rules` was added the log
+  also showed 8 to 10 name lookups for `wpad` (proxy auto-discovery, on the local network); with
+  it, those are answered not-found inside the browser. In every run it shows UDP sockets connected
+  to one Microsoft IPv6 address on port 443 with no send or receive event after the connect.
+- The operating system's connection table, sampled about once a second for 80 to 85 seconds over
+  the shell, its daemon and its WebView2 processes: the daemon listened on `127.0.0.1` and nothing
+  else; `DeckHQ.exe` owned no connection at all.
 - **And one thing that was not switched off.** In that same table the WebView2 _browser_ process
-  held two TLS connections to an address in Microsoft's network (`52.98.253.34:443`; on an earlier
-  run `52.98.252.66` and `52.110.17.34`), opened about a second after launch. They are not in the
-  network log, so they are not requests from the page, and none of the settings above prevented
-  them. What they carry was not determined.
+  held two TLS connections to an address in Microsoft's network on every run (`52.98.243.34:443`,
+  `52.98.253.34`, and once `52.98.252.66` with `52.110.17.34`), opened about a second after launch.
+  They are not in the network log, so they are not requests from the page, and none of the
+  settings above prevented them. What they carry was not determined.
 - A `crashpad-handler` process still starts. Whether it can upload with the two crash settings
   above was not measured.
 
@@ -144,7 +145,8 @@ configured yourself is the same floor.
   carries is x64, so on Windows on ARM the daemon runs under emulation.
 - **WebView2 is required for the app window.** It is part of Windows 11 and arrives with Edge on
   Windows 10. Without it the shell falls back to `deckhq app`.
-- **Windows 10 and 11, .NET Framework 4.8.** Both ship with it.
+- **Windows 10 and 11.** The shell needs the .NET Framework 4.6.2 or later that Windows carries
+  (4.8 since Windows 10 1903), which is what the WebView2 SDK itself asks for.
 - **Per user.** One install per Windows account; there is no machine-wide install.
 
 ## Uninstalling
@@ -160,7 +162,12 @@ NSIS is not on the machine this was written on, and the pinned Node zip was not 
 there. So `installer.nsi` has never been compiled, `fetch-node.mjs` has never met nodejs.org, and
 the workflow has never run; `pins.json` has no SHA-256 for the Node zip until its first run prints
 one. Everything else here was run: the WebView2 fetch and its signature check, the compile, the
-folder, the app against a demo floor, and the workflow's own smoke step by hand.
+folder, the app against a demo floor (reusing a daemon, starting its own, a second launch, `F11`,
+closing), the fallback to `deckhq app`, and the workflow's own smoke step by hand.
+
+All of that was on one machine: Windows 11 on ARM64, with the machine's own ARM64 Node in the
+folder. The app has not been run on x64, on Windows 10, or with the x64 Node a release carries, and
+the one-time message of the fallback has not been seen on screen.
 
 ## Test switches
 

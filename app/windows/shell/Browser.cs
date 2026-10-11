@@ -22,7 +22,10 @@ namespace DeckHQ.Shell
             + " --disable-sync"
             + " --disable-breakpad"
             + " --no-pings"
-            + " --no-first-run";
+            + " --no-first-run"
+            // No host name resolves inside the browser's network stack; the
+            // only address the page is ever given is 127.0.0.1 itself.
+            + " --host-resolver-rules=\"MAP * ~NOTFOUND , EXCLUDE 127.0.0.1\"";
 
         // WebView2Loader.dll is native, so there is one per architecture, kept
         // where the SDK itself keeps them: runtimes\win-<arch>\native.
