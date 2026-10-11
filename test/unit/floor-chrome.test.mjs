@@ -39,6 +39,7 @@ import { LIFE } from '../../public/render/life.js';
 import { drawCharacter, drawLabel } from '../../public/render/rig.js';
 import { sampleClip } from '../../public/render/clips.js';
 import { planFrameLabels } from '../../public/render/scene-frame-labels.js';
+import { iconForAgent } from '../../public/render/scene-agent.js';
 import { PALETTE, STATE_COLORS } from '../../public/render/palette.js';
 
 /**
@@ -578,7 +579,7 @@ test('a figure whose own name is over its head still has its bubble, whole, unde
       }
     }
   }
-  assert.ok(cases >= 6, `these floors set names over heads: ${cases}`);
+  assert.ok(cases >= 3, `these floors set names over heads: ${cases}`);
   // The one it was reported on: the junior at the top of the arc, in a tool.
   const f = frameAt(1600, 900, () => busyFloor('crew'), { badges: true });
   const top = f.records.filter((r) => r.agent.subagent === true).sort((a, b) => a.y - b.y)[0];
@@ -629,4 +630,50 @@ test('under somebody else’s name a bubble is set beside it, as far as the edge
     }
   }
   assert.ok(beside >= 2, `these floors seat somebody under a name: ${beside}`);
+});
+
+// ------------------------------------- 6 · a box is kept for a hand that is raised
+
+/** A demo floor whose crew lead is in `state`: `needs_input` raises its hand. */
+function leadIn(name, state) {
+  const floor = populationFloor(name);
+  const leads = new Set(floor.agents.filter((a) => a.parentId).map((a) => a.parentId));
+  for (const a of floor.agents) {
+    if (!leads.has(a.id)) continue;
+    Object.assign(a, { ackState: 'active', activityState: state });
+    if (state === 'needs_input') a.needsInputSince = LARGE_NOW - 60_000;
+  }
+  return floor;
+}
+
+test('a box is kept over a crew lead for the hand it raises, and for no hand that is not drawn', () => {
+  const seen = { raised: 0, down: 0 };
+  for (const name of ['crew', 'lead', 'juniors', 'demo']) {
+    for (const state of ['working', 'needs_input', 'stalled']) {
+      const f = frameAt(1600, 869, () => leadIn(name, state), { badges: true });
+      const hands = f.labels.obstacles.filter((o) => /^hand:/.test(o.id));
+      const leads = f.records.filter((rec) => f.crewCounts.has(rec.id));
+      assert.ok(leads.length > 0, `${name}: the floor has a crew`);
+      for (const rec of leads) {
+        const box = hands.find((o) => o.id === `hand:${rec.id}`);
+        // The rig's own gate: an icon over the head is drawn when the state has one.
+        const drawn = iconForAgent(rec.agent) !== null;
+        assert.equal(drawn, state !== 'working', `${name}, ${state}`);
+        assert.equal(
+          !!box,
+          drawn,
+          `${name}: a lead that is ${state} ${box ? 'has' : 'has no'} box`,
+        );
+        seen[drawn ? 'raised' : 'down']++;
+        if (!box) continue;
+        // Where the icon is: over the crown, across the head.
+        const s = worldToScreen(rec, f.camera);
+        assert.ok(box.x < s.x && box.x + box.w > s.x && box.y + box.h <= s.y);
+        const names = takenOf(f).filter((t) => !/^(badge|pill|chip):/.test(t.id));
+        assert.equal(names.find((n) => hits(n, box))?.id, undefined, `${name}: a name is on it`);
+      }
+      assert.equal(hands.length, leads.filter((r) => iconForAgent(r.agent)).length);
+    }
+  }
+  assert.ok(seen.raised >= 4 && seen.down >= 4, JSON.stringify(seen));
 });

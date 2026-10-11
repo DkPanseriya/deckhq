@@ -34,6 +34,10 @@
   ties it to its robot stops at the bubble while one is open. Under somebody else's name — two
   rows across one desk, zoomed in — the bubble is set beside the name, shortened if it has to be,
   for as long as its near edge is still over its own body. It is still never over a name.
+- **No room is kept over a lead's head for a hand it has not raised.** Room was kept over every
+  lead with juniors for the raised hand, whether the lead was waiting on you or at work, and the
+  juniors' tags were kept off that floor for nothing. Room is now kept only while the lead draws
+  something there: a raised hand, or an hourglass.
 
 ## 1.7.1 — 2026-10-11
 

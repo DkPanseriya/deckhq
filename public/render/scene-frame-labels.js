@@ -258,8 +258,12 @@ export function planFrameLabels(ctx, view) {
     obstacles.push({ id: `body:${rec.id}`, ...box, pin: true, body: figureBox(s.x, s.y, u) });
     // WP-89 · a crew parent's raised hand is pinned too: §4, a junior's name
     // is never drawn over it. Measured generously — an obstacle may claim
-    // more than it uses.
-    if (view.crewCounts && view.crewCounts.has(rec.id)) {
+    // more than it uses — but only for a hand that is RAISED: the rig draws
+    // an icon over a head for the states that have one (`iconForAgent`), and
+    // a lead at work has none. The box was kept over every lead with
+    // juniors, the same mistake as the box for a chip nobody draws.
+    const lead = view.agentsById.get(rec.id) || rec.agent;
+    if (view.crewCounts && view.crewCounts.has(rec.id) && lead && iconForAgent(lead)) {
       obstacles.push({
         id: `hand:${rec.id}`,
         x: box.x,
