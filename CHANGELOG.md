@@ -15,6 +15,19 @@
   made of ("In the Lounge: 9 you benched, 6 ended.").
 - **The idle chip says what it counts.** "1 idle" beside counts of sessions read as one idle
   session. It is repositories nobody is working in, and it now reads "1 idle project".
+- **A junior is hired and fired at its place, and never goes to the Lounge.** A sub-agent's turn
+  ends and starts again many times inside one turn of its lead's, and each end rested it in the
+  Lounge like a session of your own: juniors walked there and back all day, and on the way back a
+  junior's cable was drawn from the desk to wherever it was walking, across two rooms, with its
+  crew's tag following it. A junior now appears at its place beside its lead, its cable drawing
+  out from the desk. When it has finished it stays where it sat for four seconds with its laptop
+  shut and its cable grey, then folds away and is not drawn; one that starts again inside those
+  four seconds carries on. A cable is drawn only to a junior in its lead's room, and a crew's tag
+  and its `+N` count only the juniors drawn there. A junior with its own hand up still walks to
+  Your Office, with no cable, and is back at its place the way it arrived once you have answered.
+  Finished juniors are not in the Lounge's `resting` count; they are a group of their own under
+  the deck's **Resting** tab, and `counts.drawn` on a snapshot gains `juniorsDone` for them. With
+  reduced motion a junior is simply there, then not.
 
 ### Fixed
 

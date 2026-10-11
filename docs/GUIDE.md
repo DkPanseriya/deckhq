@@ -130,6 +130,17 @@ so:
   transcript is moving and the lid is shut once it has stopped, which is the same thing its cable
   says by turning grey. A junior at a desk of its own, or on a sofa, sits in the furniture.
 
+**A junior is hired and fired where it sits.** It appears at its place beside its lead — it does
+not walk in from a door — and its cable draws itself out from the desk. When it has finished it
+does not get up: it stays where it is for four seconds with its laptop shut and its cable grey, so
+you can see which one is done, then folds away and is not drawn. One whose turn ends and starts
+again inside those four seconds carries on as if nothing had happened. A junior is never in the
+lounge and never in its `resting` count; a finished one that its runtime still reports is a row
+under the lounge's people in the deck's **Resting** tab, and its lead's panel still counts it. A
+junior that raises its own hand walks to Your Office like anything else that needs you. No cable
+follows it there, and once you have answered it is back at its place the way it first arrived.
+With reduced motion a junior is simply there, and then not.
+
 Its name comes from the same pool as everyone else's and is kept in `~/.deckhq/state.json`, so it
 survives a restart. It may match a session's name — they are different people, and the chip says
 which is which. Its tag is its parent's with a mark after it, `MK1.2·jr`, and the panel shows its
@@ -1141,6 +1152,8 @@ never the only way to get to anything. Whenever something is waiting, a strip of
 header carries the queue's shape without leaving the floor at all: oldest on the left, and it
 stays there. The deck's **Resting** tab is the lounge as a list: everybody in it, most recent
 first, including the ones the floor shows only as a number on the lounge's `+N resting` chip.
+Under them, ruled off, are the juniors that have finished: they are not in the lounge and not on
+the floor, and this is where each is still a row.
 
 ## Change the look
 
