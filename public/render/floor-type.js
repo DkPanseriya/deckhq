@@ -26,10 +26,28 @@
  *            default figures are proportional would make a timer shiver)
  *   mono     text that IS code: a command, a path, a tool's line
  *
- * ## The one font today
+ * ## The two fonts
  *
- * `system`: the machine's own UI face. NO `@font-face`, no file, no download —
- * a bundled family is the owner's call and arrives as a second entry here.
+ * `deckhq`, the default: the product's own typeface, SHIPPED WITH IT in
+ * `public/fonts/` and served from the daemon's own origin like every other
+ * file — Inter for names, sentences and figures, JetBrains Mono where the text
+ * is code (`public/fonts/PROVENANCE.md` has each file's source, licence and
+ * hash). Nothing is fetched from anywhere else, and a machine that has neither
+ * installed draws exactly what one that has both does. The three families are
+ * declared in `style.css` under the product's own names, by role:
+ *
+ *   DeckHQ Sans     Inter
+ *   DeckHQ Numeric  the same file with its tabular figures switched on in the
+ *                   face's own declaration — which is how a CANVAS, which
+ *                   cannot ask for a font feature, gets figures that line up
+ *   DeckHQ Mono     JetBrains Mono, regular and bold
+ *
+ * Each list still ends in the machine's own faces: a frame painted before a
+ * file has arrived is drawn in them, and `text-metrics.js` hears the file land
+ * and has the floor measured and painted again.
+ *
+ * `system`: the machine's own UI face and nothing of ours, for whoever wants
+ * the floor to look like the rest of their desktop.
  *
  * Imports nothing but the palette, so the daemon-side look model can read the
  * ids, and a test can read a role without a canvas.
@@ -42,6 +60,12 @@ import { DEFAULT_PALETTE, PALETTE, STATE_COLORS, mixHex, relativeLuminanceOf } f
  * @type {Readonly<Record<string, Readonly<{label:string, sans:string, numeric:string, mono:string}>>>}
  */
 export const FONT_FAMILIES = Object.freeze({
+  deckhq: Object.freeze({
+    label: 'DeckHQ',
+    sans: "'DeckHQ Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    numeric: "'DeckHQ Numeric', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif",
+    mono: "'DeckHQ Mono', ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New', monospace",
+  }),
   system: Object.freeze({
     label: 'System',
     sans: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -52,7 +76,32 @@ export const FONT_FAMILIES = Object.freeze({
 
 /** Every font id, in the order a picker would offer them. */
 export const FONT_IDS = Object.freeze(Object.keys(FONT_FAMILIES));
-export const DEFAULT_FONT = 'system';
+export const DEFAULT_FONT = 'deckhq';
+
+/**
+ * One CSS font shorthand per FILE the bundled font is made of, for a page to
+ * hand to `document.fonts.load` before the floor's first frame — a canvas
+ * only asks for a face when it draws with it, which is one frame too late.
+ */
+export const BUNDLED_FONT_PROBES = Object.freeze([
+  "600 12px 'DeckHQ Sans'",
+  "700 12px 'DeckHQ Numeric'",
+  "400 12px 'DeckHQ Mono'",
+  "700 12px 'DeckHQ Mono'",
+]);
+
+/**
+ * Ask the page for every file of the bundled font, now. Resolves when they
+ * have all arrived or failed — and never rejects: a floor without its face is
+ * drawn in the machine's own.
+ * @param {any} [doc] `document`, or nothing in a test
+ * @returns {Promise<void>}
+ */
+export async function loadBundledFonts(doc) {
+  const fonts = doc && doc.fonts;
+  if (!fonts || typeof fonts.load !== 'function') return;
+  await Promise.all(BUNDLED_FONT_PROBES.map((probe) => fonts.load(probe).catch(() => null)));
+}
 
 /**
  * THE ROLES. `family` is a family role; `tracking` is in ems, for a surface

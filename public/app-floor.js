@@ -122,6 +122,14 @@ export async function loadRenderModules({
     .then((res) => (res.ok ? res.json() : { packs: [], avatarSets: [] }))
     .catch(() => ({ packs: [], avatarSets: [] }));
 
+  // The product's own typeface (`render/floor-type.js`), asked for before the
+  // floor is baked and NOT waited on: a canvas only requests a face when it
+  // draws with it, so without this the first frame is always in the machine's
+  // own. When a file lands `text-metrics.js` hears it and the floor is
+  // measured and painted again — on a loopback origin, the same frame or the
+  // next. Never fatal: a floor without its face is drawn in the fallbacks.
+  import('./render/floor-type.js').then((type) => type.loadBundledFonts(document)).catch(() => {});
+
   try {
     setPalette(await import('./render/palette.js'));
   } catch (err) {

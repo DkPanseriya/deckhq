@@ -658,7 +658,13 @@ export function applyLook(look, themeName, root) {
   if (theme.name === DEFAULT_THEME_NAME && sameLook(resolved.look, DEFAULT_LOOK)) resetPalette();
   else overridePalette(resolved.tokens);
   if (root) applyChromeTheme(theme.name, root);
-  setFloorFont(resolved.font);
+  const font = setFloorFont(resolved.font);
+  // The chrome is set in the same font as the floor: the stylesheet's own
+  // variables are the default one, and `data-font` names any other.
+  if (root && root.dataset) {
+    if (font === DEFAULT_LOOK.font) delete root.dataset.font;
+    else root.dataset.font = font;
+  }
   return adopt(resolved);
 }
 

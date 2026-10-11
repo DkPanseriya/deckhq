@@ -855,6 +855,9 @@ async function probe(client) {
         agents: [...s._runtime.all()].length,
         connected: !!(conn && conn.hidden),
         onboarding: !!(layer && !layer.hidden),
+        // The bundled typeface: a picture taken while a file is still on its
+        // way is a picture in the machine's own fonts.
+        fonts: !document.fonts || document.fonts.status === 'loaded',
       };
     })()`,
   });
@@ -880,7 +883,7 @@ async function waitForFloor(client) {
     if (VERBOSE && polls % 4 === 1) {
       say(`  [${new Date().toISOString()}]   probe ${polls}: ${JSON.stringify(state)}`);
     }
-    if (state && state.connected && !state.onboarding) {
+    if (state && state.connected && !state.onboarding && state.fonts !== false) {
       stable = last !== null && state.agents === last ? stable + 1 : 0;
       last = state.agents;
       if (stable >= 4) {

@@ -211,8 +211,9 @@ test('G6a: a version-1 look written before the three keys imports as the floor i
     light: 'noon',
     partitions: 'solid',
     roomTint: 'subtle',
-    // …and the one that came after them, the same way: the face it was always set in.
-    font: 'system',
+    // …and the one that came after them: a file that names no face is set in
+    // the product's own, as every floor is unless it says otherwise.
+    font: 'deckhq',
   });
   assert.equal(LOOK_VERSION, 1);
   assert.ok(sameLook(parsed.look, lookForPreset('night-lab')));

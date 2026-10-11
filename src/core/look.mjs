@@ -120,7 +120,7 @@ const LATER_KEYS = Object.freeze({
   light: LIGHT_MOOD_IDS,
   partitions: PARTITION_STYLE_IDS,
   roomTint: ROOM_TINT_IDS,
-  // The face the floor's text is set in. Absent is `system`, the one there is.
+  // The face the floor's text is set in. Absent is the default, the product's own.
   font: FONT_IDS,
 });
 

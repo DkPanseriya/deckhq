@@ -1223,6 +1223,14 @@ four headings you can fold away:
 - **Plants and props** — the plant family, and the plant and prop densities one at a time, for when
   Calm, Normal and Lively are not the mix you want.
 
+**Font** is in there as well: the typeface every name, count and timer is set in, on the floor and
+in the window around it. **DeckHQ**, the default, is the typeface the product ships — Inter, and
+JetBrains Mono where the text is code: a command, a path, a key. The files are in the package and
+are served by the daemon from its own loopback address, so nothing is fetched from anywhere and a
+machine with neither installed draws the same letters as one with both
+(`public/fonts/PROVENANCE.md` names each file's source, licence and hash). **System** sets
+everything in your machine's own interface typeface instead.
+
 **Room colours** decides how much of a colour each project room's floor carries. The switch moves
 between the first two; the third is a chip under Advanced, and while it is chosen the switch reads
 off and says _Off_:

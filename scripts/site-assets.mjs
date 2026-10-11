@@ -301,6 +301,8 @@ async function probe(client) {
         agents: [...s._runtime.all()].length,
         connected: !!(conn && conn.hidden),
         onboarding: !!(layer && !layer.hidden),
+        // The bundled typeface has arrived (see scripts/goldens.mjs).
+        fonts: !document.fonts || document.fonts.status === 'loaded',
       };
     })()`,
   );
@@ -313,7 +315,7 @@ async function waitForFloor(client) {
   let stable = 0;
   while (Date.now() < deadline) {
     const state = await probe(client);
-    if (state && state.connected && !state.onboarding) {
+    if (state && state.connected && !state.onboarding && state.fonts !== false) {
       stable = last !== null && state.agents === last ? stable + 1 : 0;
       last = state.agents;
       if (stable >= 4) {

@@ -62,7 +62,7 @@ import {
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
 } from '../../public/render/rig.js';
-import { FONT_FAMILIES } from '../../public/render/floor-type.js';
+import { DEFAULT_FONT, FONT_FAMILIES } from '../../public/render/floor-type.js';
 import { FIGURE_HALO_POOL_SPAN, PALETTE, STATE_COLORS } from '../../public/render/palette.js';
 
 // ------------------------------------------------------- world <-> screen
@@ -1664,7 +1664,10 @@ test('WP-81: two frames a minute apart set every plate glyph in the same place',
   // no `font-variant-numeric` (VISUAL-SPEC §7). It was a bold monospace.
   for (const run of a.runs) {
     if (!/[0-9]/.test(run.text)) continue;
-    assert.ok(run.font.endsWith(FONT_FAMILIES.system.numeric), `${run.text} is set in ${run.font}`);
+    assert.ok(
+      run.font.endsWith(FONT_FAMILIES[DEFAULT_FONT].numeric),
+      `${run.text} is set in ${run.font}`,
+    );
     assert.doesNotMatch(run.font, /monospace/, run.text);
   }
 });

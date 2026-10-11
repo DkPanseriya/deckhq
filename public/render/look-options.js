@@ -99,13 +99,12 @@ export { ROOM_TINTS, ROOM_TINT_IDS, ZONE_HUES };
 export { DEFAULT_FONT, FONT_IDS };
 
 /**
- * THE FONT the floor's text is set in (`floor-type.js`): one value today,
- * `system`, the machine's own UI face. The key exists so that a bundled
- * family is one more entry in `FONT_FAMILIES` and a look can name it.
+ * THE FONT the floor's text is set in (`floor-type.js`): `deckhq`, the
+ * typeface the product ships, or `system`, the machine's own UI face.
  *
  * NOT ONE OF `ALL_LOOK_PICKERS`: that table is the floor's MATERIALS and its
  * count is published. A surface draws this row only where there is more than
- * one font to choose from — so today no surface draws it.
+ * one font to choose from — under Advanced, in the sheet.
  * @type {Readonly<{id:string, label:string, path:string,
  *   options:ReadonlyArray<{id:string, label:string}>}>}
  */
@@ -844,8 +843,8 @@ export function normalizeLook(look) {
     light: one(raw.light, LIGHT_MOOD_IDS, DEFAULT_LOOK.light),
     partitions: one(raw.partitions, PARTITION_STYLE_IDS, DEFAULT_LOOK.partitions),
     roomTint: one(raw.roomTint, ROOM_TINT_IDS, DEFAULT_LOOK.roomTint),
-    // Absent is `system`, for the same reason: a look saved before the floor's
-    // type was a choice is set in the face it always was.
+    // Absent is the default: a look saved before the floor's type was a choice
+    // named no face, and is set in the product's own like every other floor.
     font: one(raw.font, FONT_IDS, DEFAULT_LOOK.font),
   };
 }

@@ -23,8 +23,17 @@
   against what is behind it.
 - **The floor's type is one system.** Room plates are set in the interface's own sans at a
   confident weight with no outline, where they were a bold monospace; waits, counts and spend are
-  in a face whose figures line up, on the floor and in the header alike. No font is downloaded
-  and none is bundled: a look now carries a `font`, with one value, `system`.
+  in a face whose figures line up, on the floor and in the header alike.
+- **DeckHQ ships its own typeface.** The interface used to name two typefaces it did not carry, so
+  most machines drew whatever came next in the list — Segoe UI and Consolas on Windows — and no two
+  systems showed the same letters. It is now set in **Inter**, with **JetBrains Mono** only where
+  the text is code: a command, a path, a key, a diff. Buttons, labels and counts that were in a
+  monospace are in the sans; waits and counts use Inter's tabular figures, so a timer does not
+  change width as it runs. The font files are in the package and are served from the daemon's own
+  loopback address: nothing is fetched from anywhere, and `public/fonts/PROVENANCE.md` records each
+  file's source, licence (SIL Open Font License 1.1) and hash, which a test checks. A look carries
+  a `font`: `deckhq`, the default, or `system` for your machine's own typeface (Settings → Look →
+  Advanced → Font). The package is about 0.5 MB larger for it.
 - **The Look panel is shorter, and it is in the order you reach for things.** Agent size, Light,
   Style, Density and Room colours — five controls where there were six, in a panel that fits a
   laptop's screen. **Theme and Light are one control, Light**, with four choices: Default, Morning,

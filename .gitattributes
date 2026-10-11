@@ -6,4 +6,5 @@
 *.png binary
 *.jpg binary
 *.gif binary
+*.woff2 binary
 docs/DEVIATIONS.md merge=union

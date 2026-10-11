@@ -366,8 +366,8 @@ export function createAdvanced(ctx) {
 
   /**
    * THE FONT the floor's text is set in (`render/floor-type.js`), as a row —
-   * drawn ONLY where there is more than one to choose from. Today there is one,
-   * the machine's own, so there is no row: a control with one answer is noise.
+   * drawn ONLY where there is more than one to choose from: the product's own
+   * typeface, or the machine's. A control with one answer would be noise.
    * @param {any} host @param {any} c @param {any} current
    */
   function renderFont(host, c, current) {
@@ -381,7 +381,8 @@ export function createAdvanced(ctx) {
       value: String(current.font),
       onChange: (next) => void store.choosePath(c.FONT_PICKER.path, next, FONT_ROW),
     });
-    const note = 'The typeface every name, count and timer on the floor is set in.';
+    const note =
+      'The typeface every name, count and timer is set in. DeckHQ is the one the product ships; System is your machine’s own.';
     const row = widgets.row(host, c.FONT_PICKER.label, radios, note);
     row.className += ' settings-row--stack';
     drawRefusals(host, FONT_ROW);

@@ -37,6 +37,58 @@
  * neutral-ink label, never by colouring the words themselves.
  */
 
+/* THE PRODUCT'S OWN TYPEFACE, shipped in `fonts/` and served from this origin —
+   nothing is fetched from anywhere else (`fonts/PROVENANCE.md`: each file's
+   source, licence and hash). Declared by ROLE under the product's own names,
+   so the floor's canvas and this sheet ask for the same three families:
+
+     DeckHQ Sans     Inter, one variable file for every weight
+     DeckHQ Numeric  the same file with tabular figures switched on HERE, in
+                     the face's own declaration: a canvas cannot ask for a font
+                     feature, and a wait that changes width as it counts shivers
+     DeckHQ Mono     JetBrains Mono, regular and bold
+
+   `swap`: text is drawn at once in the machine's own face and again when the
+   file lands, which on a loopback origin is the same frame or the next. */
+@font-face {
+  font-family: 'DeckHQ Sans';
+  src: url('./fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DeckHQ Numeric';
+  src: url('./fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  font-feature-settings: 'tnum' 1;
+}
+@font-face {
+  font-family: 'DeckHQ Mono';
+  src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 100 599;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DeckHQ Mono';
+  src: url('./fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* A look whose font is `system` (Settings → Look → Advanced → Font): the
+   machine's own faces and none of ours, here as on the floor. */
+:root[data-font='system'] {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+}
+
 :root {
   color-scheme: dark;
 
@@ -98,17 +150,19 @@
   --t-med: 200ms ease;
 
   /* TYPE. Three family roles, the same three the floor's text is set in
-     (`render/floor-type.js`, whose `system` font these lists repeat): the
+     (`render/floor-type.js`, whose `deckhq` font these lists repeat): the
      SANS for names and sentences, the NUMERIC for anything that is mostly
      figures and changes while you watch — a family whose own figures are
      tabular — and the MONO only where the text is code: a command, a path, a
-     key. No face here needs a file: the two this sheet used to name first
-     were never shipped, so most machines were already drawing what came next.
-     A bundled family is one change here and one in `FONT_FAMILIES`. */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-num: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
+     key. The first face in each list is the product's own, declared at the
+     foot of this block's sheet (`@font-face`, below `:root`) and served from
+     `fonts/`; what follows it is what a machine draws until the file lands. */
+  --font-sans:
+    'DeckHQ Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num: 'DeckHQ Numeric', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
   --font-mono:
-    ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+    'DeckHQ Mono', ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New',
+    monospace;
   /* …and the weights a role may take, so a heading in the header, the strip
      and the panel is the same heading. */
   --weight-body: 400;
@@ -173,9 +227,13 @@ body {
   top: 0.5rem;
 }
 
-.mono,
-.num {
+.mono {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+/* Figures are the numeric family, not the mono: a count is not code. */
+.num {
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
 }
 
@@ -192,7 +250,7 @@ button {
 
 /* -------------------------------------------------------------- buttons */
 .btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   padding: 0.42rem 0.7rem;
   background: var(--surface-2);
@@ -459,7 +517,7 @@ button {
    competing with the one that matters. */
 .floor-counts {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.68rem;
   color: var(--muted);
   white-space: nowrap;
@@ -475,7 +533,7 @@ button {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.68rem;
   color: var(--ink-2);
   background: var(--surface-2);
@@ -507,7 +565,7 @@ button {
 }
 
 .connection-status {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.65rem;
   color: var(--muted);
   display: flex;
@@ -542,7 +600,7 @@ button {
   border-radius: var(--radius-sm);
   color: var(--muted);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
 }
 .palette-hint:hover {
@@ -600,7 +658,7 @@ button {
   color: var(--ink-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   white-space: nowrap;
   cursor: pointer;
@@ -728,7 +786,7 @@ button {
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--ink-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   white-space: nowrap;
   cursor: pointer;
@@ -929,7 +987,7 @@ button {
   border: none;
   border-radius: 999px;
   color: var(--ink-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   cursor: pointer;
 }
@@ -1094,7 +1152,7 @@ button {
   border: 1px solid var(--line-2);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.68rem;
   cursor: pointer;
 }
@@ -1268,7 +1326,7 @@ button {
   border: 1px solid var(--line-2);
   border-radius: var(--radius-sm);
   padding: 0.55rem 0.65rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.68rem;
   line-height: 1.6;
   max-width: 22rem;
@@ -1395,7 +1453,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -1421,7 +1479,7 @@ button {
   gap: 0.25rem;
 }
 .msg-who {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.56rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1504,7 +1562,7 @@ button {
   margin-top: 0.5rem;
 }
 .composer-hint {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   color: var(--muted);
   flex: 1 1 auto;
@@ -1562,7 +1620,7 @@ button {
 }
 /* "your draft": an unsent reply is held by you. A quiet outline, no colour. */
 .draft-chip {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.56rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1583,7 +1641,7 @@ button {
 }
 /* the live clock: "waiting 1d 2h". Mono, ink, crimson on the rule only. */
 .panel-waiting {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
@@ -1715,7 +1773,7 @@ button {
 }
 .review-heading {
   margin: 0 0 0.45rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -1732,7 +1790,7 @@ button {
   overflow-wrap: anywhere;
 }
 .review-totals {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.66rem;
   font-variant-numeric: tabular-nums;
   white-space: pre;
@@ -1740,7 +1798,7 @@ button {
   flex: 0 0 auto;
 }
 .review-note {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   color: var(--muted);
   line-height: 1.5;
@@ -1808,7 +1866,7 @@ button {
 .md-h5,
 .md-h6 {
   font-size: 0.78rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1880,7 +1938,7 @@ button {
 }
 .md-copy,
 .md-in-session {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   letter-spacing: 0.04em;
   color: var(--ink-2);
@@ -2054,7 +2112,7 @@ button {
   display: none;
 }
 .review-thread-summary {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -2088,7 +2146,7 @@ button {
   bottom: 0.5rem;
   display: block;
   margin: 0.6rem 0 0 auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.62rem;
   letter-spacing: 0.04em;
   color: var(--ink);
@@ -2241,7 +2299,7 @@ button {
   display: none;
 }
 .review-since-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.56rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2342,7 +2400,7 @@ button {
   flex: 0 0 auto;
   border-top: 1px solid var(--line);
   padding: 0.5rem 0.9rem 0.6rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.6rem;
   line-height: 1.6;
   color: var(--muted);
@@ -2360,7 +2418,7 @@ button {
   margin-top: 0.1rem;
 }
 .panel-resume-link {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   color: var(--muted);
   text-decoration-style: dotted;
@@ -2501,7 +2559,7 @@ button {
   background: none;
   border: 0;
   padding: 0.1rem 0.2rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   color: var(--muted);
   cursor: pointer;
@@ -2588,7 +2646,7 @@ button {
   border: 0;
   flex: 0 0 auto;
   padding: 0.1rem 0.2rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   color: var(--muted);
   cursor: pointer;
@@ -2904,7 +2962,7 @@ button {
   gap: 0.7rem;
 }
 .coach-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.7rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -3078,7 +3136,7 @@ button {
 }
 .nightcard-sub {
   margin: 0.3rem 0 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   color: var(--muted);
 }
@@ -3101,7 +3159,7 @@ button {
   gap: 0.6rem;
 }
 .nightcard-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   color: var(--muted);
   padding-top: 0.18rem;
@@ -3116,7 +3174,7 @@ button {
   margin: 0.75rem 0 0;
   padding-top: 0.6rem;
   border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   color: var(--muted);
 }
@@ -3168,7 +3226,7 @@ button {
 }
 .replay-btn {
   flex: 0 0 auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   padding: 0.3rem 0.6rem;
   color: var(--ink-2);
@@ -3222,7 +3280,7 @@ button {
   flex: 1 1 auto;
 }
 .hooks-badge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -3308,7 +3366,7 @@ button {
   border: 1px solid var(--line-2);
   border-radius: var(--radius-md);
   padding: 0.55rem 0.9rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   color: var(--ink);
   box-shadow: var(--shadow-elevated);
@@ -3510,7 +3568,7 @@ button {
   border: 1px solid var(--line-2);
   border-radius: var(--radius-sm);
   color: var(--ink-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.72rem;
   cursor: pointer;
 }
@@ -3627,7 +3685,7 @@ button {
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   white-space: nowrap;
   transition:
@@ -3721,7 +3779,7 @@ button {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.65rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -3777,7 +3835,7 @@ button {
 
 .deck-waiting {
   text-align: right;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   white-space: nowrap;
@@ -3866,7 +3924,7 @@ button {
 }
 .deck-tokens {
   text-align: right;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.72rem;
   color: var(--muted);
@@ -3972,7 +4030,7 @@ button {
 }
 .usage-total-v {
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 1.7rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -4048,7 +4106,7 @@ button {
 }
 .usage-legend-v {
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4068,7 +4126,7 @@ button {
 .usage-caption {
   caption-side: top;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.65rem;
   letter-spacing: 0.12em;
   padding-bottom: 0.4rem;
@@ -4104,7 +4162,7 @@ button {
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.65rem;
   letter-spacing: 0.12em;
   padding: 0 0.7rem;
@@ -4134,7 +4192,7 @@ button {
 }
 .usage-cell.num {
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
 }
 .usage-row:hover {
@@ -4331,7 +4389,7 @@ textarea.field-input {
   padding: 0.15rem 0.05rem;
 }
 .picker-btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.72rem;
   padding: 0.32rem 0.6rem;
   background: none;
@@ -4637,7 +4695,7 @@ textarea.field-input {
 }
 .palette-group {
   padding: 0.6rem 1rem 0.25rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.58rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -4674,7 +4732,7 @@ textarea.field-input {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4704,7 +4762,7 @@ textarea.field-input {
   margin: 0;
   padding: 0.5rem 1rem;
   border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   color: var(--muted);
 }
@@ -4741,7 +4799,7 @@ textarea.field-input {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   cursor: pointer;
   transition:
@@ -4772,7 +4830,7 @@ textarea.field-input {
 }
 .settings-heading {
   margin: 0 0 0.35rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -4826,7 +4884,7 @@ textarea.field-input {
   text-align: right;
 }
 .settings-unit {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   color: var(--muted);
 }
@@ -4905,7 +4963,7 @@ textarea.field-input {
   align-items: center;
 }
 .settings-rate-row.is-head > span {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -4928,7 +4986,7 @@ textarea.field-input {
 }
 .settings-rate-drop,
 .settings-btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   padding: 0.3rem 0.55rem;
   color: var(--ink-2);
@@ -5127,7 +5185,7 @@ textarea.field-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.64rem;
   color: var(--muted);
 }
@@ -5146,7 +5204,7 @@ textarea.field-input {
 }
 .settings-look-caption {
   margin: 0.35rem 0 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.62rem;
   color: var(--muted);
 }
@@ -5175,7 +5233,7 @@ textarea.field-input {
   justify-self: start;
 }
 .settings-look-dim-name {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.66rem;
   color: var(--muted);
 }
@@ -5420,7 +5478,7 @@ textarea.field-input {
   align-self: center;
 }
 .minifloor-hands-v {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
@@ -5561,7 +5619,7 @@ textarea.field-input {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-size: 0.7rem;
   line-height: 1.6;
@@ -5672,7 +5730,7 @@ textarea.field-input {
 .idle-row-stat {
   flex: 0 0 auto;
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.68rem;
 }
@@ -5900,7 +5958,7 @@ textarea.field-input {
   border-bottom: 1px solid var(--line);
   border-radius: 6px 6px 0 0;
   background: var(--surface);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -5954,7 +6012,7 @@ textarea.field-input {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.68rem;
   color: var(--muted);
   cursor: pointer;
@@ -6072,7 +6130,7 @@ textarea.field-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.62rem;
   color: var(--muted);
 }
@@ -6099,7 +6157,7 @@ textarea.field-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.6rem;
   color: var(--ink-2);
 }
@@ -6113,7 +6171,7 @@ textarea.field-input {
   flex-wrap: wrap;
   gap: 0.35rem 1.2rem;
   margin: 0 0 0.75rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-size: 0.68rem;
   color: var(--ink-2);
 }
@@ -6249,7 +6307,7 @@ textarea.field-input {
 .dialog-body .share-status {
   margin: 0.6rem 0 0;
   min-height: 1.2em;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.7rem;
   line-height: 1.5;
   color: var(--ink);
