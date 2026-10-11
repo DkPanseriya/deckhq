@@ -102,8 +102,8 @@ const PAGES = [
     slug: 'index',
     title: `DeckHQ: ${TAGLINE[0].toLowerCase()}${TAGLINE.slice(1)}`,
     description:
-      'The agent that finished an hour ago is still waiting for you. DeckHQ puts every Claude ' +
-      'Code and Codex session on one office floor until you clear it. Local, free, MIT.',
+      'The agent that finished an hour ago is still waiting for you. Every Claude Code ' +
+      'and Codex session on one office floor until you clear it. Local, free, MIT.',
     loop: 'hero-walk',
   },
   {
@@ -112,15 +112,15 @@ const PAGES = [
     title: 'Features',
     description:
       'Every session on one floor, the queue only you clear, crews and juniors, worktrees as ' +
-      'benches, the session panel, Studio and the app window. A picture of each.',
+      'benches, the session panel, Studio, and a picture you can post.',
   },
   {
     slug: 'look',
     nav: 'Look',
     title: 'Look',
     description:
-      'Eleven styles, three lights, room colours, three themes and four agent sizes. Every ' +
-      'picture is the same floor, repainted.',
+      'Eleven styles, three lights, room colours, three themes and four agent sizes. The ' +
+      'eleven styles are one floor, repainted.',
   },
   {
     slug: 'install',
@@ -179,35 +179,35 @@ const REDIRECTS = [
   {
     slug: 'studio',
     to: 'features.html#studio',
-    name: 'Studio',
+    name: 'The Studio page',
     moved: 'Studio is a section of the Features page now.',
     label: 'Studio, on Features',
   },
   {
     slug: 'characters',
     to: 'features.html#see',
-    name: 'The characters',
+    name: 'The characters page',
     moved: 'The robots and their six states are on the Features page now.',
     label: 'The six states, on Features',
   },
   {
     slug: 'model',
     to: 'features.html#needs-you',
-    name: 'The model',
+    name: 'The model page',
     moved: 'How the queue works is on the Features page now.',
     label: 'Know who needs you, on Features',
   },
   {
     slug: 'adapters',
     to: 'features.html#runtimes',
-    name: 'The adapters',
+    name: 'The adapters page',
     moved: 'Which coding tools DeckHQ reads is a table on the Features page now.',
     label: 'Runtimes, on Features',
   },
   {
     slug: 'hooks-and-privacy',
     to: 'privacy.html',
-    name: 'Hooks and privacy',
+    name: 'The hooks and privacy page',
     moved: 'Hooks and privacy are one page now, under the name What it never does.',
     label: 'What it never does',
   },

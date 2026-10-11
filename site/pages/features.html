@@ -14,6 +14,7 @@
     <li><a href="#studio">Studio</a></li>
     <li><a href="#app">The app window</a></li>
     <li><a href="#terminal">In your terminal</a></li>
+    <li><a href="#share">A picture to post</a></li>
     <li><a href="#runtimes">Runtimes</a></li>
   </ul>
 </div>
@@ -40,6 +41,11 @@
           <li>
             <strong>What it is running.</strong> With the hooks installed, a small bubble over a
             working robot names the tool: <code>Bash npm test</code>.
+          </li>
+          <li>
+            <strong>It holds still.</strong> A room keeps its furniture while people come and go,
+            and gives a desk back only after five minutes with fewer of them. A thought cloud or a
+            tool bubble steps aside for a name.
           </li>
         </ul>
       </div>
@@ -69,8 +75,8 @@
           <span>At its desk, typing. Producing output right now.</span>
         </li>
         <li>
-          <i class="dot dot--needs-input"></i><b>Needs input</b>
-          <span>A hand up. Blocked mid-task on a question only you can answer.</span>
+          <i class="dot dot--needs-input"></i><b>Hands up</b>
+          <span>A raised hand. Blocked mid-task on a question only you can answer.</span>
         </li>
         <li>
           <i class="dot dot--for-review"></i><b>For review</b>
@@ -85,8 +91,8 @@
           <span>You have dealt with it. In the Lounge, out of the queue.</span>
         </li>
         <li>
-          <i class="dot dot--let-go"></i><b>Let go</b>
-          <span>Fired. Off the floor; its chat is kept.</span>
+          <i class="dot dot--let-go"></i><b>Fired</b>
+          <span>Let go. Off the floor; its chat is kept.</span>
         </li>
       </ul>
     </div>
@@ -191,7 +197,7 @@
       <figure class="split-media shot shot--ui">
         <img
           src="media/panel.png"
-          alt="The session panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a code block reading npm test, 214 passing, the two files that changed with plus 142 and minus 18, and three buttons: 1 Reply, 2 Approve, 3 Bench."
+          alt="The session panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a code block reading npm test, 214 passing, what changed in orbital-api at plus 142 and minus 18 across 3 files, and three buttons: 1 Reply, 2 Approve, 3 Bench."
         />
       </figure>
     </div>
@@ -282,6 +288,12 @@
           <strong>A subfolder is not a project.</strong> A session started in one is in its
           repository's room.
         </li>
+        <li>
+          <strong>A repository inside a repository is a bench too.</strong> A submodule, or a clone
+          the outer repository's <code>.gitignore</code> names by its path, sits in the outer room
+          with its folder's name on the bench. A terminal or a diff opened from it still runs inside
+          it.
+        </li>
       </ul>
     </div>
     <figure class="split-media shot">
@@ -337,8 +349,8 @@
         <h3>Hire starts people.</h3>
         <p>
           A role gets a git worktree of its own, a brief file that is yours to edit, and a real
-          session there, on the floor within one scan. Moving a card into
-          <strong>Ready</strong> hires its role.
+          session there, on the floor within one scan. Moving a card that names a role into
+          <strong>Ready</strong> hires it.
         </p>
       </div>
       <div>
@@ -390,8 +402,8 @@
       <div>
         <h3>A count on the icon.</h3>
         <p>
-          Installed as an app, the taskbar or dock icon and the window title carry the number
-          waiting, with every window closed.
+          Installed as an app, the taskbar or dock icon carries the number waiting, and so does the
+          window title, for as long as a window is open.
         </p>
       </div>
       <div>
@@ -441,7 +453,45 @@
   </div>
 </section>
 
-<section class="band band--deep" id="runtimes">
+<section class="band band--deep" id="share">
+  <div class="wrap split split--flip">
+    <div class="split-copy">
+      <h2>A picture of your floor you can post.</h2>
+      <p>
+        <kbd>X</kbd> opens a small sheet with a live preview. Project names and session details are
+        hidden by default, and the picture is drawn from a copy of the floor those names were never
+        put into, so nothing is painted over.
+      </p>
+      <ul class="facts">
+        <li>
+          <strong>Hide project names.</strong> Each room gets an invented name and keeps it from one
+          picture to the next. A worktree's bench reads <code>branch 1</code>.
+        </li>
+        <li>
+          <strong>Hide session details.</strong> No titles, no tool text, no model. Robot names,
+          states and wait times stay.
+        </li>
+        <li>
+          <strong>Add the footer.</strong> The mark, one line of the floor's own numbers, and
+          <code>deckhq.dev</code>.
+        </li>
+      </ul>
+      <p class="quiet">
+        16:9 or square. <strong>Save picture</strong> writes a PNG to
+        <code>~/.deckhq/snapshots/</code> and <strong>Copy image</strong> puts it on your clipboard.
+        Nothing is uploaded, and making a picture changes no session's state.
+      </p>
+    </div>
+    <figure class="split-media shot shot--ui">
+      <img
+        src="media/share-sheet.png"
+        alt="The sheet titled Share picture of the floor. A preview of the demo floor with its five rooms under invented names, and a footer reading 6 need you, 2 hands up, oldest 1d 2h, 25 sessions, 5 rooms. Under it, three switches, all on: Hide project names, Hide session details, Add the footer. Then Frame, 16:9 or 1:1, and two buttons: Copy image and Save picture."
+      />
+    </figure>
+  </div>
+</section>
+
+<section class="band" id="runtimes">
   <div class="wrap">
     <div class="section-head">
       <h2>Runtimes.</h2>

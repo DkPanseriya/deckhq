@@ -229,6 +229,20 @@
       "note": "the deck: the same queue as a table"
     },
     {
+      "name": "share-sheet",
+      "kind": "still",
+      "population": "demo",
+      "press": "x",
+      "crop": {
+        "x": 440,
+        "y": 92,
+        "w": 720,
+        "h": 816
+      },
+      "width": 1200,
+      "note": "the share picture's sheet: a preview with project names hidden, and three switches"
+    },
+    {
       "name": "board",
       "kind": "still",
       "population": "board",
