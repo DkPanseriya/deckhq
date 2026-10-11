@@ -1,6 +1,38 @@
 {
-  "tag": "site-media-3d-1",
+  "tag": "site-media-3d-2",
   "files": [
+    {
+      "name": "bale-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 515052,
+      "sha256": "cf65bd96e4f4e806f528a1f2fb35a703219ccbda814cb7cc8d6e67d3a53a618a"
+    },
+    {
+      "name": "bale-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 1062931,
+      "sha256": "54ff2bcb6f1f6329b3fbeafcc6467b942811b135ea129f66b5b6b8e035af8d04"
+    },
+    {
+      "name": "brick-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 509283,
+      "sha256": "fe2c70dfa1a799a267e0827119e4af2697f50bae9271912ca872a233ce1fada0"
+    },
+    {
+      "name": "brick-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 1051126,
+      "sha256": "8348e6c1d03ed2dc6cb96624ea6311d1d56fa6af0f43760aeaf98f014ccde5f6"
+    },
     {
       "name": "clip-orbit-1440.mp4",
       "kind": "clip",
@@ -88,6 +120,86 @@
       "height": 1440,
       "bytes": 2258720,
       "sha256": "fec311d281973bf3e17490079d3a12e4d8c4731ad6bb8a8c4a678971c5969405"
+    },
+    {
+      "name": "hand-up-1440.png",
+      "kind": "still",
+      "width": 1440,
+      "height": 1440,
+      "bytes": 1427623,
+      "sha256": "65fb48b0d906fef5826cdf0ba0acc38eb5efd36adb9bc8984d5b4f61afca5be3"
+    },
+    {
+      "name": "hand-up-2160.png",
+      "kind": "still",
+      "width": 2160,
+      "height": 2160,
+      "bytes": 3578349,
+      "sha256": "be0c21a990993852438daeb6969c01f209ae36dc3e3861ee7a6748fc00be49bf"
+    },
+    {
+      "name": "mote-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 469761,
+      "sha256": "91737154e33e32716d042fe2fc3239cde2fed062eaac009168ce1fd21504c784"
+    },
+    {
+      "name": "mote-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 965616,
+      "sha256": "be7abf5b666cc06bc5c905195c826572c50088a68025cf96df9f324ac612c24b"
+    },
+    {
+      "name": "night-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 2742388,
+      "sha256": "b314e3b924dd20e6afaafce9b4a90a7e0bcdf0f0bf492aea8e6d88dc745c845e"
+    },
+    {
+      "name": "night-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 5794681,
+      "sha256": "6afe70e560349e1c9ee0423c27d9640154298736df6233af168378a6f559c7bd"
+    },
+    {
+      "name": "office-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 2097273,
+      "sha256": "cf72086a8fc2ef231c11c27d72f7742ea97760b24da22a21c4952b2477b20eca"
+    },
+    {
+      "name": "office-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 4247166,
+      "sha256": "fa70a943f52aa78cbf3ef964453e35a5b8f89da6c5e1003f4046bf902c74bff8"
+    },
+    {
+      "name": "stem-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 508807,
+      "sha256": "39a9fdabbc4b0f0311e77b7a4bff3bb3423008fe1913a31c88d773355ed8b7c8"
+    },
+    {
+      "name": "stem-3840.png",
+      "kind": "still",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 1035893,
+      "sha256": "34ac0e4449b321599decbca3f0b0fe3768ea82acedc5406d8cbd95a554423fb0"
     }
   ]
 }

@@ -3,30 +3,30 @@
     {
       "name": "bale.png",
       "kind": "still",
-      "width": 960,
-      "height": 540,
-      "bytes": 98102
+      "width": 1000,
+      "height": 563,
+      "bytes": 115696
     },
     {
       "name": "bale@2x.png",
       "kind": "still",
-      "width": 1920,
-      "height": 1080,
-      "bytes": 320490
+      "width": 2000,
+      "height": 1125,
+      "bytes": 334052
     },
     {
       "name": "brick.png",
       "kind": "still",
-      "width": 960,
-      "height": 540,
-      "bytes": 99676
+      "width": 1000,
+      "height": 563,
+      "bytes": 105146
     },
     {
       "name": "brick@2x.png",
       "kind": "still",
-      "width": 1920,
-      "height": 1080,
-      "bytes": 324235
+      "width": 2000,
+      "height": 1125,
+      "bytes": 344590
     },
     {
       "name": "clip-bale.mp4",
@@ -201,70 +201,70 @@
       "kind": "still",
       "width": 480,
       "height": 480,
-      "bytes": 103394
+      "bytes": 100599
     },
     {
       "name": "hand-up@2x.png",
       "kind": "still",
       "width": 960,
       "height": 960,
-      "bytes": 370094
+      "bytes": 359378
     },
     {
       "name": "mote.png",
       "kind": "still",
-      "width": 960,
-      "height": 540,
-      "bytes": 91523
+      "width": 1000,
+      "height": 563,
+      "bytes": 114923
     },
     {
       "name": "mote@2x.png",
       "kind": "still",
-      "width": 1920,
-      "height": 1080,
-      "bytes": 285982
+      "width": 2000,
+      "height": 1125,
+      "bytes": 339224
     },
     {
       "name": "night.png",
       "kind": "still",
       "width": 720,
       "height": 405,
-      "bytes": 111506
+      "bytes": 114018
     },
     {
       "name": "night@2x.png",
       "kind": "still",
       "width": 1440,
       "height": 810,
-      "bytes": 380673
+      "bytes": 389229
     },
     {
       "name": "office.png",
       "kind": "still",
       "width": 640,
       "height": 360,
-      "bytes": 97035
+      "bytes": 97260
     },
     {
       "name": "office@2x.png",
       "kind": "still",
       "width": 1280,
       "height": 720,
-      "bytes": 353519
+      "bytes": 346272
     },
     {
       "name": "panel.png",
       "kind": "still",
       "width": 720,
       "height": 405,
-      "bytes": 101247
+      "bytes": 97301
     },
     {
       "name": "panel@2x.png",
       "kind": "still",
       "width": 1440,
       "height": 810,
-      "bytes": 347520
+      "bytes": 344092
     },
     {
       "name": "states.png",
@@ -283,44 +283,44 @@
     {
       "name": "stem.png",
       "kind": "still",
-      "width": 960,
-      "height": 540,
-      "bytes": 94260
+      "width": 1000,
+      "height": 563,
+      "bytes": 106263
     },
     {
       "name": "stem@2x.png",
       "kind": "still",
-      "width": 1920,
-      "height": 1080,
-      "bytes": 339226
+      "width": 2000,
+      "height": 1125,
+      "bytes": 330050
     },
     {
       "name": "thumb-night.png",
       "kind": "still",
       "width": 320,
       "height": 180,
-      "bytes": 29018
+      "bytes": 31199
     },
     {
       "name": "thumb-night@2x.png",
       "kind": "still",
       "width": 640,
       "height": 360,
-      "bytes": 92303
+      "bytes": 91959
     },
     {
       "name": "thumb-office.png",
       "kind": "still",
       "width": 320,
       "height": 180,
-      "bytes": 28919
+      "bytes": 29432
     },
     {
       "name": "thumb-office@2x.png",
       "kind": "still",
       "width": 640,
       "height": 360,
-      "bytes": 97035
+      "bytes": 97260
     },
     {
       "name": "thumb-states.png",
@@ -341,14 +341,14 @@
       "kind": "still",
       "width": 320,
       "height": 180,
-      "bytes": 16357
+      "bytes": 15642
     },
     {
       "name": "thumb-stem@2x.png",
       "kind": "still",
       "width": 640,
       "height": 360,
-      "bytes": 47158
+      "bytes": 52389
     }
   ]
 }
