@@ -40,9 +40,10 @@ export function npmRunner() {
  * Every path in the package, relative to the repository, forward slashes,
  * sorted. Nothing is written: `--dry-run` packs to nowhere.
  * @param {string} repo
+ * @param {Record<string, string>} [env] extra environment for npm (a test's cache folder)
  * @returns {string[]}
  */
-export function packFiles(repo) {
+export function packFiles(repo, env = {}) {
   const npm = npmRunner();
   if (!npm)
     throw new Error('no npm was found beside this Node, so the package list cannot be read');
@@ -61,6 +62,7 @@ export function packFiles(repo) {
         npm_config_fund: 'false',
         npm_config_audit: 'false',
         npm_config_loglevel: 'error',
+        ...env,
       },
     },
   );

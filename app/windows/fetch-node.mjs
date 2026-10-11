@@ -105,8 +105,34 @@ export async function fetchNode(opts = {}) {
     fs.rmSync(outDir, { recursive: true, force: true });
     throw new Error('node.exe is not validly signed by the OpenJS Foundation; nothing was kept');
   }
-  fs.writeFileSync(path.join(outDir, 'VERSION'), `${pin.version}\n`, 'utf8');
-  return { version: pin.version, exe, sha256: hashOf(zip, 'sha256') };
+  const record = {
+    version: pin.version,
+    sha256: hashOf(zip, 'sha256'),
+    exeSha256: hashOf(exeBytes, 'sha256'),
+  };
+  fs.writeFileSync(path.join(outDir, 'node.json'), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  return { ...record, exe };
+}
+
+/**
+ * What an earlier `fetchNode` left in `outDir`, if it is the pinned version
+ * and `node.exe` is still the bytes that were verified then. Null otherwise,
+ * and the caller fetches again.
+ * @param {{pins?:any, outDir?:string}} [opts]
+ * @returns {{version:string, exe:string, sha256:string, exeSha256:string}|null}
+ */
+export function fetchedNode(opts = {}) {
+  const pin = (opts.pins || readPins()).node;
+  const outDir = opts.outDir || NODE_DIR;
+  try {
+    const record = JSON.parse(fs.readFileSync(path.join(outDir, 'node.json'), 'utf8'));
+    const exe = path.join(outDir, 'node.exe');
+    if (record.version !== pin.version) return null;
+    if (hashOf(fs.readFileSync(exe), 'sha256') !== record.exeSha256) return null;
+    return { ...record, exe };
+  } catch {
+    return null;
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

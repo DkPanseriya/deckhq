@@ -27,7 +27,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { BUILD_DIR, SHELL_EXE, buildShell } from './build-shell.mjs';
-import { NODE_DIR, fetchNode } from './fetch-node.mjs';
+import { NODE_DIR, fetchNode, fetchedNode } from './fetch-node.mjs';
 import { REPO, WEBVIEW2_DIR, fetchWebView2 } from './fetch-webview2.mjs';
 import { nsisFileLists } from './lib/nsis-lists.mjs';
 import { packFiles } from './lib/pack-list.mjs';
@@ -90,7 +90,8 @@ function commit() {
 /** The Node this build carries: the machine's own (a test build) or the pinned release. */
 async function chooseNode(localNode, pins, log) {
   if (!localNode) {
-    const got = await fetchNode({ pins, log });
+    // The copy `fetch-node.mjs` already verified, if it is still those bytes.
+    const got = fetchedNode({ pins }) || (await fetchNode({ pins, log }));
     return {
       exe: got.exe,
       line: `node ${got.version} (win-x64, official, zip sha256 ${got.sha256})`,

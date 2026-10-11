@@ -6,6 +6,14 @@
 
 ## Unreleased
 
+### Added
+
+- **DeckHQ for Windows, phase 1 (`app/windows/`).** The floor in a native window of its own, with
+  the daemon and a Node runtime bundled beside it, a per-user installer script and the workflow
+  that builds both. It is not in the npm package and nothing is published yet: the build is
+  unsigned and its installer has not been compiled. `app/windows/README.md` says what was measured
+  and what was not.
+
 ### Changed
 
 - **The header says "resting", and it is the Lounge's number.** The third floor count read "9
