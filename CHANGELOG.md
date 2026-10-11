@@ -6,13 +6,26 @@
 
 ## Unreleased
 
+## 1.8.0 — 2026-10-11
+
+### Highlights
+
+DeckHQ has a typeface of its own. The interface is set in Inter, with JetBrains Mono kept for
+code, from files that ship in the package and are served from your own machine: every system shows
+the same letters, and nothing is fetched from anywhere. The Look panel is five controls in the
+order you reach for them, with Theme and Light merged into one choice of four: Default, Morning,
+Evening and Night shift. Every name, badge and room plate on the floor now reads in every light
+and every style, measured at 4.5:1 or better. Juniors appear beside their lead and fold away when
+they finish, instead of walking to the Lounge and back all day. And the header's resting count is
+the Lounge's own number.
+
 ### Added
 
 - **DeckHQ for Windows, phase 1 (`app/windows/`).** The floor in a native window of its own, with
-  the daemon and a Node runtime bundled beside it, a per-user installer script and the workflow
-  that builds both. It is not in the npm package and nothing is published yet: the build is
-  unsigned and its installer has not been compiled. `app/windows/README.md` says what was measured
-  and what was not.
+  the daemon and a Node runtime bundled beside it, a per-user installer and the workflow that
+  builds both. It is not in the npm package and there is nothing to download yet: the build is
+  not signed, so Windows would warn on it. `app/windows/README.md` says what was measured and what
+  was not.
 
 ### Changed
 
