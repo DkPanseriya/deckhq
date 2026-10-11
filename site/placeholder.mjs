@@ -101,7 +101,8 @@ export function placeholderTones(css) {
   /** @type {Record<string, [number, number, number]>} */
   const tones = {};
   for (const m of css.matchAll(/--ph-([a-z]+):\s*#([0-9a-f]{6})\b/gi)) {
-    tones[m[1]] = [0, 2, 4].map((i) => parseInt(m[2].slice(i, i + 2), 16));
+    const channel = (/** @type {number} */ i) => parseInt(m[2].slice(i, i + 2), 16);
+    tones[m[1]] = [channel(0), channel(2), channel(4)];
   }
   return tones;
 }

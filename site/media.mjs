@@ -29,6 +29,16 @@ import { fileURLToPath } from 'node:url';
 import { inspectMp4 } from '../scripts/lib/mp4-mux.mjs';
 import { largeWidth } from '../scripts/lib/site-still.mjs';
 import { placeholderFor } from './placeholder.mjs';
+import {
+  BIG,
+  HQ_BUDGET,
+  HQ_OUT,
+  ROOM_CINEMA,
+  clipSources,
+  hqClip,
+  hqHave,
+  publishHq,
+} from './hq.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -100,6 +110,8 @@ export const BUDGET = {
    */
   type: 560 * 1024,
 };
+
+export { BIG, HQ_BUDGET, HQ_OUT, ROOM_CINEMA, clipSources, hqClip, hqHave, publishHq };
 
 /** Where the pictures of the 3D office sit, under `MEDIA_DIR` and under `media/`. */
 export const DIR_3D = '3d';
@@ -347,11 +359,17 @@ export function publishMedia(outDir, files) {
  * And each gets a `ph-*` class naming the placeholder tone nearest its own
  * colour, so the box a lazy picture arrives into is not an empty dark one.
  *
+ * A clip of the 3D office that this build has at full quality (`hq.mjs`) is
+ * offered by screen: see `clipSources`. A page says a clip is shown in the
+ * wide stage with `data-stage="cinema"` on its picture, which is what lets
+ * the 3840-pixel file be offered at all.
+ *
  * @param {string} body
  * @param {string} outDir where the pictures were copied to
  * @param {Record<string, [number, number, number]>} [tones] `placeholderTones()`
+ * @param {Map<string, import('./hq.mjs').HqFile>} [have] `hqHave()`
  */
-export function dressImages(body, outDir, tones = {}) {
+export function dressImages(body, outDir, tones = {}, have = new Map()) {
   const loops = declaredLoops();
   const listed = media3d();
   return body.replace(/<img\b[^>]*>/g, (tag) => {
@@ -371,13 +389,19 @@ export function dressImages(body, outDir, tones = {}) {
     // an ordinary screen takes the dense file where the room is that wide,
     // and a phone the plain one. `sizes` says how much room, and a page that
     // shows one narrower than the column says so itself.
+    const cinema = attr(tag, 'data-stage') === 'cinema';
     if (pair && !attr(tag, 'srcset') && is3d(src.replace(/^media\//, ''))) {
-      extra += ` srcset="${src} ${size.width}w, ${dense(src)} ${size.width * 2}w"`;
-      if (!attr(tag, 'sizes')) extra += ` sizes="${ROOM_3D}"`;
+      // A clip's first frame at full quality is one more width to choose from.
+      const first = hqClip(path.basename(src, '.png'), have).first;
+      const widest = first ? `, ${first.src} ${first.width}w` : '';
+      extra += ` srcset="${src} ${size.width}w, ${dense(src)} ${size.width * 2}w${widest}"`;
+      if (!attr(tag, 'sizes')) extra += ` sizes="${cinema ? ROOM_CINEMA : ROOM_3D}"`;
     } else if (pair && !attr(tag, 'srcset')) extra += ` srcset="${src} 1x, ${dense(src)} 2x"`;
     if (!/\sfetchpriority="high"/.test(tag) && !attr(tag, 'loading')) extra += ' loading="lazy"';
     if (!attr(tag, 'decoding')) extra += ' decoding="async"';
-    const img = tag.replace(/\s+data-narrow="[^"]*"/, '').replace(/\s*\/?>$/, `${extra} />`);
+    const img = tag
+      .replace(/\s+data-(?:narrow|stage)="[^"]*"/g, '')
+      .replace(/\s*\/?>$/, `${extra} />`);
     // `data-narrow` names a closer crop of the same thing for a phone, where a
     // whole window would be a thumbnail. It becomes a `<source>` with its own
     // size, so the page holds the right room for whichever one is shown.
@@ -424,11 +448,22 @@ export function dressImages(body, outDir, tones = {}) {
         ? `<source src="media/${narrowOf(loop)}" type="video/mp4" ` +
           `media="${NARROW} and ${MOTION}" />`
         : '';
+      // A clip of the 3D office this build has at full quality: by screen.
+      const hq = is3d(loop) ? hqClip(loop.slice(DIR_3D.length + 1), have) : null;
+      const sources = hq
+        ? clipSources({
+            base: `media/${loop}.mp4`,
+            mid: hq.mid,
+            big: hq.big,
+            cinema,
+            narrow: NARROW,
+            motion: MOTION,
+          })
+        : `${small}<source src="media/${loop}.mp4" type="video/mp4" media="${MOTION}" />`;
       return (
         `<span class="loop">${img}<video${first ? ' autoplay' : ''} muted loop playsinline ` +
         `preload="${first ? 'metadata' : 'none'}" width="${video.width / 2}" ` +
-        `height="${video.height / 2}" aria-hidden="true" tabindex="-1">${small}` +
-        `<source src="media/${loop}.mp4" type="video/mp4" media="${MOTION}" /></video></span>`
+        `height="${video.height / 2}" aria-hidden="true" tabindex="-1">${sources}</video></span>`
       );
     }
     if (!src.endsWith('.gif')) return img;
@@ -500,7 +535,13 @@ export function pageWeight(outDir, rel, opts = {}) {
   // every wider screen.
   if (!videos) return bytes;
   for (const [, tag, inner] of html.matchAll(/(<video\b[^>]*>)([\s\S]*?)<\/video>/g)) {
-    const sources = [...inner.matchAll(/<source\b[^>]*\ssrc="([^"]+)"[^>]*>/g)];
+    // The full-quality sources are not counted: they are sent only to a wide
+    // screen on a connection that can carry them, and weigh megabytes each by
+    // design. What is counted is the page as a phone, a slow connection and a
+    // build without those files are sent it; `HQ_BUDGET` holds the rest.
+    const sources = [...inner.matchAll(/<source\b[^>]*\ssrc="([^"]+)"[^>]*>/g)].filter(
+      (s) => !/\sdata-hq\b/.test(s[0]),
+    );
     const pick = sources.find((s) => /max-width/.test(s[0]) === Boolean(opts.narrow));
     const src = (pick ?? sources[sources.length - 1] ?? [])[1];
     if (!src || (!all && !/\sautoplay[\s>]/.test(tag)) || seen.has(src)) continue;

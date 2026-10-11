@@ -42,13 +42,21 @@ jobs:
         with:
           node-version: 22
 
+      - name: Fetch the 3D office's clips at full quality
+        # Too heavy for the repository, so they are files of one of its own
+        # releases; site/3d-hq.json lists each by SHA-256 and a file that does
+        # not hash to its listed value is refused. Never a reason the site does
+        # not ship: without the whole set the pages are built with the clips
+        # that are in the repository, and nothing points at a missing file.
+        run: node scripts/site-hq.mjs fetch || echo "::warning::the full-quality clips were not fetched; the site is built without them"
+
       - name: Build the site
         run: node site/build.mjs
 
       - name: Assert the site fetches nothing from anywhere else
         # The same test CI runs, run again here against the bytes about to be
         # published. The site keeps the product's promise or it does not ship.
-        run: npm test -- test/unit/site.test.mjs
+        run: npm test -- test/unit/site.test.mjs test/unit/site-hq.test.mjs
 
       - uses: actions/configure-pages@v5
 

@@ -119,6 +119,19 @@
   /* A loop is fetched and played when it is scrolled to and paused when it
      leaves; none plays for a reader who asked for less motion. */
   const loops = document.querySelectorAll('.loop video');
+  /* A reader whose browser is set to save data is not sent a full-quality
+     clip. (The browser's guess at the connection is not used: it was wrong.) */
+  const link = navigator.connection;
+  if (link && link.saveData) {
+    loops.forEach(function (video) {
+      const heavy = video.querySelectorAll('source[data-hq]');
+      if (!heavy.length) return;
+      heavy.forEach(function (source) {
+        source.remove();
+      });
+      video.load();
+    });
+  }
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     loops.forEach(function (video) {
       video.removeAttribute('autoplay');

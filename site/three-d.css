@@ -307,6 +307,18 @@
   font-size: var(--t-body);
 }
 
+/* THE WIDE STAGE (site/hq.mjs): on a wide window a clip leaves the column, up
+   to 120rem and never taller than the window. Margins, not a transform, so
+   the page gains no sideways scroll. */
+@media (min-width: 88rem) {
+  .shot--cinema {
+    --stage: max(100%, min(calc(100vw - 6rem), 120rem, calc((100vh - 9rem) * 16 / 9)));
+    width: var(--stage);
+    max-width: none;
+    margin-inline: calc((100% - var(--stage)) / 2);
+  }
+}
+
 /* A clip of the 3D office is the shape of its first frame, corner to corner. */
 .shot3d video {
   object-position: 50% 50%;

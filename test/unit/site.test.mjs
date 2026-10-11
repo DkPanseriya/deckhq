@@ -117,10 +117,14 @@ const FORWARDS = {
 
 before(() => {
   out = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-site-'));
-  const built = spawnSync(process.execPath, [path.join(siteDir, 'build.mjs'), '--out', out], {
-    cwd: root,
-    encoding: 'utf8',
-  });
+  // Without the 3D office's clips at full quality, whether or not this machine
+  // has fetched them: every test here is then the same test everywhere.
+  // `site-hq.test.mjs` builds the site both ways.
+  const built = spawnSync(
+    process.execPath,
+    [path.join(siteDir, 'build.mjs'), '--out', out, '--hq', 'none'],
+    { cwd: root, encoding: 'utf8' },
+  );
   assert.equal(built.status, 0, `site build failed:\n${built.stderr}`);
 });
 

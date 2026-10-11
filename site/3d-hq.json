@@ -1,0 +1,93 @@
+{
+  "tag": "site-media-3d-1",
+  "files": [
+    {
+      "name": "clip-orbit-1440.mp4",
+      "kind": "clip",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 25418843,
+      "sha256": "e2dca697e87ca6806c6ab30b2cb82e366e8d57b8940185b28fb64346bd08ddd6"
+    },
+    {
+      "name": "clip-orbit-2160.mp4",
+      "kind": "clip",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 73893777,
+      "sha256": "8eb883713ca0ff7bc6065315429e9afe01dea70b7e9e0b050cfca4f82632c427"
+    },
+    {
+      "name": "clip-orbit-first-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 2806361,
+      "sha256": "a699155782f2889950e9ccf5bf2f755697de7b23d35b3fa0616624ee0d65aa89"
+    },
+    {
+      "name": "clip-rise-1440.mp4",
+      "kind": "clip",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 15076799,
+      "sha256": "3a5f97f5d8721fd669a2d8b854166bc1c2ed30d89f2a9b0cb0d4bbcf95e2dbff"
+    },
+    {
+      "name": "clip-rise-2160.mp4",
+      "kind": "clip",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 44005939,
+      "sha256": "7bc69564de7e8cbb0a74e0225702cc6632ea50fdd9d048e32d5076d3ffeaad83"
+    },
+    {
+      "name": "clip-rise-first-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 1644121,
+      "sha256": "ce56b89ded73f40d9dfbf718b7118c673583fc2f6da0b5ca509a6299bd95a61a"
+    },
+    {
+      "name": "clip-states-1440.mp4",
+      "kind": "clip",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 8738722,
+      "sha256": "2798aee6dc6149126d837efe47271a8ae8a8ba85dea9833e551dc7d38cf16afc"
+    },
+    {
+      "name": "clip-states-first-1920.png",
+      "kind": "still",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 1054079,
+      "sha256": "342082b9403d53a9e83ede689b3c8f355a2925fe99056b6f6fbda732da9f7cae"
+    },
+    {
+      "name": "clip-walkthrough-1440.mp4",
+      "kind": "clip",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 26027238,
+      "sha256": "34251128d4972467216dfc06a5b466cd5b33b41bc60778c3e8fece919f9716c5"
+    },
+    {
+      "name": "clip-walkthrough-2160.mp4",
+      "kind": "clip",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 75140892,
+      "sha256": "b7594827c9ff83351b4882b30477fc0d79631f39824afe3c3916682dc2dc4857"
+    },
+    {
+      "name": "clip-walkthrough-first-2560.png",
+      "kind": "still",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 2258720,
+      "sha256": "fec311d281973bf3e17490079d3a12e4d8c4731ad6bb8a8c4a678971c5969405"
+    }
+  ]
+}

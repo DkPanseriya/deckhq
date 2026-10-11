@@ -36,16 +36,19 @@ import {
   COMING,
   declaredMedia,
   dressImages,
+  hqHave,
   imageSize,
   MEDIA_DIR,
   media3d,
   NARROW,
   pageWeight,
+  publishHq,
   publishMedia,
   referencedMedia,
   resolveClips,
   resolveOptional,
 } from './media.mjs';
+import { HQ_DIR, HQ_MANIFEST } from './hq.mjs';
 import { placeholderTones } from './placeholder.mjs';
 import {
   announceBar,
@@ -70,6 +73,14 @@ const opt = (name, fallback) => {
   return i !== -1 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 const OUT = path.resolve(opt('--out', path.join(here, 'dist')));
+/**
+ * The 3D office at full quality (`site/hq.mjs`): `--hq <folder>` says where
+ * the files are, `--hq none` builds without them, and `--hq-manifest <file>`
+ * names another list. By default the folder is `site/hq/`, which is empty on
+ * every machine that has not fetched them.
+ */
+const HQ_FROM = opt('--hq', HQ_DIR) === 'none' ? null : path.resolve(opt('--hq', HQ_DIR));
+const HQ_LIST = path.resolve(opt('--hq-manifest', HQ_MANIFEST));
 const SERVE = argv.includes('--serve');
 const PORT = Number(opt('--port', 4600));
 
@@ -627,10 +638,14 @@ function build() {
   }
   const media = publishMedia(OUT, [...shown]);
   written += media.count;
+  // The clips at full quality, when this machine has every one of them.
+  const have = hqHave({ dir: HQ_FROM, manifest: HQ_LIST });
+  const hq = publishHq(OUT, have, HQ_FROM ?? undefined);
+  written += hq.count;
 
   const tones = placeholderTones(read(path.join('site', STYLES[0])));
   for (const { page, body } of bodies) {
-    const html = shell({ ...page, body: dressImages(body, OUT, tones) });
+    const html = shell({ ...page, body: dressImages(body, OUT, tones, have) });
     assertNothingInternal(`${page.slug}.html`, html);
     write(`${page.slug}.html`, html);
   }
@@ -720,7 +735,12 @@ function build() {
       `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
       ` (${PAGES.length - REDIRECTS.length} pages, ${REDIRECTS.length} forwarding addresses,` +
       ` ${releases.length} releases, ${media.count} pictures` +
-      ` at ${(media.bytes / 1024 / 1024).toFixed(1)} MB, ${INSTALLERS.length} installers)\n`,
+      ` at ${(media.bytes / 1024 / 1024).toFixed(1)} MB, ${INSTALLERS.length} installers)\n` +
+      (hq.count
+        ? `site: the 3D office at full quality: ${hq.count} files, ` +
+          `${(hq.bytes / 1024 / 1024).toFixed(0)} MB, sent to wide screens only\n`
+        : 'site: the 3D office at full quality is not on this machine ' +
+          '(node scripts/site-hq.mjs fetch); its clips are the 1280-pixel ones\n'),
   );
 }
 

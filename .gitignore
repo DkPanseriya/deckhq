@@ -24,6 +24,9 @@ test/goldens/.out/
 # Whole uncropped frames from `node scripts/site-assets.mjs --survey`, which is
 # how a crop rectangle gets chosen. Generated, never committed.
 site/.survey/
+# The 3D office's clips at full quality: fetched from a release by hash
+# (scripts/site-hq.mjs), never committed. site/3d-hq.json is the list.
+site/hq/
 
 # Agent worktrees, created by the orchestrator. Never committed.
 .claude/worktrees/
