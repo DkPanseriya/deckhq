@@ -192,6 +192,8 @@ export async function loadRenderModules({
           if (sel.kind === 'shelf') return revealProjectFolder(sel.id);
           if (sel.kind === 'screen') return runProjectDashboard(sel.id);
           if (sel.kind === 'resting') return openResting();
+          // A header with nothing behind it: a press there is a press on the floor.
+          if (sel.kind === 'room') return selectAgent(null);
           selectAgent(sel.id);
         },
         onHover: (hit) => {
@@ -207,12 +209,10 @@ export async function loadRenderModules({
           // tooltip rather than a second floating card: a title attribute
           // costs no paint, no layout and no keyboard trap, and it is read
           // aloud by a screen reader that the canvas cannot otherwise reach.
-          const plate =
-            sel && sel.kind === 'project'
-              ? scene.plateTooltipFor(sel.id)
-              : sel && sel.kind === 'resting'
-                ? 'Everybody resting in the lounge. Open the list.'
-                : '';
+          // The room header moved the words here: every slot of its strip is a
+          // symbol and a number on the floor, and a sentence on the hover — and
+          // everything else that can be pressed says what a press does.
+          const plate = sel ? scene.hoverTitleFor(sel) : '';
           if (plate) el.canvas.title = plate;
           else el.canvas.removeAttribute('title');
         },

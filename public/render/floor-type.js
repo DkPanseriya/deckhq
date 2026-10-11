@@ -174,6 +174,9 @@ export function typeFont(name, px, exact) {
  *   plateCount   its hero: "6 waiting · oldest 1d 2h"
  *   plateDoing   what the room is doing
  *   plateTokens  the day's spend: "today 5.8M tok · with cache"
+ *   barTitle     a room's name on its title bar
+ *   barCount     a number in a slot of its status strip
+ *   barDim       a slot at zero, kept in its place and dimmed
  *   chip         the Lounge's "+N resting", a crew's "+N", a worktree's name
  *   roleChip     "Junior", a sub-agent's role, over its name
  *   bubble       a tool's line over a head
@@ -185,6 +188,9 @@ export const TEXT_KINDS = Object.freeze([
   'plateCount',
   'plateDoing',
   'plateTokens',
+  'barTitle',
+  'barCount',
+  'barDim',
   'chip',
   'roleChip',
   'bubble',
@@ -236,13 +242,12 @@ export function badgeInk(fill) {
  * name whose ink was the theme's, is how the night shift's names came to be
  * white on white.
  *
- * A ROOM'S PLATE IS SET BARE, all four lines: no outline and no card (R-082,
- * the owner's own words). Two lines bare and two outlined read as two
- * typefaces in one block (the owner, 11 October 2026: "the font styling looks
- * off when some text has outlines and some don't"). So the two quiet lines
- * take the name's ink, which is held to the floor itself in every light and
- * style, and the plate's order is carried by size and weight alone: the count
- * bold and largest, the name bold, the two lines under them medium and small.
+ * A ROOM'S HEADER HAS A GROUND OF ITS OWN (`room-header.js`): the three `bar*`
+ * kinds are its name, a number in a slot and a slot at zero, all on the halo.
+ * That replaces R-082 — "no background behind the plate" — at its author's
+ * own request (11 October 2026). The four `plate*` kinds are the lines the
+ * plate used to set bare on the floor; nothing on the floor draws them now,
+ * and they are kept, measured, for a surface that sets a room's lines as text.
  *
  * @param {string} kind one of `TEXT_KINDS`
  * @param {string} [state] for a badge: the state whose colour its pill is
@@ -254,6 +259,9 @@ export function textPaint(kind, state) {
       return { ink: PALETTE.plateInkSecondary, backing: null };
     case 'plateCount':
       return { ink: PALETTE.plateInk, backing: null };
+    case 'barDim':
+      // A slot at zero, and the pin: the quietest ink, on the bar's own ground.
+      return { ink: PALETTE.plateInkTertiary, backing: PALETTE.plateHalo };
     case 'plateDoing':
     case 'plateTokens':
       return { ink: PALETTE.plateInkSecondary, backing: null };

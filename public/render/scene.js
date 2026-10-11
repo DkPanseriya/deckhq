@@ -411,9 +411,40 @@ export class Scene extends SceneInput {
    */
   plateTooltipFor(id) {
     for (const plate of this._plateRects) {
-      if (plate.id === id && plate.kind === 'project') return plate.tooltip || '';
+      if (plate.id === id) return plate.tooltip || '';
     }
     return '';
+  }
+
+  /**
+   * WHAT A HOVER SAYS, for everything on the floor that is not a person: a
+   * room's header in words — its symbols have none — and, for each thing that
+   * can be pressed, what a press does. `''` for anything with nothing to say.
+   * @param {{kind:string, id:string}} hit
+   * @returns {string}
+   */
+  hoverTitleFor(hit) {
+    if (!hit) return '';
+    const header =
+      hit.kind === 'project' || hit.kind === 'room' ? this.plateTooltipFor(hit.id) : '';
+    switch (hit.kind) {
+      case 'project':
+        return header ? `${header}. Press to show only this room.` : '';
+      case 'room':
+        return header;
+      case 'new-agent':
+        return 'Start a new agent in this room.';
+      case 'whiteboard':
+        return 'The room’s board: who is in it and what each is doing. Press to open it.';
+      case 'shelf':
+        return 'Open this project’s folder.';
+      case 'screen':
+        return 'Run this project’s dashboard.';
+      case 'resting':
+        return 'Everybody resting in the lounge. Open the list.';
+      default:
+        return '';
+    }
   }
 
   /**

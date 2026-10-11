@@ -19,11 +19,13 @@ import { formatTokens, plateHeroLine, plateTertiaryLine, restingChipLine } from 
 // leaf of pure numbers, and `plan.js` is already at the 900-line ceiling.
 import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
-import { formatElapsed, labelHaloWidth } from './rig.js';
-import { deviceScaleOf, snapPx, snapWidth } from './device-px.js';
+import { formatElapsed } from './rig.js';
+import { snapPx, snapWidth } from './device-px.js';
 import { textWidth } from './text-metrics.js';
 import { labelFontSize } from './rig-metrics.js';
-import { textPaint, typeFont } from './floor-type.js';
+import { typeFont } from './floor-type.js';
+import { LOOK, roomAccentFor } from './look-derive.js';
+import { layoutHeader, paintHeader, roomHeaderFor } from './room-header.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 import { waitingSince } from '../floor-rule.js';
 import { worldToScreen } from './agents.js';
@@ -111,7 +113,7 @@ export function ellipsise(ctx, text, maxW, font) {
  * @param {number} now ms epoch, from the injected clock
  * @returns {{oldest:number, state:string|null}}
  */
-function longestWait(agents, now) {
+export function longestWait(agents, now) {
   let oldest = 0;
   /** @type {string|null} */
   let state = null;
@@ -602,8 +604,7 @@ export function plateLimit(room, badgeBoxes, camera) {
   return limit;
 }
 
-/** The state dot's radius, and the gap it leaves before the hero's first glyph. */
-const PLATE_DOT_R = 2.6;
+/** The gap the hero's state dot leaves before its first glyph. */
 const PLATE_DOT_GAP = 9;
 
 /**
@@ -704,85 +705,51 @@ export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
 
 export class SceneLabels extends SceneBake {
   /**
-   * The room's name and the three ranked lines under it, as plain text
-   * directly on the floor — no card, no fill, no border, no rounded rect
-   * (CONTRACTS-WP15.md §3 and `00-REQUIREMENTS.md` R-082: "do not make white
-   * background pop up box, maybe just minimal fonts without background
-   * colour"). `10-INTERIOR-DESIGN.md` §3.8 wanted the plate to become a quiet
-   * CARD; it is refused here and the reason is R-082, which is the owner's own
-   * words about this exact object and is marked done. What §3.8 actually needs
-   * from a card — that nothing on the plate out-shouts the wall — is kept by
-   * deriving `plateHalo` from the theme's `wall` instead of from a hard-coded
-   * near-white, so the brightest thing behind a plate is now exactly the
-   * brightest surface a room is allowed (`themes.js`).
+   * A ROOM'S HEADER: its title bar and, under it, its strip of symbols and
+   * numbers (`room-header.js`), with a ground of its own.
    *
-   * Where each row goes is `layoutPlate`'s: the band decides how many rows are
-   * drawn, in `PLATE_KEEP_ORDER`, and the title and the hero are never dropped.
+   * R-082 IS REPLACED, AND BY THE PERSON WHO WROTE IT. `00-REQUIREMENTS.md`
+   * R-082 was the owner's own words about this object — "do not make white
+   * background pop up box, maybe just minimal fonts without background
+   * colour" — and for as long as it stood, the plate was four lines of words
+   * set bare on the floor (CONTRACTS-WP15.md §3) and a card was refused here
+   * on its authority. On 11 October he asked for the opposite: "in all rooms
+   * make a top bar for title / room name / repo name, with some background to
+   * the textbar", and under it symbols and numbers in fixed slots, no words.
+   * So the plate is a header now. What R-082 was protecting is kept another
+   * way: the ground is `plateHalo`, the theme's own wall tone, so it is never
+   * a white box and never brighter than the walls it hangs under
+   * (`floor-contrast.test.mjs` holds both).
+   *
+   * The words the plate printed — the longest wait, what the room is doing,
+   * the day's tokens in full, the room's size — are the hover's
+   * (`_headerFor`), in a sentence, so nothing was lost by taking them off the
+   * floor.
+   *
    * `layout` is the one the frame already measured for its label pass; a caller
    * without one gets it measured here.
    */
   _drawRoomPlate(room, camera, layout) {
     const ctx = this.ctx;
-    // The frame's layout carries the lines it was measured from (`scene-frame.js`).
-    const plate = (layout && layout.plate) || this._platePlanFor(room);
-    const laid = layout || layoutPlate(ctx, room, plate, camera);
-    const k = laid.k;
-    const dev = deviceScaleOf(ctx);
-
-    ctx.save();
-    // Text state is global and the rig can leave textAlign at 'center'.
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    // A halo, not a card: a pale outline separates the letterforms from the
-    // herringbone seams behind them without putting a box back on the floor.
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 2;
-
-    for (const row of laid.rows) {
-      ctx.font = row.font;
-      if (row.dotted) {
-        // State is never colour alone on this floor: the dot is the state, the
-        // words beside it say the same thing.
-        const cy = row.y - row.px / 3;
-        ctx.beginPath();
-        ctx.arc(row.x + PLATE_DOT_R * k, cy, PLATE_DOT_R * k, 0, Math.PI * 2);
-        ctx.fillStyle = PALETTE.plateHalo;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(row.x + PLATE_DOT_R * k, cy, PLATE_DOT_R * 0.72 * k, 0, Math.PI * 2);
-        ctx.fillStyle = plate.dot;
-        ctx.fill();
-      }
-      // The name is context — which room — and the hero is the message: what
-      // to do. Every row of a plate is set BARE, with no outline round it: its
-      // ink is held to the floor itself (`floor-type.js`, `textPaint`). The
-      // stroke below is for a kind of text that does carry a backing.
-      const paint = textPaint(PLATE_KINDS[row.i]);
-      // The baseline and the left edge on whole device pixels, so a row is the
-      // same row in every room.
-      const tx = snapPx(ctx, row.x + row.dotted);
-      const ty = snapPx(ctx, row.y);
-      if (paint.backing) {
-        ctx.strokeStyle = paint.backing;
-        // 0.16 of the type and never under a device pixel and a half, which is
-        // a figure's name's own rule (`labelHaloWidth`).
-        ctx.lineWidth = Math.max(row.halo, labelHaloWidth(row.px, dev));
-        ctx.strokeText(row.text, tx, ty);
-      }
-      ctx.fillStyle = paint.ink;
-      ctx.fillText(row.text, tx, ty);
-    }
-    ctx.restore();
-
-    // No card is drawn, but a room plate is still click-to-filter (VISUAL-SPEC
-    // §8): the hit rect wraps every line that was drawn, and `tooltip` rides
-    // along so the hover can say what the plate does not (WP-81).
-    this._plateRects.push({
-      ...laid.rect,
-      kind: room.kind === 'project' ? 'project' : room.kind,
-      id: room.id,
-      tooltip: plate.tooltip,
+    // The frame's layout carries the header it was measured from (`scene-frame.js`).
+    const header = (layout && layout.header) || this._headerFor(room);
+    const laid =
+      layout && layout.bar
+        ? layout
+        : layoutHeader(ctx, room, header, camera, plateScaleFor(camera.zoom * camera.U));
+    const kind = room.kind === 'project' ? 'project' : room.kind;
+    const hovered =
+      !!this._hoveredTarget &&
+      this._hoveredTarget.kind === kind &&
+      this._hoveredTarget.id === room.id;
+    paintHeader(ctx, laid, {
+      accent: room.kind === 'project' ? roomAccentFor(LOOK, room.projectMk) : null,
+      // Only a bar that DOES something on a press is lit under the pointer.
+      hovered: hovered && kind === 'project',
     });
+    // The whole header is the hit rect — a press anywhere on it is a press on
+    // the room — and `tooltip` rides along: it is where the words are now.
+    this._plateRects.push({ ...laid.rect, kind, id: room.id, tooltip: header.tooltip });
   }
 
   /**
@@ -827,6 +794,23 @@ export class SceneLabels extends SceneBake {
 
   _platePlanFor(room) {
     return platePlanFor(room, this._snapshot, this._plan);
+  }
+
+  /**
+   * One room's header (`room-header.js`), and in its tooltip everything the
+   * plate used to print that the strip does not: the longest wait, what the
+   * room is doing, the day's tokens in full and the room's size — in words.
+   */
+  _headerFor(room) {
+    const snap = this._snapshot || {};
+    const mine =
+      room.kind === 'project'
+        ? (snap.agents || []).filter((/** @type {any} */ a) => a && a.projectId === room.id)
+        : snap.agents || [];
+    const header = roomHeaderFor(room, snap, this._plan, longestWait(mine, clockNow()));
+    const plate = this._platePlanFor(room);
+    const more = [...plate.lines.slice(1), plate.tooltip].filter(Boolean);
+    return { ...header, tooltip: [header.tooltip, ...more].join(' · ') };
   }
 
   _plateLinesFor(room) {

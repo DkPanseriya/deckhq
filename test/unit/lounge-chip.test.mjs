@@ -280,7 +280,7 @@ test('a click on the chip opens the deck on the people resting', () => {
   assert.match(read('render/scene-labels.js'), /kind: 'resting', id: '__lounge__'/);
   assert.match(read('render/scene-draw.js'), /this\._drawLoungeChip\(camera\);/);
   const app = read('app.js');
-  assert.match(app, /'screen', 'resting'\]/, 'the app drops the chip as an unknown hit');
+  assert.match(app, /'screen', 'resting'[,\]]/, 'the app drops the chip as an unknown hit');
   assert.match(app, /openResting: \(\) => deckUI\?\.openResting\(\)/);
   assert.match(app, /getResting: \(\) => restingAgentsOf\(latestSnapshot/);
   assert.match(read('app-floor.js'), /if \(sel\.kind === 'resting'\) return openResting\(\);/);

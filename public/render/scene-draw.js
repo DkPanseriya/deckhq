@@ -18,6 +18,7 @@ import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './pa
 import { rigSeatOf, worldToScreen } from './agents.js';
 import { BADGE_MIN_PX_PER_UNIT, juniorScaleFor } from './scene-lod.js';
 import { PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
+import { paintBoardLive, paintPressable } from './room-header.js';
 import { SceneFrame, waitingBadgeMs } from './scene-frame.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
@@ -378,6 +379,25 @@ export class SceneDraw extends SceneFrame {
     // back as they were otherwise (`scene-frame.js`).
     const { charU, badgePlan, plates, labels } = this._layoutFrame(ctx, records, camera);
 
+    // THE ROOM HEADERS, UNDER EVERYBODY. A header has a ground of its own now, so
+    // it is part of the room and not a caption over it: a wait badge that
+    // reaches into the band is drawn over the bar, never under it.
+    this._plateRects = [];
+    this._fixtureRects = [];
+    if (this._plan) {
+      for (const room of this._plan.rooms) {
+        // A corridor has no name and no data line. It used to be measured,
+        // ellipsised and hit-registered every frame anyway, which on the
+        // current plan is two thirds of the rooms on the floor.
+        if (room.kind === 'corridor') continue;
+        this._drawRoomPlate(room, camera, plates.get(room.id));
+        // The whiteboard/shelf/screen/"+" are project-room fixtures only —
+        // the office and lounge have neither a project to launch nor a
+        // whiteboard.
+        if (room.kind === 'project') this._drawRoomFixtures(room, camera, plates.get(room.id));
+      }
+    }
+
     // WP-89 · THE CREWS, UNDER THE BODIES. §1.5: everything this design draws
     // sits under the chrome band, and a cable that ran over a face would be the
     // clearest possible way of breaking that. The routes were baked into the
@@ -407,6 +427,9 @@ export class SceneDraw extends SceneFrame {
       this._drawCharacterAt(rec, camera, lod, labels, badgePlan);
     }
 
+    // The lounge's `+N resting`, where it holds more people than it draws.
+    if (this._plan) this._drawLoungeChip(camera);
+
     // The aggregate pills, over the characters whose own badges they replace.
     // After the loop rather than inside it: a pill stands for a whole row, so
     // it belongs to no one character and must not be painted under the next
@@ -428,24 +451,6 @@ export class SceneDraw extends SceneFrame {
           STATE_COLORS.for_review,
         );
       }
-    }
-
-    this._plateRects = [];
-    this._fixtureRects = [];
-    if (this._plan) {
-      for (const room of this._plan.rooms) {
-        // A corridor has no name and no data line. It used to be measured,
-        // ellipsised and hit-registered every frame anyway, which on the
-        // current plan is two thirds of the rooms on the floor.
-        if (room.kind === 'corridor') continue;
-        this._drawRoomPlate(room, camera, plates.get(room.id));
-        // The whiteboard/shelf/screen/"+" are project-room fixtures only —
-        // the office and lounge have neither a project to launch nor a
-        // whiteboard.
-        if (room.kind === 'project') this._drawRoomFixtures(room, camera);
-      }
-      // The lounge's `+N resting`, where it holds more people than it draws.
-      this._drawLoungeChip(camera);
     }
 
     ctx.restore();
@@ -627,14 +632,39 @@ export class SceneDraw extends SceneFrame {
    * @param {import('./plan.js').Room} room
    * @param {{zoom:number,panX:number,panY:number,U:number}} camera
    */
-  _drawRoomFixtures(room, camera) {
+  _drawRoomFixtures(room, camera, header) {
+    const ctx = this.ctx;
     const props = room.props || [];
     for (const kind of ['whiteboard', 'shelf', 'screen']) {
       const prop = props.find((p) => p.kind === kind);
       if (!prop) continue;
-      this._fixtureRects.push({ ...this._propRectScreen(prop, camera), kind, id: room.id });
+      const rect = this._propRectScreen(prop, camera);
+      this._fixtureRects.push({ ...rect, kind, id: room.id });
+      // The board is the one fixture that is a screen: lit a little at rest,
+      // and under the pointer it says it can be pressed.
+      if (kind === 'whiteboard') {
+        const hot = this._hoveredTarget;
+        paintBoardLive(ctx, rect, {
+          states: this._boardStatesFor(room.id),
+          hovered: !!hot && hot.kind === 'whiteboard' && hot.id === room.id,
+        });
+      }
     }
-    this._drawPlusAffordance(room, camera);
+    this._drawPlusAffordance(room, camera, header && header.plus);
+  }
+
+  /**
+   * Which states a room has somebody in, most urgent first: the lines its
+   * board is lit with. Read off the snapshot, so a board never claims a state
+   * nobody in the room is in.
+   * @param {string} projectId @returns {string[]}
+   */
+  _boardStatesFor(projectId) {
+    const seen = new Set();
+    for (const a of (this._snapshot && this._snapshot.agents) || []) {
+      if (a && a.projectId === projectId && a.ackState === 'active') seen.add(a.activityState);
+    }
+    return ['for_review', 'needs_input', 'stalled', 'working'].filter((s) => seen.has(s));
   }
 
   /**
@@ -649,23 +679,24 @@ export class SceneDraw extends SceneFrame {
    * @param {import('./plan.js').Room} room
    * @param {{zoom:number,panX:number,panY:number,U:number}} camera
    */
-  _drawPlusAffordance(room, camera) {
+  _drawPlusAffordance(room, camera, spot) {
     const ctx = this.ctx;
     const spotWorld = { x: room.x + room.w - PLUS_MARGIN_U, y: room.y + PLUS_MARGIN_U };
-    const s = worldToScreen(spotWorld, camera);
+    // In the title bar, at its right end (`room-header.js`), where a header was
+    // laid out; the room's own corner for a caller that has none.
+    const s = spot ? { x: spot.cx, y: spot.cy } : worldToScreen(spotWorld, camera);
     const u = U * camera.zoom;
     const hovered =
       !!this._hoveredTarget &&
       this._hoveredTarget.kind === 'new-agent' &&
       this._hoveredTarget.id === room.id;
-    const armLen = u * PLUS_SIZE_U * 0.5 * (hovered ? 1.15 : 1);
+    const armLen = (spot ? spot.r : u * PLUS_SIZE_U * 0.5) * (hovered ? 1.15 : 1);
 
     ctx.save();
     if (hovered) {
-      ctx.fillStyle = PALETTE.plusHoverHalo;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, armLen * 1.7, 0, Math.PI * 2);
-      ctx.fill();
+      // The floor's one hover language (`paintPressable`): a wash and a line.
+      const half = armLen * 1.75;
+      paintPressable(ctx, { x: s.x - half, y: s.y - half, w: half * 2, h: half * 2 }, 3);
     }
     ctx.strokeStyle = hovered ? PALETTE.plusHover : PALETTE.plusRest;
     ctx.lineWidth = Math.max(1.4, u * 0.11);
