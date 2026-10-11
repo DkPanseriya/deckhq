@@ -90,6 +90,15 @@ export const BUDGET = {
    * `clip` above and arrives over the picture, which is on the page first.
    */
   firstView3d: 900 * 1024,
+  /**
+   * The typeface, which a screen 40rem and wider is sent on top of everything
+   * above and a phone is not sent at all (`site/fonts.css`, linked with a
+   * media query): the sheet and three WOFF2 files, 540 KB measured on
+   * 11 October 2026. They are the files the product ships, unmodified, so
+   * this build cannot make them lighter; the ceiling is what they weigh. The
+   * words are on the page before any of it arrives (`font-display: swap`).
+   */
+  type: 560 * 1024,
 };
 
 /** Where the pictures of the 3D office sit, under `MEDIA_DIR` and under `media/`. */

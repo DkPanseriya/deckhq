@@ -300,7 +300,9 @@ test('SECURITY: the script fetches nothing and stores nothing', () => {
   }
 });
 
-test('SECURITY: the stylesheet loads no font, image or sheet from anywhere', () => {
+test('SECURITY: the stylesheet loads no font, image or sheet from anywhere, and declares no face', () => {
+  // The one sheet that DOES declare a face is `fonts.css`, which is held to
+  // the site's own files by the typeface's test below.
   for (const css of [
     ...STYLE_SOURCES.map((name) => path.join(siteDir, name)),
     path.join(out, 'style.css'),
@@ -1161,7 +1163,7 @@ test('the token set is one set, in one scheme, and it is the app’s', () => {
   assert.ok(Number(max[1]) * 16 <= 96, `the display step tops out at ${Number(max[1]) * 16} px`);
   assert.ok(Number(max[1]) * 16 >= 64, `the display step tops out at ${Number(max[1]) * 16} px`);
 
-  // No web font: the two families are named and never loaded.
+  // The lists a phone is shown: the machine's own faces, and no file.
   assert.match(t['--sans'], /system-ui/);
   assert.match(t['--mono'], /ui-monospace/);
 });
@@ -1328,17 +1330,84 @@ test('SECURITY: no file in the built site names another host', () => {
   // crawler can open: the stylesheet, the script, the sitemap and robots.txt.
   // (The two installers are the repository's own files and say where Node
   // comes from; they are checked byte for byte, and are not this site's words.)
+  // (And the typeface's two licence texts are their authors' words, which the
+  // licence says must travel with the files: they name where each typeface
+  // and the licence itself are published, and are held to exactly that.)
+  const licence = /^fonts[\\/]OFL-[A-Za-z]+\.txt$/;
   for (const file of walk(out, ['.css', '.js', '.txt', '.svg'])) {
+    const rel = path.relative(out, file);
     const text = fs.readFileSync(file, 'utf8');
     for (const m of text.matchAll(/(?:https?:)?\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
       const host = m[1].toLowerCase();
       if (host === SELF || host === 'www.w3.org') continue;
-      assert.fail(`${path.relative(out, file)} names ${host}`);
+      if (licence.test(rel) && ['github.com', 'scripts.sil.org'].includes(host)) continue;
+      assert.fail(`${rel} names ${host}`);
     }
   }
   // And nothing in the stylesheet or the script is fetched at all.
   const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
   assert.ok(!/url\(/i.test(css.replace(/\/\*[\s\S]*?\*\//g, '')), 'the stylesheet fetches a file');
+});
+
+test('the typeface is the product’s own files, served from here, and a phone is never sent one', async () => {
+  const { BUDGET, TYPE_FILES, TYPE_MEDIA } = await import('../../site/build.mjs');
+  // Byte for byte what the app ships (`floor-fonts.test.mjs` holds those to
+  // their provenance), with the licences and the provenance beside them.
+  assert.deepEqual(fs.readdirSync(path.join(out, 'fonts')).sort(), [...TYPE_FILES].sort());
+  for (const name of TYPE_FILES) {
+    assert.deepEqual(
+      fs.readFileSync(path.join(out, 'fonts', name)),
+      fs.readFileSync(path.join(root, 'public', 'fonts', name)),
+      `fonts/${name} on the site is not the file the product ships`,
+    );
+  }
+  assert.deepEqual(
+    fs.readFileSync(path.join(out, 'fonts.css')),
+    fs.readFileSync(path.join(siteDir, 'fonts.css')),
+  );
+
+  // THE ONE SHEET THAT DECLARES A FACE, and every file it names is one of ours.
+  const sheet = fs
+    .readFileSync(path.join(out, 'fonts.css'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/@import/i.test(sheet), '@import in fonts.css');
+  const urls = [...sheet.matchAll(/url\(\s*['"]?([^'")]+)/gi)].map((m) => m[1]);
+  assert.equal(urls.length, 3);
+  for (const url of urls) {
+    assert.match(url, /^fonts\/[A-Za-z0-9-]+\.woff2$/, `fonts.css fetches ${url}`);
+    assert.ok(TYPE_FILES.includes(url.slice('fonts/'.length)), `${url} is not published`);
+  }
+  for (const [, block] of sheet.matchAll(/@font-face\s*\{([^}]*)\}/g)) {
+    assert.match(block, /font-display:\s*swap/, 'a face that hides the words while it loads');
+  }
+  // Its lists end in the lists a phone is shown, so a file that never lands
+  // changes nothing but the face.
+  const tokens = tokensOf(fs.readFileSync(path.join(out, 'style.css'), 'utf8'), ':root');
+  const own = tokensOf(sheet, ':root');
+  assert.ok(own['--sans'].endsWith(tokens['--sans']), `--sans: ${own['--sans']}`);
+  assert.ok(own['--mono'].endsWith(tokens['--mono']), `--mono: ${own['--mono']}`);
+  assert.match(own['--sans'], /^'DeckHQ Sans', /);
+  assert.match(own['--mono'], /^'DeckHQ Mono', /);
+
+  // EVERY PAGE links it with the query, and with nothing that would fetch a
+  // font regardless of it: a phone downloads the 1.5 KB sheet and no file.
+  for (const name of fs.readdirSync(out).filter((f) => f.endsWith('.html'))) {
+    const html = fs.readFileSync(path.join(out, name), 'utf8');
+    if (/http-equiv="refresh"/.test(html)) continue;
+    const links = [...html.matchAll(/<link\b[^>]*href="fonts\.css"[^>]*>/g)].map((m) => m[0]);
+    assert.equal(links.length, 1, `${name} links the typeface ${links.length} times`);
+    assert.ok(links[0].includes(`media="${TYPE_MEDIA}"`), `${name}: ${links[0]}`);
+    assert.ok(!/<link\b[^>]*as="font"/.test(html), `${name} preloads a font for every screen`);
+  }
+  assert.equal(TYPE_MEDIA, '(min-width: 40rem)');
+
+  // WHAT A WIDE SCREEN IS SENT FOR IT, on top of the page: 540 KB.
+  let bytes = fs.statSync(path.join(out, 'fonts.css')).size;
+  for (const name of TYPE_FILES.filter((f) => f.endsWith('.woff2'))) {
+    bytes += fs.statSync(path.join(out, 'fonts', name)).size;
+  }
+  assert.ok(BUDGET.type <= 560 * 1024, 'the typeface budget was raised');
+  assert.ok(bytes <= BUDGET.type, `the typeface is ${(bytes / 1024).toFixed(0)} KB, over 560 KB`);
 });
 
 test('the page works with its script removed', () => {

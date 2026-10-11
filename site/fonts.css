@@ -1,0 +1,44 @@
+/*
+ * DeckHQ, the site: its typeface.
+ *
+ * The same files the product ships (`public/fonts/`, copied here by the build
+ * and never fetched from anywhere else): Inter for prose, JetBrains Mono for
+ * commands and code. `fonts/PROVENANCE.md` on the site names each file's
+ * source, licence and hash.
+ *
+ * THIS SHEET IS LINKED WITH A MEDIA QUERY — screens 40rem and wider — and that
+ * is the whole of how a phone is spared it: a sheet whose query does not hold
+ * is not applied, so its faces are never asked for. A phone's own interface
+ * face is a good one and a phone's connection is the one worth half a megabyte;
+ * a Windows desktop's fallback (Segoe UI, Consolas) is the one this replaces.
+ *
+ * `swap`: the words are on the page at once in the machine's own face, and
+ * are set again when the file lands.
+ */
+
+@font-face {
+  font-family: 'DeckHQ Sans';
+  src: url('fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DeckHQ Mono';
+  src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 100 599;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DeckHQ Mono';
+  src: url('fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --sans: 'DeckHQ Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'DeckHQ Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}

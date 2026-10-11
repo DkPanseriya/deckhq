@@ -20,8 +20,9 @@
  *
  * The product makes no outbound network call, and its site keeps the same
  * promise: every stylesheet, script and image on it is served from the site's
- * own origin or is not there at all. No analytics, no CDN, no web font, no
- * third-party frame.
+ * own origin or is not there at all. No analytics, no CDN, no font service,
+ * no third-party frame. The typeface is the product's own files, copied from
+ * `public/fonts/` and served from here (`site/fonts.css`).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -100,6 +101,22 @@ const PREVIEW_3D = '3d/office@2x.png';
 
 /** The stylesheet's sources, in the order they are joined into `style.css`. */
 const STYLES = ['style.css', 'components.css', 'three-d.css'];
+
+/**
+ * THE TYPEFACE. `fonts.css` is linked with this query, so a screen narrower
+ * than it — a phone — is never sent a font file: a sheet whose query does not
+ * hold is not applied, and a face that is not declared is not fetched.
+ */
+export const TYPE_MEDIA = '(min-width: 40rem)';
+/** What `public/fonts/` holds and the site serves from `fonts/`: fonts, licences, provenance. */
+export const TYPE_FILES = Object.freeze([
+  'InterVariable.woff2',
+  'JetBrainsMono-Regular.woff2',
+  'JetBrainsMono-Bold.woff2',
+  'OFL-Inter.txt',
+  'OFL-JetBrainsMono.txt',
+  'PROVENANCE.md',
+]);
 
 /* ------------------------------------------------------------------ pages */
 
@@ -395,6 +412,7 @@ function head(page) {
     <meta name="twitter:description" content="${esc(page.description)}" />
     <meta name="twitter:image" content="${esc(card)}" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="fonts.css" media="${TYPE_MEDIA}" />
     <link rel="icon" href="deckhq-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="deckhq-mark.png" />
     <link rel="alternate" type="application/atom+xml" title="DeckHQ releases" href="${FEED}" />${preload}
@@ -496,7 +514,7 @@ ${follow}
       </div>
       <p class="wrap foot-note">
         Built by Darshak Panseriya. <a href="${MAKER_URL}">More by Darshak</a>. This site loads
-        nothing from anywhere else: no web font, no CDN, no analytics.
+        nothing from anywhere else: no CDN, no analytics, no font service.
       </p>
     </footer>
   </body>
@@ -629,6 +647,15 @@ function build() {
   );
   fs.copyFileSync(path.join(root, 'public', 'icon-256.png'), path.join(OUT, 'deckhq-mark.png'));
   written += 3;
+
+  // The typeface: the sheet that declares it, and the product's own files
+  // beside their licences and provenance, byte for byte as the app ships them.
+  fs.copyFileSync(path.join(here, 'fonts.css'), path.join(OUT, 'fonts.css'));
+  fs.mkdirSync(path.join(OUT, 'fonts'), { recursive: true });
+  for (const name of TYPE_FILES) {
+    fs.copyFileSync(path.join(root, 'public', 'fonts', name), path.join(OUT, 'fonts', name));
+  }
+  written += 1 + TYPE_FILES.length;
 
   // The installers, byte for byte as they are in the repository, so what a
   // stranger pipes into a shell is a file that is reviewed and in the history.

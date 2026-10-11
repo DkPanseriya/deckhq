@@ -6,9 +6,10 @@
  * it. There is no light scheme here, because a second one would be the same
  * pictures on a ground they were never drawn for.
  *
- * NO WEB FONT. The two families below are named and never fetched: a machine
- * that has them shows them, every other machine shows its own system face,
- * and the fallback is the design. Nothing in this file loads anything.
+ * TYPE. The two lists below are the machine's own faces, and they are what a
+ * phone is shown. A screen 40rem and wider is also sent `fonts.css`, which
+ * puts the product's own typeface — the files the app ships, served from this
+ * origin — at the head of each list. Nothing in THIS file loads anything.
  *
  * Colour: the neutrals, amber and crimson are the app's and the mark's. Amber
  * is the accent. Crimson means a session is waiting on you and is used for
@@ -45,8 +46,8 @@
   --ph-stone: #8f8a80;
   --ph-floor: #c4bdae;
 
-  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --t-display: clamp(2.5rem, 1.1rem + 5.4vw, 4.75rem);
   --t-title: clamp(2.125rem, 1.4rem + 3vw, 3.5rem);
