@@ -25,6 +25,7 @@ import { contrastRatio, mix, relativeLuminance } from '../../public/render/theme
 import { PRESETS, lookForPreset } from '../../public/render/look-options.js';
 import { applyLook, resetLook } from '../../public/render/look-derive.js';
 import { TEXT_KINDS, opaqueOf, textPaint } from '../../public/render/floor-type.js';
+import { barSymbolInk } from '../../public/render/room-header.js';
 import { LIGHTINGS } from '../../public/look-ui-store.js';
 
 /** WCAG's floor for text. */
@@ -144,6 +145,70 @@ test('THE BACKING RULE: light text sits on a dark backing and dark text on a lig
               ` — ${inkLight ? 'light on light' : 'dark on dark'}`,
           );
         }
+      }
+    }
+  } finally {
+    resetLook();
+  }
+});
+
+// ---------------------------------------------------------- the room header
+
+/** WCAG's floor for a graphic that carries meaning: a symbol, not a letter. */
+const GRAPHIC = 3;
+/** The states whose own symbol stands in a slot, in that state's colour. */
+const SYMBOL_STATES = Object.freeze(['working', 'stalled', 'needs_input', 'for_review']);
+
+test('THE ROOM HEADER: every symbol is 3:1 on its bar, in every light and style, with rooms zoned and not', (t) => {
+  let worst = { ratio: Infinity, where: '' };
+  let floors = 0;
+  try {
+    for (const mood of LIGHTINGS) {
+      for (const preset of PRESETS) {
+        for (const roomTint of ['subtle', 'zoned']) {
+          const look = { ...lookForPreset(preset.id), roomTint };
+          applyLook(mood.light ? { ...look, light: mood.light } : look, mood.theme);
+          floors++;
+          const bar = /** @type {string} */ (textPaint('barTitle').backing);
+          // What a symbol is drawn in: a state's own colour while its count is
+          // not zero, the bar's ink otherwise, and the dim ink at zero.
+          const inks = [
+            ...SYMBOL_STATES.map((s) => [s, barSymbolInk(s)]),
+            ['a count', textPaint('barCount').ink],
+            ['a zero', textPaint('barDim').ink],
+          ];
+          for (const ground of extremes()) {
+            const behind = seenOver(bar, ground);
+            for (const [what, ink] of inks) {
+              const ratio = contrastRatio(opaqueOf(ink), behind);
+              const where = `${mood.label} x ${preset.label} x ${roomTint}: ${what} ${ink} on ${behind}`;
+              if (ratio < worst.ratio) worst = { ratio, where };
+              assert.ok(ratio >= GRAPHIC, `${where} is ${ratio.toFixed(2)}:1`);
+            }
+          }
+        }
+      }
+    }
+  } finally {
+    resetLook();
+  }
+  assert.equal(floors, 88);
+  t.diagnostic(`the faintest symbol on any bar: ${worst.ratio.toFixed(2)}:1 (${worst.where})`);
+});
+
+test('THE ROOM HEADER does not out-shout the walls: its ground is never brighter than the wall it hangs under', () => {
+  try {
+    for (const mood of LIGHTINGS) {
+      for (const preset of PRESETS) {
+        applyLook(lookForPreset(preset.id), mood.theme);
+        const bar = opaqueOf(/** @type {string} */ (textPaint('barTitle').backing));
+        const wall = PALETTE.wallFill;
+        // The same surface on a light floor, and on a dark one no brighter:
+        // a header is signage on the wall's own tone, never a lamp.
+        assert.ok(
+          relativeLuminance(bar) <= relativeLuminance(wall) + 0.02,
+          `${mood.label} x ${preset.label}: the bar ${bar} is brighter than the wall ${wall}`,
+        );
       }
     }
   } finally {

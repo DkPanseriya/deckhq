@@ -94,7 +94,7 @@ export function applyTendencies(map) {
 
 /**
  * @param {{normaliseHit:(hit:unknown) => any, selectAgent:(id:string|null) => void,
- *   filterToProject:(id:string|null) => void, openNewAgentDialog:(id:string) => void,
+ *   openRoomSettings:(id:string) => void, openNewAgentDialog:(id:string) => void,
  *   showWhiteboard:(id:string) => void, revealProjectFolder:(id:string) => Promise<void>,
  *   runProjectDashboard:(id:string) => Promise<void>,
  *   showTooltip:(id:string|null) => void, openResting:() => void}} actions
@@ -104,7 +104,7 @@ export function applyTendencies(map) {
 export async function loadRenderModules({
   normaliseHit,
   selectAgent,
-  filterToProject,
+  openRoomSettings,
   openNewAgentDialog,
   showWhiteboard,
   revealProjectFolder,
@@ -186,12 +186,16 @@ export async function loadRenderModules({
         onSelect: (hit) => {
           const sel = normaliseHit(hit);
           if (!sel) return selectAgent(null);
-          if (sel.kind === 'project') return filterToProject(sel.id);
+          // A press on a project room's title bar opens that room's own
+          // settings; "show only this room" is a row in there now.
+          if (sel.kind === 'project') return openRoomSettings(sel.id);
           if (sel.kind === 'new-agent') return openNewAgentDialog(sel.id);
           if (sel.kind === 'whiteboard') return showWhiteboard(sel.id);
           if (sel.kind === 'shelf') return revealProjectFolder(sel.id);
           if (sel.kind === 'screen') return runProjectDashboard(sel.id);
           if (sel.kind === 'resting') return openResting();
+          // A header with nothing behind it: a press there is a press on the floor.
+          if (sel.kind === 'room') return selectAgent(null);
           selectAgent(sel.id);
         },
         onHover: (hit) => {
@@ -207,12 +211,10 @@ export async function loadRenderModules({
           // tooltip rather than a second floating card: a title attribute
           // costs no paint, no layout and no keyboard trap, and it is read
           // aloud by a screen reader that the canvas cannot otherwise reach.
-          const plate =
-            sel && sel.kind === 'project'
-              ? scene.plateTooltipFor(sel.id)
-              : sel && sel.kind === 'resting'
-                ? 'Everybody resting in the lounge. Open the list.'
-                : '';
+          // The room header moved the words here: every slot of its strip is a
+          // symbol and a number on the floor, and a sentence on the hover — and
+          // everything else that can be pressed says what a press does.
+          const plate = sel ? scene.hoverTitleFor(sel) : '';
           if (plate) el.canvas.title = plate;
           else el.canvas.removeAttribute('title');
         },

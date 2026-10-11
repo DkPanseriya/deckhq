@@ -59,6 +59,7 @@ import { joinPlanSignature, planSignatureParts } from './scene-draw.js';
 import { pickSessionPhase } from '../url-options.js';
 import { crewsFrom } from '../floor-rule.js';
 import { animMs } from './scene-agent.js';
+import { setRoomColours } from './look-derive.js';
 
 export * from './scene-base.js';
 export * from './scene-lod.js';
@@ -173,6 +174,14 @@ export class Scene extends SceneInput {
   setState(snapshot) {
     const previousAgents = (this._snapshot && this._snapshot.agents) || [];
     this._snapshot = snapshot || { agents: [], projects: [], counts: {} };
+    // Which rooms have a colour of their own, by the number their painters
+    // know them by: the settings key them by project id.
+    const roomsSet = (this._snapshot.settings && this._snapshot.settings.rooms) || {};
+    setRoomColours(
+      (this._snapshot.projects || [])
+        .filter((p) => p && roomsSet[p.id] && roomsSet[p.id].colour)
+        .map((p) => ({ projectMk: p.projectMk, colour: roomsSet[p.id].colour })),
+    );
     // A new snapshot is a new layout and a new picture, whatever it says.
     this._stateGen++;
     const agents = this._snapshot.agents || [];
@@ -411,9 +420,52 @@ export class Scene extends SceneInput {
    */
   plateTooltipFor(id) {
     for (const plate of this._plateRects) {
-      if (plate.id === id && plate.kind === 'project') return plate.tooltip || '';
+      if (plate.id === id) return plate.tooltip || '';
     }
     return '';
+  }
+
+  /**
+   * Where one room's header is on the canvas, in the canvas's own CSS pixels:
+   * what a popover that belongs to the room is anchored under. `null` for a
+   * room with no header drawn this frame.
+   * @param {string} id
+   * @returns {{x:number, y:number, w:number, h:number}|null}
+   */
+  headerRectFor(id) {
+    const plate = this._plateRects.find((p) => p.id === id);
+    return plate ? { x: plate.x, y: plate.y, w: plate.w, h: plate.h } : null;
+  }
+
+  /**
+   * WHAT A HOVER SAYS, for everything on the floor that is not a person: a
+   * room's header in words — its symbols have none — and, for each thing that
+   * can be pressed, what a press does. `''` for anything with nothing to say.
+   * @param {{kind:string, id:string}} hit
+   * @returns {string}
+   */
+  hoverTitleFor(hit) {
+    if (!hit) return '';
+    const header =
+      hit.kind === 'project' || hit.kind === 'room' ? this.plateTooltipFor(hit.id) : '';
+    switch (hit.kind) {
+      case 'project':
+        return header ? `${header}. Press for this room’s settings.` : '';
+      case 'room':
+        return header;
+      case 'new-agent':
+        return 'Start a new agent in this room.';
+      case 'whiteboard':
+        return 'The room’s board: who is in it and what each is doing. Press to open it.';
+      case 'shelf':
+        return 'Open this project’s folder.';
+      case 'screen':
+        return 'Run this project’s dashboard.';
+      case 'resting':
+        return 'Everybody resting in the lounge. Open the list.';
+      default:
+        return '';
+    }
   }
 
   /**

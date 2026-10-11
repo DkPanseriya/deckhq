@@ -904,6 +904,87 @@ button {
 .lookbar-strip[data-more-after='true'] .lookbar-strip-btn--next {
   display: grid;
 }
+/* A PROJECT ROOM'S OWN SETTINGS (`room-menu.js`): the Look popover's ground,
+   rows and segments, anchored under the room's title bar on the floor instead
+   of under a header button — so it is fixed to the window, and narrower. */
+.room-popover {
+  position: fixed;
+  top: 0;
+  right: auto;
+  left: 0;
+  gap: 0.35rem;
+  width: 21rem;
+  transform-origin: top left;
+}
+.room-menu-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0 0.15rem 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+.room-menu-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--track-tight);
+  color: var(--ink);
+}
+.room-menu-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.room-menu-item:hover,
+.room-menu-item:focus-visible {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+.room-menu-label {
+  font-weight: var(--weight-label);
+  white-space: nowrap;
+}
+.room-menu-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.room-popover .lookbar-row {
+  padding: 0.3rem 0.15rem 0.2rem;
+}
+.room-menu-colours .lookbar-seg-btn {
+  flex: 1 1 22%;
+}
+.room-menu-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  vertical-align: -0.02rem;
+}
+.room-menu-foot {
+  justify-content: flex-end;
+}
+
 /* The two short controls that turn a style, side by side on one line. */
 .lookbar-pair {
   display: grid;
@@ -4414,6 +4495,27 @@ textarea.field-input {
   gap: 0.3rem;
   min-width: 3.5rem;
   padding: 0.4rem 0.5rem;
+}
+/* The badges are nine cards and are all shown: two rows, never a scroller
+   inside a sheet. */
+#new-agent-avatar-picker,
+#identity-avatar-picker {
+  max-height: none;
+}
+/* A badge's card is a robot wearing it, drawn by the floor's own painter
+   (`agent-thumb.js`), on the floor's own ground. */
+.picker-btn.avatar-btn canvas {
+  display: block;
+  width: 56px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+}
+/* A line under a field, and under a sheet's fields: what is not a control. */
+.field-hint,
+.dialog-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 .picker-btn.avatar-btn svg {
   width: 18px;

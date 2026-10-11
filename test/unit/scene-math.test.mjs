@@ -41,13 +41,10 @@ import {
 import {
   doingEntriesFor,
   PLATE_DOING_CHARS,
-  PLATE_ROWS,
   platePlanFor,
   resolveBadgeCollisions,
-  SceneLabels,
 } from '../../public/render/scene-labels.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
-import { PLUS_CLEAR_U } from '../../public/render/plan-units.js';
 import { buildPlan } from '../../public/render/plan.js';
 import {
   truncateLabel,
@@ -62,8 +59,7 @@ import {
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
 } from '../../public/render/rig.js';
-import { DEFAULT_FONT, FONT_FAMILIES } from '../../public/render/floor-type.js';
-import { FIGURE_HALO_POOL_SPAN, PALETTE, STATE_COLORS } from '../../public/render/palette.js';
+import { FIGURE_HALO_POOL_SPAN, STATE_COLORS } from '../../public/render/palette.js';
 
 // ------------------------------------------------------- world <-> screen
 
@@ -1575,196 +1571,6 @@ test('a room the snapshot has nothing to say about falls back to its own plate',
   ]);
 });
 
-// ------------------------------------------------ how a plate is actually set
-//
-// `_drawRoomPlate` is a method on `SceneLabels`, and `new Scene(...)` wants a
-// canvas — so these drive the prototype directly against a recording 2D
-// context, which is all the method touches. The measurer is a true monospace
-// (every glyph `0.6em`), so a recorded x is a glyph POSITION rather than a
-// font-engine artefact.
-
-/** A 2D context that records every glyph run instead of painting one. */
-function recordingCtx() {
-  return {
-    font: '',
-    textAlign: '',
-    textBaseline: '',
-    lineJoin: '',
-    miterLimit: 0,
-    strokeStyle: '',
-    fillStyle: '',
-    lineWidth: 0,
-    /** @type {{text:string,x:number,y:number,font:string,fill:string}[]} */
-    runs: [],
-    /** @type {{x:number,y:number,r:number,fill:string}[]} */
-    dots: [],
-    /** Every text that was drawn as an OUTLINE. @type {string[]} */
-    outlined: [],
-    /** @type {{x:number,y:number,r:number}|null} */
-    _arc: null,
-    save() {},
-    restore() {},
-    beginPath() {
-      this._arc = null;
-    },
-    arc(x, y, r) {
-      this._arc = { x, y, r };
-    },
-    fill() {
-      if (this._arc) this.dots.push({ ...this._arc, fill: String(this.fillStyle) });
-    },
-    measureText(text) {
-      return { width: String(text).length * parseFloat(/(\d[\d.]*)px/.exec(this.font)[1]) * 0.6 };
-    },
-    strokeText(text) {
-      this.outlined.push(String(text));
-    },
-    fillText(text, x, y) {
-      this.runs.push({ text, x, y, font: this.font, fill: String(this.fillStyle) });
-    },
-  };
-}
-
-/** Draw one room's plate at `U` px per unit and return what was set. */
-function drawPlate(room, snapshot, { zoom = 1, U = 17.5 } = {}) {
-  const ctx = recordingCtx();
-  // The prototype without its constructor: `new Scene(...)` wants a canvas and
-  // a document, and the plate pass touches neither.
-  const scene = Object.assign(Object.create(SceneLabels.prototype), {
-    ctx,
-    _plateRects: [],
-    _snapshot: snapshot,
-    _plan: null,
-  });
-  scene._drawRoomPlate(room, { zoom, panX: 0, panY: 0, U });
-  return { runs: ctx.runs, dots: ctx.dots, outlined: ctx.outlined, rect: scene._plateRects[0] };
-}
-
-const WIDE_ROOM = { ...PLATE_ROOM, x: 0, y: 0, w: 30, h: 20, plateBand: 3.4 };
-
-test('WP-81: two frames a minute apart set every plate glyph in the same place', () => {
-  // The no-jitter contract. Every number on a plate is set in the numeric face,
-  // so an elapsed figure ticking from `1d 2h` to `1d 3h` moves no glyph that
-  // precedes it — and nothing before the tail may move at all. Measured as the
-  // recorded x of every run, at two clocks.
-  const a = withFixedNow(PLATE_NOW, () => drawPlate(WIDE_ROOM, plateFixture()));
-  const b = withFixedNow(PLATE_NOW + 61_000, () => drawPlate(WIDE_ROOM, plateFixture()));
-  assert.equal(a.runs.length, b.runs.length, 'a minute changed how many lines were drawn');
-  for (let i = 0; i < a.runs.length; i++) {
-    assert.equal(a.runs[i].x, b.runs[i].x, `line ${i} moved sideways between frames`);
-    assert.equal(a.runs[i].y, b.runs[i].y, `line ${i} moved vertically between frames`);
-    assert.equal(a.runs[i].font, b.runs[i].font, `line ${i} changed face between frames`);
-    assert.equal(a.runs[i].text, b.runs[i].text, `line ${i} changed text within one minute`);
-  }
-  // An hour later the tail DOES move, and only the tail: the run it belongs to
-  // is still set at the same x, in the same face.
-  const later = withFixedNow(PLATE_NOW + 3 * PLATE_HOUR, () =>
-    drawPlate(WIDE_ROOM, plateFixture()),
-  );
-  assert.notEqual(later.runs[1].text, a.runs[1].text, 'the wait never advanced');
-  assert.equal(later.runs[1].x, a.runs[1].x);
-  // Every figure is in the NUMERIC role (`floor-type.js`): a family whose own
-  // figures are tabular, which is what tabular stability is on a canvas with
-  // no `font-variant-numeric` (VISUAL-SPEC §7). It was a bold monospace.
-  for (const run of a.runs) {
-    if (!/[0-9]/.test(run.text)) continue;
-    assert.ok(
-      run.font.endsWith(FONT_FAMILIES[DEFAULT_FONT].numeric),
-      `${run.text} is set in ${run.font}`,
-    );
-    assert.doesNotMatch(run.font, /monospace/, run.text);
-  }
-});
-
-test('WP-81: the plate is ranked by size and by ink, hero first', () => {
-  const { runs, dots, outlined } = withFixedNow(PLATE_NOW, () =>
-    drawPlate(WIDE_ROOM, plateFixture()),
-  );
-  const px = (run) => parseFloat(/(\d[\d.]*)px/.exec(run.font)[1]);
-  assert.equal(runs.length, 4);
-  // The hero is the largest thing on the plate — larger than the room's own
-  // name, which is the whole point: the name says which room, the hero says
-  // whether to get up.
-  assert.ok(px(runs[1]) > px(runs[0]), 'the hero is not the biggest line');
-  assert.ok(px(runs[0]) > px(runs[2]), 'the name is not above the doing line');
-  assert.ok(px(runs[2]) >= 11 && px(runs[3]) >= 11, 'a plate line fell under 11 px');
-  // Two inks: the hero in the strongest, and the name and the two lines under
-  // it in the one that is held to the bare floor in every light and style.
-  // (The spend line was a third, quieter ink, which only read over an outline;
-  // a plate with an outline on two of its four lines read as two typefaces.)
-  assert.equal(runs[1].fill, PALETTE.plateInk);
-  assert.equal(runs[0].fill, PALETTE.plateInkSecondary);
-  assert.equal(runs[2].fill, PALETTE.plateInkSecondary);
-  assert.equal(runs[3].fill, PALETTE.plateInkSecondary);
-  // NO LINE OF A PLATE IS OUTLINED: every one is filled and none is stroked.
-  assert.deepEqual(outlined, [], 'a line of the plate is drawn with an outline');
-  // One state dot, beside the hero, in the reserved crimson.
-  assert.equal(dots.length, 2, 'the dot is a halo disc under an ink disc');
-  assert.equal(dots[1].fill, STATE_COLORS.for_review);
-  assert.ok(dots[1].x < runs[1].x, 'the dot is not to the left of the hero');
-});
-
-test('WP-81: a plate collapses from the bottom and never leaves its band', () => {
-  // §7: a label never covers furniture, kept as a property of the band rather
-  // than as a check — `PLATE_BAND` is furniture-free by construction, so the
-  // rule is simply that the plate stays inside it. The order it gives way in
-  // is the order the lines are worth losing: spend, then doing, then the
-  // hero's `· oldest …` tail.
-  const band = 3.4;
-  const seen = [];
-  for (const U of [28, 17.5, 14, 11]) {
-    const { runs, rect } = withFixedNow(PLATE_NOW, () =>
-      drawPlate({ ...WIDE_ROOM, plateBand: band }, plateFixture(), { U }),
-    );
-    seen.push(runs.length);
-    assert.ok(
-      rect.y + rect.h <= band * U + 1e-6,
-      `at ${U} px/unit the plate is ${(rect.y + rect.h - band * U).toFixed(1)} px past its band`,
-    );
-    assert.ok(runs.length >= 2, 'the name and the hero are never dropped');
-  }
-  assert.deepEqual(
-    [...seen].sort((a, b) => b - a),
-    seen,
-    'a tighter floor showed MORE plate lines, not fewer',
-  );
-  // And sideways: a narrow room drops the hero's tail rather than cutting a
-  // number in half, and drops the second "doing" entry rather than ellipsising
-  // through it.
-  const narrow = withFixedNow(PLATE_NOW, () =>
-    drawPlate({ ...WIDE_ROOM, w: 9 }, plateFixture(), { U: 28 }),
-  );
-  assert.equal(narrow.runs[1].text, '2 need you');
-  assert.equal(narrow.runs[2].text.includes('Nadir'), false);
-});
-
-test('WP-81: a plate stops short of the in-room "+", which stands in the same band', () => {
-  // The defect the first 3x crop of `orbital-api` showed: `2 need you · oldest
-  // 1d 2h` drawn straight through the affordance in the room's north-east
-  // corner. The plate band is furniture-free by construction, so no furniture
-  // rule could have caught it — the "+" is chrome, like the plate.
-  const U = 28;
-  const { runs, rect } = withFixedNow(PLATE_NOW, () =>
-    drawPlate({ ...WIDE_ROOM, w: 14 }, plateFixture(), { U }),
-  );
-  const plusLeft = (14 - PLUS_CLEAR_U) * U;
-  assert.ok(runs.length >= 2);
-  assert.ok(
-    rect.x + rect.w <= plusLeft + 1e-6,
-    `the plate reaches ${(rect.x + rect.w).toFixed(1)} px, past the "+" at ${plusLeft.toFixed(1)}`,
-  );
-  // And the corner is only a PROJECT room's: the office, the lounge and the
-  // archive have no "+" in them, so nothing is reserved on their plates.
-  const office = withFixedNow(PLATE_NOW, () =>
-    drawPlate(
-      { kind: 'office', id: 'o', name: 'Your Office', x: 0, y: 0, w: 14, h: 10, plateBand: 3.4 },
-      { counts: { drawn: { waiting: 2 } }, agents: [] },
-      { U },
-    ),
-  );
-  assert.ok(office.rect.w > 0);
-});
-
 test('WP-81: the doing line is the adapter’s own tool summary, cut but never invented', () => {
   const agents = [
     {
@@ -1804,14 +1610,6 @@ test('WP-81: the doing line is the adapter’s own tool summary, cut but never i
   assert.equal(entries[1], 'Zoe · Gmail · send');
   assert.equal(doingEntriesFor([]).length, 0);
   assert.equal(doingEntriesFor(null).length, 0);
-});
-
-test('WP-81: the plate’s type scale is stated once, and nothing is set under 11 px', () => {
-  assert.equal(PLATE_ROWS.length, 4);
-  assert.ok(PLATE_ROWS.every((r) => r.px >= 11));
-  assert.ok(PLATE_ROWS[1].px > PLATE_ROWS[0].px, 'the hero must outrank the name');
-  // Every row's leading is positive, so the rows can only ever run downward.
-  assert.ok(PLATE_ROWS.every((r) => r.lead > 0));
 });
 
 // ------------------------------------------- the bitmap, one pixel to one
@@ -1976,8 +1774,5 @@ test('a name is haloed by a share of its type, never under a device pixel and a 
   assert.equal(labelHaloWidth(6, 2), 0.96);
   assert.equal(labelHaloWidth(4, 2) * 2, 1.5, 'in DEVICE pixels, whatever the ratio');
   // Under a quarter of the glyph at every size the floor sets: the counters stay open.
-  for (const row of PLATE_ROWS) {
-    assert.ok(Math.abs(row.halo - row.px * 0.16) < 1e-9, `${row.px} px is haloed ${row.halo}`);
-    assert.ok(labelHaloWidth(row.px, 1) / row.px < 0.2);
-  }
+  for (const px of [11, 12.5, 14]) assert.ok(labelHaloWidth(px, 1) / px < 0.2);
 });

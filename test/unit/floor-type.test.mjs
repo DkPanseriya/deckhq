@@ -21,7 +21,6 @@ import {
   typeFont,
 } from '../../public/render/floor-type.js';
 import { monoFont, sansFont } from '../../public/render/rig-metrics.js';
-import { PLATE_KINDS, PLATE_ROLES, PLATE_ROWS } from '../../public/render/scene-labels.js';
 import {
   DEFAULT_LOOK,
   FONT_PICKER,
@@ -52,7 +51,7 @@ test('every role names a family role, a real weight and whether its figures line
     ['sans', 700, true],
   );
   // Timers and counts keep figures that line up; mono is only where text is code.
-  for (const name of ['roomCount', 'roomTokens', 'badge']) assert.ok(TYPE_ROLES[name].tabular);
+  for (const name of ['roomCount', 'badge']) assert.ok(TYPE_ROLES[name].tabular);
   assert.deepEqual(
     Object.entries(TYPE_ROLES)
       .filter(([, r]) => r.family === 'mono')
@@ -107,10 +106,6 @@ test('every floor painter asks a role for its face: the canvas font is the roleâ
   assert.equal(sansFont(12), typeFont('agentName', 12));
   assert.equal(monoFont(13), typeFont('badge', 13));
   assert.match(monoFont(13), /^700 13px 'DeckHQ Numeric'/, 'a wait is no longer a monospace');
-  // A plate's four rows are four roles and four kinds of text, in step.
-  assert.equal(PLATE_ROLES.length, PLATE_ROWS.length);
-  assert.equal(PLATE_KINDS.length, PLATE_ROWS.length);
-  for (const name of PLATE_ROLES) assert.ok(TYPE_ROLES[name], name);
   // And no painter names a family of its own any more.
   for (const file of fs.readdirSync(path.join(REPO, 'public/render'))) {
     if (!file.endsWith('.js') || file === 'floor-type.js') continue;

@@ -8,10 +8,22 @@
 
 ### Changed
 
-- **A room's plate is set one way.** Its name and its count were drawn bare while the two quiet
-  lines under them, what the room is doing and the day's spend, kept a pale outline, and the block
-  read as two typefaces. All four lines are now bare, in an ink that is held to the floor in every
-  light and style; the order is carried by size and weight.
+- **Every room has a header.** The loose lines of text in a room's corner are a **title bar** with
+  the room's name and, under it, a **status strip** of symbols and numbers in fixed places: need
+  you, working, stalled and tokens today in a project room; waiting, hands up and for review in
+  Your Office; resting and went home in the Lounge. A zero stays in its place, dimmed. There are no
+  words on the floor: pointing at a header says every slot in a sentence, with the longest wait and
+  what the room is doing. The bar is the tone of the room's own walls in every light and style.
+- **A room's settings are behind its title bar.** Press a project room's bar (or `⌘K`, _Room
+  settings_) for a small panel: show only this room, new agent here, pin or unpin, a colour for
+  this room, its board and its folder. A press on the old plate filtered to the project; that is
+  the panel's first row now. A room's choices are kept per project and are never part of a look.
+- **The board on a room's wall is lit**, with a line for each state somebody in the room is in, and
+  it, the title bar and the `+` are outlined under the pointer, with a tooltip that says what a
+  press does.
+- **The new-agent sheet asks in the order you answer**: what it should start on, what to call it,
+  and its chest badge — which is shown as the robot wearing it, drawn by the floor's own painter,
+  where it was seven outlines under the word "Avatar". The rename sheet is the same two choices.
 
 ## 1.8.0 — 2026-10-11
 

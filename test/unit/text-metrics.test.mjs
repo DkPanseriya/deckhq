@@ -12,12 +12,13 @@ import assert from 'node:assert/strict';
 
 import {
   TEXT_METRICS_MAX,
+  ellipsise,
   forgetTextMetrics,
   textMetricsEpoch,
   textWidth,
 } from '../../public/render/text-metrics.js';
 import { badgeBox, labelBox } from '../../public/render/rig.js';
-import { ellipsise, layoutPlate } from '../../public/render/scene-labels.js';
+import { layoutHeader, roomHeaderFor } from '../../public/render/room-header.js';
 import { fitOneLine, toolBubbleBox } from '../../public/render/rig-bubble.js';
 
 /** A context that measures by the font it was last given, and counts. */
@@ -88,18 +89,6 @@ test('a context that has measured a great many strings starts over', () => {
 test('the boxes the floor measures are the same boxes, asked twice or two hundred times', () => {
   const ctx = ruler();
   const fresh = () => ruler();
-  const plate = {
-    lines: [
-      'orbital-api',
-      '3 need you · oldest 2h 10m',
-      'editing rate-limit.ts, running tests',
-      '5.8M today',
-    ],
-    heroHead: '3 need you',
-    doing: ['editing rate-limit.ts', 'running tests'],
-    dot: '#C0392B',
-    tooltip: '',
-  };
   const room = { id: 'r', kind: 'project', x: 2, y: 3, w: 9, h: 12, name: 'orbital-api' };
   const camera = { zoom: 1, panX: 10, panY: 20, U: 14 };
   const ask = (c) => ({
@@ -107,7 +96,7 @@ test('the boxes the floor measures are the same boxes, asked twice or two hundre
     small: labelBox(c, 100, 200, 14, 'Ada', 9),
     badge: badgeBox(c, 100, 200, 14, '2h 10m'),
     bubble: toolBubbleBox(c, 100, 200, 14, 'Edit src/core/a-very-long-file-name-indeed.mjs'),
-    plate: layoutPlate(c, room, plate, camera),
+    plate: layoutHeader(c, room, roomHeaderFor(room, { projects: [] }), camera, 1),
     cut: ellipsise(c, 'a room with a long name', 60, '600 11px sans-serif'),
     fit: fitOneLine(c, 'a summary too long for its bubble', 70, '9px sans-serif'),
   });

@@ -178,6 +178,9 @@ export class SceneHit extends SceneLabels {
     for (const plate of this._plateRects) {
       if (sx >= plate.x && sx <= plate.x + plate.w && sy >= plate.y && sy <= plate.y + plate.h) {
         if (plate.kind === 'project') return { kind: 'project', id: plate.id };
+        // The office's and the lounge's headers do nothing on a press, but
+        // their slots have words, and the hover is where the words are.
+        return { kind: 'room', id: plate.id };
       }
     }
     return null;

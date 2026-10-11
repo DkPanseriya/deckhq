@@ -21,6 +21,7 @@ import { avatarSetByName, avatarSets } from '../../core/avatars.mjs';
 // behind made this route look like it needed the Claude Code adapter to answer
 // a question no runtime owns. The catalogue is runtime-neutral (WP-92f, A-09).
 import { terminalIds } from '../../core/terminals.mjs';
+import { roomsProblem } from '../../core/room-settings.mjs';
 
 /**
  * Exactly the persisted settings, derived rather than restated. The two lists
@@ -159,6 +160,13 @@ export function register(router, ctx) {
         if (!isKnownTheme(v)) {
           return sendError(res, 400, `theme must be one of ${themeNames().join(', ')}`);
         }
+      }
+      // `rooms`: each project room's own choices (`room-settings.mjs`). The store
+      // would drop anything it does not know, and the room's popover would then
+      // show a choice the floor is not painted in. Reported here instead.
+      if (k === 'rooms') {
+        const problem = roomsProblem(v);
+        if (problem) return sendError(res, 400, problem);
       }
       // WP-45. `avatarSet` names a set an installed pack registered, or `""`
       // for the tables this product ships. Same reasoning as `theme`: the

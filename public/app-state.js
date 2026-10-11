@@ -95,6 +95,7 @@ export const el = {
   newAgentIntro: document.getElementById('new-agent-intro'),
   newAgentNamePicker: document.getElementById('new-agent-name-picker'),
   newAgentAvatarPicker: document.getElementById('new-agent-avatar-picker'),
+  newAgentRuntime: document.getElementById('new-agent-runtime'),
   newAgentInstructions: /** @type {HTMLTextAreaElement} */ (
     document.getElementById('new-agent-instructions')
   ),

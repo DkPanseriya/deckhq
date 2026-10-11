@@ -41,7 +41,8 @@
 
 import { badgeBox, characterBox, formatElapsed, formatElapsedShort } from './rig.js';
 import { BADGE_MIN_PX_PER_UNIT } from './scene-lod.js';
-import { layoutPlate, plateLimit, resolveBadgeCollisions } from './scene-labels.js';
+import { plateScaleFor, resolveBadgeCollisions } from './scene-labels.js';
+import { layoutHeader } from './room-header.js';
 import { buildingRect, planFrameLabels, wallBoxes } from './scene-frame-labels.js';
 import { worldToScreen } from './agents.js';
 import { animMs, stateForAgent } from './scene-agent.js';
@@ -351,9 +352,9 @@ export class SceneFrame extends SceneStatic {
     for (const room of this._plan ? this._plan.rooms : []) {
       // A corridor has no name and no data line.
       if (room.kind === 'corridor') continue;
-      const limit = plateLimit(room, badgeBoxes, camera);
-      const plate = this._platePlanFor(room);
-      plates.set(room.id, { ...layoutPlate(ctx, room, plate, camera, limit), plate });
+      const header = this._headerFor(room);
+      const k = plateScaleFor(camera.zoom * camera.U);
+      plates.set(room.id, { ...layoutHeader(ctx, room, header, camera, k), header });
     }
 
     // Name-label collision pass (tech-lead review finding 1), at EVERY level

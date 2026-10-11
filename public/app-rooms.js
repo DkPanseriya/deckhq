@@ -24,7 +24,9 @@
  * interface telling the user something it does not yet know.
  */
 
-import { toast } from './app-state.js';
+import { el, latestSnapshot, look, scene, toast } from './app-state.js';
+import { saveSetting } from './app-notify.js';
+import { ROOM_COLOUR_IDS, createRoomMenu } from './room-menu.js';
 
 /**
  * Pin a project's room to the floor, or take the pin back (WP-77).
@@ -74,4 +76,43 @@ export async function setProjectArchived(projectId, archived) {
   } catch (err) {
     toast(`Could not change that room: ${err.message}`, { isError: true });
   }
+}
+
+/**
+ * A PROJECT ROOM'S OWN SETTINGS (`room-menu.js`): the popover its title bar
+ * opens. Anchored under the bar the scene drew, and handed the same actions
+ * the palette has, so a row here and a row there cannot do two different
+ * things. Everything is read through `app-state.js` ON EACH CALL: the scene
+ * and the look arrive after this is built.
+ *
+ * @param {(id:string|null) => void} filterToProject
+ * @param {(id:string) => void} newAgent
+ * @param {(id:string) => void} showWhiteboard
+ * @param {(id:string) => any} revealFolder
+ */
+export function wireRoomMenu(filterToProject, newAgent, showWhiteboard, revealFolder) {
+  return createRoomMenu({
+    doc: document,
+    hostEl: document.getElementById('room-popover'),
+    getSnapshot: () => latestSnapshot,
+    anchorFor: (id) => {
+      const at = scene?.headerRectFor?.(id);
+      const box = el.canvas.getBoundingClientRect();
+      // No header on screen — the room is off the edge, or the deck is up.
+      return at
+        ? { x: box.left + at.x, y: box.top + at.y, w: at.w, h: at.h }
+        : { x: box.left + 12, y: box.top + 12, w: 0, h: 0 };
+    },
+    actions: {
+      filterToProject,
+      newAgent,
+      showWhiteboard,
+      revealFolder,
+      pinProject: setProjectPinned,
+    },
+    saveSetting,
+    colours: ROOM_COLOUR_IDS,
+    swatchOf: (id) => look?.roomSwatchFor?.(id) || '',
+    coloursShown: () => Boolean(look?.LOOK?.roomTint?.zoned),
+  });
 }

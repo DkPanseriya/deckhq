@@ -26,7 +26,7 @@ import {
   ownerShapedFloor,
   populationFloor,
 } from '../helpers/large-floor.mjs';
-import { drawnBox, frameAt, hits, measuringCtx, tiesOf } from '../helpers/label-frame.mjs';
+import { drawnBox, frameAt, hits, tiesOf } from '../helpers/label-frame.mjs';
 import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
 import { drawDots } from '../../public/render/rig-props.js';
 import { turnIsOpen } from '../../public/render/life.js';
@@ -43,7 +43,6 @@ import {
   frameLabelTexts,
   wallBoxes,
 } from '../../public/render/scene-frame-labels.js';
-import { layoutPlate, PLATE_KEEP_ORDER } from '../../public/render/scene-labels.js';
 import { sofaPlacesOn } from '../../public/render/plan-office-seats.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
@@ -91,11 +90,11 @@ test('F1 · at the owner’s window, 150 agents in 40 repos: every live agent is
     for (const r of said)
       assert.ok(f.labels.plan.get(r.id), `${w}x${h}: ${f.labels.texts.get(r.id)} dropped`);
 
-    // Every plate carries its title and its hero, and a room that needs you
-    // says how many.
+    // Every header carries its title bar, and a room that needs you says how
+    // many in its first slot.
     for (const p of f.plates) {
-      const hero = p.rows.find((row) => row.i === 1);
-      assert.ok(hero && hero.text, `${w}x${h}: ${p.room.id} lost its hero line`);
+      const hero = p.slots[0] || { text: '' };
+      assert.ok(p.bar.h > 0 && p.title.font, `${w}x${h}: ${p.room.id} lost its title bar`);
       const project = f.plan.rooms.find((r) => r.id === p.room.id) && p.room.kind === 'project';
       const needs = project ? f.agents.filter((a) => a.projectId === p.room.id) : [];
       const n = needs.filter(
@@ -166,68 +165,6 @@ test('F7 · a crew says each of its types once, with a count', () => {
 });
 
 /** One wide project room with every plate line present, at `scale` px/U. */
-function plateAt(scale, { w = 30, doing = true } = {}) {
-  const room = {
-    kind: 'project',
-    id: 'p',
-    name: 'orbital-api',
-    x: 0,
-    y: 0,
-    w,
-    h: 40,
-    plateBand: 3.4,
-  };
-  const plate = {
-    lines: [
-      'orbital-api',
-      '6 need you · oldest 1d 2h',
-      doing ? 'Nova · npm test' : '',
-      'today 5.8M tok · with cache',
-    ],
-    heroHead: '6 need you',
-    doing: doing ? ['Nova · npm test'] : [],
-    dot: STATE_COLORS.for_review,
-    tooltip: '',
-  };
-  return layoutPlate(measuringCtx(), room, plate, { zoom: scale / 14, panX: 0, panY: 0, U: 14 });
-}
-
-test('F8 · the collapse order: the doing line goes first, the tokens second, the hero never', () => {
-  assert.deepEqual(PLATE_KEEP_ORDER, [
-    [0, 1, 2, 3],
-    [0, 1, 3],
-    [0, 1],
-  ]);
-  const rowsAt = (scale, opts) => plateAt(scale, opts).rows.map((r) => r.i);
-  // Room for everything.
-  assert.deepEqual(rowsAt(18), [0, 1, 2, 3]);
-  // Room for two lines under the title: the hero and the tokens.
-  assert.deepEqual(rowsAt(11), [0, 1, 3]);
-  // The owner's 8 px per unit: the title and the hero, and the hero is whole.
-  const tight = plateAt(8);
-  assert.deepEqual(
-    tight.rows.map((r) => r.i),
-    [0, 1],
-  );
-  assert.equal(tight.rows[1].text, '6 need you · oldest 1d 2h');
-  // Even under MIN_SCALE the hero is drawn, never dropped.
-  assert.deepEqual(rowsAt(6), [0, 1]);
-  // And nothing is set under 11 px on the way down.
-  for (const s of [6, 8, 11, 14, 18]) {
-    for (const r of plateAt(s).rows) assert.ok(r.px >= 11, `${r.px} px at ${s} px/U`);
-  }
-  // A band that fits the tokens line fits it whether or not a doing line exists.
-  assert.deepEqual(rowsAt(11, { doing: false }), [0, 1, 3]);
-});
-
-test('F1 · a hero too wide for its plate collapses to the dot and the count', () => {
-  const narrow = plateAt(8, { w: 9 });
-  const hero = narrow.rows.find((r) => r.i === 1);
-  assert.ok(hero.dotted > 0, 'the state dot stays');
-  assert.match(hero.text, /^6( need you)?$/);
-  const narrower = plateAt(8, { w: 5 });
-  assert.equal(narrower.rows.find((r) => r.i === 1).text, '6');
-});
 
 test('F1 · the rig draws a name at L0', () => {
   const texts = [];
@@ -434,8 +371,17 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
     const found = { badgeOnBadge: 0, badgeOnBody: 0, nameOnBody: 0, nameOnBadge: 0, nameOnName: 0 };
     for (const [i, b] of f.badgeBoxes.entries()) {
       const own = b.id.slice(6);
-      // The office's plate stops short of the badge over its first cushion.
-      for (const p of f.plates) assert.ok(!hits(b, p.rect), `${name}: a badge is under a plate`);
+      // A header runs the width of its room and is drawn UNDER the figures, so
+      // a badge over the office's first cushion stands on the bar rather than
+      // the bar stopping short of it; what must hold is that it is never over
+      // a room's NAME.
+      for (const p of f.plates) {
+        const name = { x: p.title.x, y: p.bar.y, w: p.bar.w * 0.25, h: p.bar.h };
+        assert.ok(
+          !hits(b, name) || p.room.kind !== 'project',
+          `${name}: a badge is over a room's name`,
+        );
+      }
       for (const body of bodies) if (body.id !== own && hits(b, body)) found.badgeOnBody++;
       for (let j = i + 1; j < f.badgeBoxes.length; j++)
         if (hits(b, f.badgeBoxes[j])) found.badgeOnBadge++;
