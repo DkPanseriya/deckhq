@@ -50,7 +50,12 @@ export const BUDGET = {
    * home page was held to 2.5 MB while its two loops were GIFs at 25 frames a
    * second; as video at 60, twice as wide, it measures 2957 KB.
    */
-  page: { 'index.html': 3 * 1024 * 1024, default: 3 * 1024 * 1024 },
+  page: {
+    'index.html': 3 * 1024 * 1024,
+    /** The 3D page: up to ten stills at 400 KB and eight clips at 1.6 MB, every one lazy. */
+    '3d.html': 16 * 1024 * 1024,
+    default: 3 * 1024 * 1024,
+  },
   /**
    * What arrives before a reader scrolls: the document, its assets, the hero's
    * first frame and the whole of the hero's video. It was 600 KB, when the
@@ -62,16 +67,50 @@ export const BUDGET = {
    * it arrives.
    */
   firstView: 850 * 1024,
+  /**
+   * A clip of the 3D office: 1280 pixels wide at sixty frames a second, made
+   * somewhere else and brought in finished. This build cannot make one
+   * lighter, so the ceiling is what a clip of that size weighs.
+   */
+  clip: 1.6 * 1024 * 1024,
+  /**
+   * The 3D page before a reader scrolls, without the clip its first picture
+   * may play: the document, its assets and that picture. The clip is held to
+   * `clip` above and arrives over the picture, which is on the page first.
+   */
+  firstView3d: 900 * 1024,
 };
 
+/** Where the pictures of the 3D office sit, under `MEDIA_DIR` and under `media/`. */
+export const DIR_3D = '3d';
+
 /**
- * Pictures of something that is not released. They are not in the manifest,
- * because the free product cannot draw them, and they are the only pictures
- * allowed to be absent: a page wraps each in `<!-- if media/<file> -->` and
- * the block is dropped when the file is not there. Each must sit in a figure
- * whose caption carries the "Coming" tag.
+ * The pictures and clips of the 3D office, by file name, as
+ * `scripts/site-3d-import.mjs` listed them in `site/3d-media.json`. The free
+ * product cannot draw them, so they are not in `site/assets.json`; they are
+ * made somewhere else and arrive here finished.
+ *
+ * @returns {Map<string, {name: string, kind: 'still' | 'clip', width: number, height: number, bytes: number}>}
  */
-export const COMING = ['coming-office.png', 'coming-robot.png', 'coming-orbit.gif'];
+export function media3d() {
+  const file = path.join(here, '3d-media.json');
+  if (!fs.existsSync(file)) return new Map();
+  return new Map(JSON.parse(fs.readFileSync(file, 'utf8')).media.map((m) => [m.name, m]));
+}
+
+/**
+ * Pictures of something that is not released, as paths under `media/`. They
+ * are the only pictures allowed to be absent: a page wraps one in
+ * `<!-- if media/<file> -->` and the block is dropped when the file is not
+ * there. Each must sit in a figure whose caption carries the "Coming" tag.
+ */
+export const COMING = [...media3d().keys()].map((name) => `${DIR_3D}/${name}`);
+
+/** The room a 3D picture has when its page does not say: the column, or the window. */
+export const ROOM_3D = '(max-width: 76rem) 100vw, 76rem';
+
+/** `3d/office.png` -> true: a path under `media/` that is one of the 3D office's. */
+const is3d = (file) => file.startsWith(`${DIR_3D}/`);
 
 /**
  * The one composed picture: the card a link to the site unfurls into. It is
@@ -167,9 +206,32 @@ const large = (src) => src.replace(/\.png$/, '@3x.png');
  */
 export function resolveOptional(body) {
   return body.replace(
-    /[ \t]*<!-- if media\/([\w@.-]+) -->\n?([\s\S]*?)[ \t]*<!-- endif -->\n?/g,
+    /[ \t]*<!-- if media\/([\w@./-]+) -->\n?([\s\S]*?)[ \t]*<!-- endif -->\n?/g,
     (_m, file, inner) => (fs.existsSync(path.join(MEDIA_DIR, file)) ? inner : ''),
   );
+}
+
+/**
+ * A still of the 3D office that has a clip of the same thing names it:
+ * `data-clip="clip-stem"`, with the words for it in `data-clip-alt`. When the
+ * clip has been brought in, the picture becomes the clip's first frame, under
+ * those words, and `dressImages` lays the clip over it. When it has not, the
+ * still stays as it was written. Either way the two attributes are gone.
+ *
+ * @param {string} body
+ * @param {Map<string, unknown>} [listed] `media3d()`
+ */
+export function resolveClips(body, listed = media3d()) {
+  return body.replace(/<img\b[^>]*\sdata-clip="[^"]*"[^>]*>/g, (tag) => {
+    const clip = attr(tag, 'data-clip');
+    const words = attr(tag, 'data-clip-alt');
+    const plain = tag.replace(/\s+data-clip(?:-alt)?="[^"]*"/g, '');
+    if (!listed.has(`${clip}.mp4`)) return plain;
+    if (!words) throw new Error(`${clip} is shown with no words of its own: data-clip-alt`);
+    return plain
+      .replace(/\ssrc="[^"]*"/, ` src="media/${DIR_3D}/${clip}.png"`)
+      .replace(/\salt="[^"]*"/, ` alt="${words}"`);
+  });
 }
 
 /**
@@ -180,13 +242,23 @@ export function resolveOptional(body) {
  */
 export function referencedMedia(html) {
   const seen = new Set();
-  for (const m of html.matchAll(/(?:^|["\s,])media\/([\w@.-]+\.(?:png|gif|mp4))/g)) seen.add(m[1]);
+  const named = /(?:^|["\s,])media\/((?:3d\/)?[\w@.-]+\.(?:png|gif|mp4))/g;
+  for (const m of html.matchAll(named)) seen.add(m[1]);
   return [...seen];
 }
 
-/** `media/hero-walk.png` -> `hero-walk`, when that is a loop the manifest declares. */
-const loopOf = (src, loops) => {
-  const name = path.basename(src, '.png');
+/**
+ * `media/hero-walk.png` -> `hero-walk`, when that is a loop the manifest
+ * declares; `media/3d/clip-rise.png` -> `3d/clip-rise`, when that clip of the
+ * 3D office has been brought in. The answer is a path under `media/`, less
+ * its extension.
+ *
+ * @param {string} src @param {Set<string>} loops @param {Map<string, unknown>} listed
+ */
+const loopOf = (src, loops, listed) => {
+  if (!src.endsWith('.png')) return null;
+  const name = src.replace(/^media\//, '').replace(/\.png$/, '');
+  if (is3d(name)) return listed.has(`${name.slice(DIR_3D.length + 1)}.mp4`) ? name : null;
   return loops.has(name) ? name : null;
 };
 
@@ -200,29 +272,36 @@ const loopOf = (src, loops) => {
 export function publishMedia(outDir, files) {
   const declared = declaredMedia();
   const loops = declaredLoops();
+  const listed = media3d();
+  // A picture of the 3D office is known by its own list, any other by the
+  // manifest of captures.
+  const known = (file) =>
+    is3d(file) ? listed.has(file.slice(DIR_3D.length + 1)) : declared.has(file);
   const wanted = new Set(files);
   // A still brings its dense sibling, and a loop's still brings its video.
   for (const file of files) {
     if (file.endsWith('.gif')) wanted.add(file.replace(/\.gif$/, '.png'));
-    else if (declared.has(dense(file))) wanted.add(dense(file));
+    else if (known(dense(file))) wanted.add(dense(file));
     if (declared.has(large(file))) wanted.add(large(file));
-    const loop = loopOf(file, loops);
+    const loop = loopOf(file, loops, listed);
     if (loop) wanted.add(`${loop}.mp4`);
     if (loop && declared.has(narrowOf(loop))) wanted.add(narrowOf(loop));
   }
   let bytes = 0;
   let heaviest = { file: '', bytes: 0 };
-  fs.mkdirSync(path.join(outDir, 'media'), { recursive: true });
+  fs.mkdirSync(path.join(outDir, 'media', DIR_3D), { recursive: true });
   for (const file of wanted) {
-    if (!declared.has(file) && !COMING.includes(file) && !COMPOSED.includes(file)) {
-      throw new Error(`media/${file} is shown on a page and is not declared in site/assets.json`);
+    if (!known(file) && !COMPOSED.includes(file)) {
+      const list = is3d(file) ? 'listed in site/3d-media.json' : 'declared in site/assets.json';
+      throw new Error(`media/${file} is shown on a page and is not ${list}`);
     }
     const from = path.join(MEDIA_DIR, file);
     if (!fs.existsSync(from)) {
       throw new Error(`media/${file} is declared and not captured: run scripts/site-assets.mjs`);
     }
     const size = fs.statSync(from).size;
-    const budget = /\.(gif|mp4)$/.test(file) ? BUDGET.loop : BUDGET.still;
+    const moving = /\.(gif|mp4)$/.test(file);
+    const budget = moving ? (is3d(file) ? BUDGET.clip : BUDGET.loop) : BUDGET.still;
     if (size > budget) {
       throw new Error(
         `media/${file} is ${Math.round(size / 1024)} KB, over the ` +
@@ -254,6 +333,7 @@ export function publishMedia(outDir, files) {
  */
 export function dressImages(body, outDir, tones = {}) {
   const loops = declaredLoops();
+  const listed = media3d();
   return body.replace(/<img\b[^>]*>/g, (tag) => {
     const src = attr(tag, 'src');
     if (!src || !src.startsWith('media/')) return tag;
@@ -265,7 +345,16 @@ export function dressImages(body, outDir, tones = {}) {
     if (tone && !attr(tag, 'class')) extra += ` class="ph-${tone}"`;
     if (!attr(tag, 'width')) extra += ` width="${size.width}" height="${size.height}"`;
     const pair = src.endsWith('.png') && fs.existsSync(path.join(outDir, dense(src)));
-    if (pair && !attr(tag, 'srcset')) extra += ` srcset="${src} 1x, ${dense(src)} 2x"`;
+    // A picture of the 3D office is offered by width and not by density. Its
+    // source is 1600 pixels wide and no file of it is wider than 2000, so its
+    // plain file is narrower than the column it is shown in; named by width,
+    // an ordinary screen takes the dense file where the room is that wide,
+    // and a phone the plain one. `sizes` says how much room, and a page that
+    // shows one narrower than the column says so itself.
+    if (pair && !attr(tag, 'srcset') && is3d(src.replace(/^media\//, ''))) {
+      extra += ` srcset="${src} ${size.width}w, ${dense(src)} ${size.width * 2}w"`;
+      if (!attr(tag, 'sizes')) extra += ` sizes="${ROOM_3D}"`;
+    } else if (pair && !attr(tag, 'srcset')) extra += ` srcset="${src} 1x, ${dense(src)} 2x"`;
     if (!/\sfetchpriority="high"/.test(tag) && !attr(tag, 'loading')) extra += ' loading="lazy"';
     if (!attr(tag, 'decoding')) extra += ' decoding="async"';
     const img = tag.replace(/\s+data-narrow="[^"]*"/, '').replace(/\s*\/?>$/, `${extra} />`);
@@ -295,7 +384,7 @@ export function dressImages(body, outDir, tones = {}) {
       );
     }
     if (wide) return `<picture>${wide}${img}</picture>`;
-    const loop = loopOf(src, loops);
+    const loop = loopOf(src, loops, listed);
     if (loop) {
       // The video is laid over its own first frame and takes no room of its
       // own, so the still is what holds the box, what is described, and what
@@ -361,11 +450,13 @@ export function assertComingIsLabelled(name, body) {
  *
  * @param {string} outDir
  * @param {string} rel a page, e.g. `features.html`
- * @param {{dpr?: 1|2, all?: boolean, narrow?: boolean}} [opts] `narrow`: a screen under 40rem
+ * @param {{dpr?: 1|2, all?: boolean, narrow?: boolean, videos?: boolean}} [opts] `narrow`: a
+ *   screen under 40rem; `videos: false`: the page before any video, which is what a reader who
+ *   asked for less motion is sent
  * @returns {number} bytes
  */
 export function pageWeight(outDir, rel, opts = {}) {
-  const { dpr = 2, all = true } = opts;
+  const { dpr = 2, all = true, videos = true } = opts;
   const file = path.join(outDir, rel);
   const html = fs.readFileSync(file, 'utf8');
   let bytes = Buffer.byteLength(html);
@@ -387,6 +478,7 @@ export function pageWeight(outDir, rel, opts = {}) {
   // as soon as the page is, and any other when the reader scrolls to it. Of
   // two sources one is fetched: the narrow file on a phone, the other on
   // every wider screen.
+  if (!videos) return bytes;
   for (const [, tag, inner] of html.matchAll(/(<video\b[^>]*>)([\s\S]*?)<\/video>/g)) {
     const sources = [...inner.matchAll(/<source\b[^>]*\ssrc="([^"]+)"[^>]*>/g)];
     const pick = sources.find((s) => /max-width/.test(s[0]) === Boolean(opts.narrow));

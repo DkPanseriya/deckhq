@@ -37,14 +37,17 @@ import {
   dressImages,
   imageSize,
   MEDIA_DIR,
+  media3d,
   NARROW,
   pageWeight,
   publishMedia,
   referencedMedia,
+  resolveClips,
   resolveOptional,
 } from './media.mjs';
 import { placeholderTones } from './placeholder.mjs';
 import {
+  announceBar,
   atomFeed,
   FEED,
   fill,
@@ -53,6 +56,7 @@ import {
   MAKER_URL,
   quotesBlock,
   releaseAnchor,
+  waitlistButton,
   WAITLIST_URL,
 } from './slots.mjs';
 
@@ -87,8 +91,15 @@ const TAGLINE = 'An office for your AI coding agents';
 /** The card a link to any page unfurls into: 1200 x 630. */
 const PREVIEW = 'link-preview.png';
 
+/**
+ * The card of the one page that has a card of its own: the 3D page unfurls
+ * into the floor today beside the same floor in 3D, which says Coming in the
+ * picture. Its size is read from `site/3d-media.json`, not written here.
+ */
+const PREVIEW_3D = '3d/office@2x.png';
+
 /** The stylesheet's sources, in the order they are joined into `style.css`. */
-const STYLES = ['style.css', 'components.css'];
+const STYLES = ['style.css', 'components.css', 'three-d.css'];
 
 /* ------------------------------------------------------------------ pages */
 
@@ -121,6 +132,22 @@ const PAGES = [
     description:
       'Eleven styles, three lights, room colours, three themes and four agent sizes. The ' +
       'eleven styles are one floor, repainted.',
+  },
+  {
+    slug: '3d',
+    nav: '3D',
+    // Not released: the bar says so beside the name, on every page.
+    navTag: 'Coming',
+    title: 'The same office, in 3D',
+    description:
+      'The DeckHQ office in 3D: every session a robot at a desk, the ones waiting on you on ' +
+      'the sofa in your office. Coming. The office from above is free today.',
+    card: {
+      file: PREVIEW_3D,
+      alt:
+        'The same office twice: the DeckHQ floor seen from above, labelled Today, and beside ' +
+        'it the same rooms in 3D, labelled Coming.',
+    },
   },
   {
     slug: 'install',
@@ -309,7 +336,18 @@ const pageUrl = (slug) => (slug === 'index' ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN
  */
 function head(page) {
   const full = page.slug === 'index' ? page.title : `${page.title} · DeckHQ`;
-  const card = `${SITE_ORIGIN}/media/${PREVIEW}`;
+  // The card: the composed one, or a page's own, at the size its file has.
+  const own = page.card ? media3d().get(page.card.file.split('/').pop()) : null;
+  if (page.card && !own) throw new Error(`${page.slug}.html: its card is not in 3d-media.json`);
+  const shown = own
+    ? { file: page.card.file, width: own.width, height: own.height, alt: page.card.alt }
+    : {
+        file: PREVIEW,
+        width: 1200,
+        height: 630,
+        alt: 'The DeckHQ floor: an office seen from above, with a robot at each desk and two waiting in Your Office.',
+      };
+  const card = `${SITE_ORIGIN}/media/${shown.file}`;
   // The first picture is asked for before the stylesheet has been read: the
   // whole window on a wide screen, its closer crop on a narrow one, and of
   // each the file for the density the screen has. One of the four is fetched.
@@ -349,9 +387,9 @@ function head(page) {
     <meta property="og:description" content="${esc(page.description)}" />
     <meta property="og:url" content="${esc(pageUrl(page.slug))}" />
     <meta property="og:image" content="${esc(card)}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The DeckHQ floor: an office seen from above, with a robot at each desk and two waiting in Your Office." />
+    <meta property="og:image:width" content="${shown.width}" />
+    <meta property="og:image:height" content="${shown.height}" />
+    <meta property="og:image:alt" content="${esc(shown.alt)}" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${esc(full)}" />
     <meta name="twitter:description" content="${esc(page.description)}" />
@@ -370,7 +408,9 @@ function head(page) {
 function shell(page) {
   const link = (p, indent) => {
     const current = p.slug === page.slug ? ' aria-current="page"' : '';
-    return `${indent}<a href="${p.slug}.html"${current}>${esc(p.nav)}</a>`;
+    // A page about something not released carries the tag beside its name.
+    const tag = p.navTag ? ` <span class="tag tag--coming">${esc(p.navTag)}</span>` : '';
+    return `${indent}<a href="${p.slug}.html"${current}>${esc(p.nav)}${tag}</a>`;
   };
   const bar = PAGES.filter((p) => p.nav);
   const nav = bar.map((p) => link(p, '          ')).join('\n');
@@ -384,6 +424,7 @@ function shell(page) {
   ${head(page)}
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
+    ${announceBar()}
     <header class="site-head">
       <div class="wrap head-inner">
         <a class="brand" href="index.html">
@@ -423,6 +464,7 @@ ${page.body.replace(/\n$/, '')}
           <ul>
             <li><a href="features.html">Features</a></li>
             <li><a href="look.html">Look</a></li>
+            <li><a href="3d.html">3D, coming</a></li>
             <li><a href="install.html">Install</a></li>
             <li><a href="changelog.html">Changelog</a></li>
           </ul>
@@ -543,6 +585,10 @@ function build() {
   const slots = {
     follow: followBlock({ repo: REPO, url: WAITLIST_URL }),
     quotes: quotesBlock(JSON.parse(read(path.join('site', 'quotes.json'))).quotes),
+    // The e-mail button, where a page about 3D asks for it: quiet beside
+    // another button, large on the 3D page. Nothing while there is no form.
+    waitlist: waitlistButton({ label: 'Tell me when it is ready', kind: 'btn--ghost' }),
+    'waitlist-large': waitlistButton({ label: 'Tell me when it is ready', kind: 'btn--large' }),
   };
 
   // The bodies first, because the pictures are published from what the pages
@@ -554,9 +600,9 @@ function build() {
       : page.generated
         ? changelogBody(releases)
         : read(path.join('site', 'pages', `${page.slug}.html`));
-    return { page, body: fill(resolveOptional(source), slots) };
+    return { page, body: fill(resolveClips(resolveOptional(source)), slots) };
   });
-  const shown = new Set([PREVIEW]);
+  const shown = new Set([PREVIEW, ...PAGES.filter((p) => p.card).map((p) => p.card.file)]);
   for (const { page, body } of bodies) {
     assertComingIsLabelled(`${page.slug}.html`, body);
     for (const file of referencedMedia(body)) shown.add(file);
@@ -627,12 +673,21 @@ function build() {
   // A screen under 40rem is offered the walk at half the width.
   const phone = pageWeight(OUT, 'index.html', { all: false, narrow: true });
   const kb = (n) => `${Math.round(n / 1024)} KB`;
+  // The 3D page before a reader scrolls: held to its budget without the clip
+  // its first picture may play, and that clip is said beside it.
+  const first3d = pageWeight(OUT, '3d.html', { all: false, videos: false });
+  if (first3d > BUDGET.firstView3d) {
+    throw new Error(`the 3D page's first view is ${kb(first3d)}, over ${kb(BUDGET.firstView3d)}`);
+  }
+  const clip3d = pageWeight(OUT, '3d.html', { all: false }) - first3d;
   const heaviest = weights.reduce((a, b) => (b.bytes > a.bytes ? b : a));
   const home = weights.find((w) => w.page === 'index.html');
 
   process.stdout.write(
     `site: home ${kb(first)} before scrolling (${kb(phone)} on a phone), ` +
       `${kb(home.bytes)} read to the bottom\n` +
+      `site: 3d ${kb(first3d)} before scrolling` +
+      (clip3d ? `, and ${kb(clip3d)} of clip over its first picture\n` : ', no clip yet\n') +
       `site: heaviest page ${heaviest.page} at ${kb(heaviest.bytes)}; ` +
       `heaviest picture ${media.heaviest.file} at ${kb(media.heaviest.bytes)}\n` +
       `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
@@ -695,6 +750,8 @@ export {
   imageSize,
   dressImages,
   resolveOptional,
+  resolveClips,
+  media3d,
   referencedMedia,
   declaredMedia,
   assertComingIsLabelled,

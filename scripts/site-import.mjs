@@ -1,22 +1,19 @@
 /**
- * Bring in the few pictures the site shows that `scripts/site-assets.mjs`
- * cannot take from the free product.
+ * Bring in the one picture the site shows that `scripts/site-assets.mjs`
+ * cannot take from the free product and that is not of the 3D office.
  *
  *   node scripts/site-import.mjs <folder>
  *
- * There are two kinds, and `site/media.mjs` lists both by name:
+ * It is the card a link to the site unfurls into, 1200 x 630: a composed
+ * image (the mark, one line, a capture of the floor) rather than a capture on
+ * its own. `site/media.mjs` lists it by name.
  *
- *   - the card a link to the site unfurls into, 1200 x 630, which is a
- *     composed image (the mark, one line, a capture of the floor) rather than
- *     a capture on its own;
- *   - pictures of the 3D office, which is not released. Each one carries the
- *     word "Coming" in the picture itself and again in its caption, and a page
- *     that shows one is built without it when the file is absent.
+ * The pictures and clips of the 3D office, which is not released, come in
+ * through `scripts/site-3d-import.mjs` and have a list of their own.
  *
- * Every file is resampled to the width the site shows it at and written
- * against a 256-colour palette, dithered, because these are shaded renders
- * rather than flat drawings. A file the folder does not have is skipped and
- * said so; nothing is invented in its place.
+ * The file is resampled to the width the site shows it at and written against
+ * a 256-colour palette. If the folder does not have it, it is skipped and said
+ * so; nothing is invented in its place.
  *
  * Dev script only: `scripts/` is not in the published package.
  */
@@ -34,9 +31,6 @@ const OUT = path.join(ROOT, 'docs', 'media', 'site');
 /** What to look for in the folder, and what it becomes on the site. */
 const IMPORTS = [
   { from: 'link-preview-1200x630.png', to: 'link-preview.png', width: 1200, dither: false },
-  { from: 'pro3d.office.png', to: 'coming-office.png', width: 1280, dither: true },
-  { from: 'pro3d.hero-stem.png', to: 'coming-robot.png', width: 960, dither: true },
-  { from: 'pro3d.orbit.gif', to: 'coming-orbit.gif' },
 ];
 
 /** What `site/media.mjs` lets a loop weigh. */
