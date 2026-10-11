@@ -38,6 +38,7 @@ import {
   crewChipText,
   crewNameAt,
   crewPulseCount,
+  inFormation,
   pointAlong,
 } from './crew.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
@@ -123,6 +124,10 @@ function drawOne(ctx, view, rec, pulses, px) {
   const seat = rec.targetSeat;
   const route = seat.route;
   if (!Array.isArray(route) || route.length < 2) return;
+  // Only to a member that is IN the formation (`inFormation`): the route ends
+  // at its seat and the last run goes on to wherever the record is, so a cable
+  // drawn on the seat's word alone followed a junior out of the room.
+  if (!inFormation(rec)) return;
   const agent = view.agentsById.get(rec.id) || rec.agent;
   const live = agent ? crewCableLive(agent, view.nowMs, { reduced: view.reduced }) : 0;
   const extent = crewCableExtent(view.nowMs, rec, {
@@ -141,7 +146,7 @@ function drawOne(ctx, view, rec, pulses, px) {
   strokeFromPort(ctx, view, route, extent, rec);
   ctx.globalAlpha = 1;
 
-  if (!pulses) return;
+  if (!pulses || live <= 0) return;
   const count = agent ? crewPulseCount(agent, view.nowMs) : 0;
   if (count <= 0) return;
   // The loop phase: the injected clock folded into `CREW_PULSE_MS`, or `?phase=`
@@ -250,13 +255,13 @@ function chipOf(view, parentId, all, widest) {
   // last given, and that seat still says how many were at the desk before it
   // went: one junior folding away alone read `+2`, for the two that had gone
   // ahead of it. Its cable is still drawn, retracting; it is in no count.
-  const members = all.filter((rec) => typeof rec.leftAt !== 'number');
+  const members = all.filter((rec) => typeof rec.leftAt !== 'number' && inFormation(rec));
   if (!members.length) return null;
   // The desk the crew is cabled to, and how many are AT it — read off the seat
   // `assignSeats` wrote, because since bug 201 neither is the parent's: the
   // parent may be on a reception sofa while its crew works at the room's
-  // primary desk, and a junior that finished is resting in the lounge rather
-  // than being one of the `+N` this chip stands for.
+  // primary desk, and a junior that has finished and been fired is on no part
+  // of the floor rather than being one of the `+N` this chip stands for.
   const seat = members[0].targetSeat;
   const anchor = (seat && seat.crewAnchor) || view.seatOf(parentId);
   const total = (seat && seat.crewTotal) ?? view.crewCounts.get(parentId) ?? members.length;

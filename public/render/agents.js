@@ -73,7 +73,12 @@ import {
 import { planWalk, doorFor } from './agents-nav.js';
 import { derivePlacement } from './agents-seats.js';
 import { agentIndex, homeProjectOf } from '../floor-rule.js';
-import { pickNextActivity, pickNextActivityFromClips, initialClipFor } from './agents-activity.js';
+import {
+  clipEpochFor,
+  pickNextActivity,
+  pickNextActivityFromClips,
+  initialClipFor,
+} from './agents-activity.js';
 // WP-87. `./life.js` is the one new static import this file takes, and it does
 // not break the rule the header states above: `life.js` is pure, imports only
 // `./agents-core.js` (which imports nothing), and touches no canvas and no DOM,
@@ -206,44 +211,6 @@ export function bayActivityChoice(id, bays, cycle) {
     duration: loungeHoldMs(id, cycle) / 1000,
     paired: PAIRED_ACTIVITIES.has(activity),
   };
-}
-
-/**
- * WHEN THIS CLIP STARTED, AND IT IS THE AGENT'S OWN TIMESTAMP WHEREVER THERE
- * IS ONE (WP-87, `docs/plan/12-MOTION-AND-CREW.md` §1.1).
- *
- * *"`clipStartedAt` becomes a phase offset derived from a real timestamp on the
- * agent … rather than from when this tab noticed, so two tabs draw the same
- * frame and a reload does not restart a cycle."* That is the whole of this
- * function: a hand has been up since `needsInputSince`, a review has been
- * waiting since `reviewSince`, and a session has been working since its last
- * observed activity. Each is a fact the daemon reported, so two browsers
- * looking at one floor agree about which frame of the wave they are on.
- *
- * The fallback is the caller's `now` — the injected clock — and it is used for
- * exactly the things the model has no timestamp for: a walk (which started when
- * THIS tab saw the seat change) and a lounge activity (which the rotation
- * itself chose).
- *
- * @param {AgentLike & {needsInputSince?:number|null, reviewSince?:number|null,
- *   lastActivityAt?:number, spawnedAt?:number|null}} agent
- * @param {string} placement
- * @param {number} now the injected clock
- * @returns {number} ms epoch
- */
-export function clipEpochFor(agent, placement, now) {
-  const ok = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-  if (!agent) return now;
-  if (placement === 'desk' || placement === 'office') {
-    if (agent.activityState === 'needs_input') {
-      return ok(agent.needsInputSince) ?? ok(agent.lastActivityAt) ?? now;
-    }
-    if (agent.activityState === 'for_review') {
-      return ok(agent.reviewSince) ?? ok(agent.lastActivityAt) ?? now;
-    }
-    return ok(agent.lastActivityAt) ?? ok(agent.spawnedAt) ?? now;
-  }
-  return now;
 }
 
 // ------------------------------------------------------------- AgentRuntime
@@ -431,7 +398,11 @@ export class AgentRuntime {
     const behindChip = (plan && plan.loungeOverflow && plan.loungeOverflow.ids) || null;
     const seen = new Set();
     for (const agent of agents) {
-      const placement = derivePlacement(agent, byId);
+      // A junior that has finished (`done`) and still has a seat is being held
+      // at its place for a moment (`junior-hold.js`): it sits where it sat.
+      // Without a seat it is skipped below, and folds away as one that left.
+      const zone = derivePlacement(agent, byId);
+      const placement = zone === 'done' ? 'desk' : zone;
       // An archived session is off the floor: it has no room, no seat and
       // nothing drawn, so it gets no record either. Keeping one would fall
       // through to the no-seat fallback and park every one of them on the
@@ -480,7 +451,22 @@ export class AgentRuntime {
       // …and one that came back before its fold-away finished is simply here.
       rec.leftAt = null;
 
-      if (!rec.initialised) {
+      // A JUNIOR IS HIRED AT ITS PLACE AND NEVER WALKS TO IT FROM ANOTHER ROOM.
+      // One back from Your Office, its hand answered, arrives as a new one
+      // does: there, by the arrival animation. Walking back, it crossed two
+      // rooms with its cable stretched from the desk to wherever it was.
+      const hired =
+        rec.initialised &&
+        agent.subagent === true &&
+        placement === 'desk' &&
+        !!destRoom &&
+        rec.roomId !== destRoom.id;
+      if (hired) {
+        rec.spawnAt = timed ? now : null;
+        rec.pendingClip = null;
+        rec.running = false;
+      }
+      if (!rec.initialised || hired) {
         rec.x = seat ? seat.x : destRoom ? destRoom.x + destRoom.w / 2 : 0;
         rec.y = seat ? seat.y : destRoom ? destRoom.y + destRoom.h / 2 : 0;
         rec.angle = seat && typeof seat.angle === 'number' ? seat.angle : 0;

@@ -294,7 +294,8 @@ test('bug 201: the away crew’s desk carries the parent’s name, and the chip 
   const seats = assignSeats(plan, agents);
   const records = agents
     .filter((a) => seats.get(a.id)?.crew === true)
-    .map((a) => ({ id: a.id, agent: a, targetSeat: seats.get(a.id), x: 0, y: 0 }));
+    // Each at its seat: a chip counts the members in the formation (`inFormation`).
+    .map((a) => ({ ...seats.get(a.id), id: a.id, agent: a, targetSeat: seats.get(a.id) }));
   /** @type {{text:string, x:number, y:number}[]} */
   const texts = [];
   const ctx = new Proxy(

@@ -393,7 +393,10 @@ export function chairFootprints(seats, own) {
  * @param {Plan} plan
  * @param {AgentLike[]} agents
  * @param {{selectedId?: string|null,
- *   keep?: Map<string, {pid:string, i:number, n:number}>|null}} [opts]
+ *   keep?: Map<string, {pid:string, i:number, n:number}>|null,
+ *   held?: Map<string, AgentLike>|null}} [opts]
+ *   `held`: the finished juniors that keep their place for a moment
+ *   (`junior-hold.js`), by id. The page's own memory, like the other two.
  *   `selectedId`: the session whose panel is open. A waiting one walks to the
  *   manager's desk; anybody else is left exactly where their state puts them.
  *   `keep`: the desk chairs the page's people were last in (`deskSeatsOf`), so
@@ -428,8 +431,9 @@ export function assignSeats(plan, agents, opts = {}) {
    * what gives a senior with three juniors a four-seater to stand around.
    *
    * ONLY THE ONES AT A DESK (bug 201). A junior is placed by its own state:
-   * one that finished rests in the lounge and one with its hand up waits in the
-   * office, through the same passes as everybody else below.
+   * one with its hand up waits in the office, through the same pass as
+   * everybody else below, and one that has finished gets no seat at all —
+   * unless the page is holding it at its place for a moment (`held`).
    * @type {Map<string, AgentLike[]>}
    */
   const juniorsByParent = new Map();
@@ -443,17 +447,24 @@ export function assignSeats(plan, agents, opts = {}) {
    */
   const placementById = new Map();
   const byId = agentIndex(agents);
+  // THE JUNIORS THE PAGE IS HOLDING AT THEIR PLACE (`junior-hold.js`): finished
+  // a moment ago, and seated with their formation until they are fired, so
+  // nobody closes up round one that is still sitting there. One that has left
+  // the snapshot is seated from the copy the hold kept of it.
+  const held = (opts && opts.held && opts.held.size && opts.held) || null;
+  const atPlace = (/** @type {AgentLike} */ junior) => {
+    const parent = junior.parentId == null ? '' : String(junior.parentId);
+    juniorsByParent.set(parent, [...(juniorsByParent.get(parent) || []), junior]);
+  };
+  for (const [id, junior] of held || []) if (!byId.has(id)) atPlace(junior);
 
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
     const p = derivePlacement(agent, byId);
     // In the lounge and behind its chip: counted there, drawn nowhere.
     if (p === 'lounge' && behindChip && behindChip.has(String(agent.id))) continue;
-    if (agent.subagent === true && p === 'desk') {
-      const parent = agent.parentId == null ? '' : String(agent.parentId);
-      const list = juniorsByParent.get(parent) || [];
-      list.push(agent);
-      juniorsByParent.set(parent, list);
+    if (agent.subagent === true && (p === 'desk' || (held && held.has(String(agent.id))))) {
+      atPlace(agent);
       continue;
     }
     if (agent.subagent !== true) placementById.set(String(agent.id), p);
@@ -671,6 +682,9 @@ function seatAround(desk, room, roomSeats, parentId, ordered, away, result) {
           crewIndex: i,
           crewOf: parentId,
           crewAnchor: { x: desk.x, y: desk.y, angle },
+          // The room the formation is in: a cable is drawn inside it or not
+          // at all (`inFormation`, `crew.js`).
+          crewRoom: room || null,
           crewTotal: ordered.length,
           crewIds,
           ...(away ? { crewAway: true } : {}),
