@@ -40,6 +40,7 @@ import {
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
 import { crewAwayNameBoxes, crewChipBoxes } from './crew-draw.js';
+import { inFormation } from './crew.js';
 import {
   abbreviateName,
   resolveLabelCollisions,
@@ -101,7 +102,15 @@ function labelGroups(records, agentsById) {
     // the first is the same word the panels use (`roleWordFor`).
     const role = roleWordFor(agent);
     if (role) roles.set(rec.id, role);
-    if (seat && seat.crew === true && agent.subagentType) {
+    // A TAG COUNTS AND DESCRIBES ONLY THE JUNIORS THAT ARE DRAWN THERE. One
+    // folding away has been fired: it is in no count and carries no name for
+    // the 0.42 s it takes to go. One the seat names but who is not in the
+    // formation's room (`inFormation`) is not one of `general-purpose ×4`
+    // either, and the tag is never hung on it: the owner's picture had the
+    // crew's tag in the Lounge, under a junior on its way back from there.
+    const crewed = !!seat && seat.crew === true;
+    if (crewed && typeof rec.leftAt === 'number') continue;
+    if (crewed && agent.subagentType && inFormation(rec)) {
       const type = String(agent.subagentType);
       const key = `${seat.crewOf}\u0000${type}`;
       const at = seat.crewIndex ?? 0;
@@ -191,15 +200,21 @@ export function wallBoxes(plan, camera) {
  * @returns {{x:number, y:number, w:number, h:number}|undefined}
  */
 export function roomFloor(rooms, rec, camera) {
-  if (!Array.isArray(rooms) || (rec.path && rec.path.length > 0)) return undefined;
-  const room = rooms.find(
-    (r) =>
-      r.kind !== 'corridor' &&
-      rec.x >= r.x &&
-      rec.x <= r.x + r.w &&
-      rec.y >= r.y &&
-      rec.y <= r.y + r.h,
-  );
+  // A JUNIOR'S TAG IS IN ITS LEAD'S ROOM, walking or not: a member of a
+  // formation is in the room that formation is in (`inFormation`), and a
+  // shuffle along the arc does not let its tag out of it.
+  const crew = inFormation(rec) ? rec.targetSeat.crewRoom : null;
+  if (!crew && (!Array.isArray(rooms) || (rec.path && rec.path.length > 0))) return undefined;
+  const room =
+    crew ||
+    rooms.find(
+      (/** @type {any} */ r) =>
+        r.kind !== 'corridor' &&
+        rec.x >= r.x &&
+        rec.x <= r.x + r.w &&
+        rec.y >= r.y &&
+        rec.y <= r.y + r.h,
+    );
   if (!room) return undefined;
   const pad =
     Math.max(1, (WALL_PX.exterior / U_DEFAULT) * camera.zoom * camera.U * 0.5) + WALL_CLEAR_PX;
