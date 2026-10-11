@@ -1598,6 +1598,8 @@ function recordingCtx() {
     runs: [],
     /** @type {{x:number,y:number,r:number,fill:string}[]} */
     dots: [],
+    /** Every text that was drawn as an OUTLINE. @type {string[]} */
+    outlined: [],
     /** @type {{x:number,y:number,r:number}|null} */
     _arc: null,
     save() {},
@@ -1614,7 +1616,9 @@ function recordingCtx() {
     measureText(text) {
       return { width: String(text).length * parseFloat(/(\d[\d.]*)px/.exec(this.font)[1]) * 0.6 };
     },
-    strokeText() {},
+    strokeText(text) {
+      this.outlined.push(String(text));
+    },
     fillText(text, x, y) {
       this.runs.push({ text, x, y, font: this.font, fill: String(this.fillStyle) });
     },
@@ -1633,7 +1637,7 @@ function drawPlate(room, snapshot, { zoom = 1, U = 17.5 } = {}) {
     _plan: null,
   });
   scene._drawRoomPlate(room, { zoom, panX: 0, panY: 0, U });
-  return { runs: ctx.runs, dots: ctx.dots, rect: scene._plateRects[0] };
+  return { runs: ctx.runs, dots: ctx.dots, outlined: ctx.outlined, rect: scene._plateRects[0] };
 }
 
 const WIDE_ROOM = { ...PLATE_ROOM, x: 0, y: 0, w: 30, h: 20, plateBand: 3.4 };
@@ -1673,7 +1677,9 @@ test('WP-81: two frames a minute apart set every plate glyph in the same place',
 });
 
 test('WP-81: the plate is ranked by size and by ink, hero first', () => {
-  const { runs, dots } = withFixedNow(PLATE_NOW, () => drawPlate(WIDE_ROOM, plateFixture()));
+  const { runs, dots, outlined } = withFixedNow(PLATE_NOW, () =>
+    drawPlate(WIDE_ROOM, plateFixture()),
+  );
   const px = (run) => parseFloat(/(\d[\d.]*)px/.exec(run.font)[1]);
   assert.equal(runs.length, 4);
   // The hero is the largest thing on the plate — larger than the room's own
@@ -1682,10 +1688,16 @@ test('WP-81: the plate is ranked by size and by ink, hero first', () => {
   assert.ok(px(runs[1]) > px(runs[0]), 'the hero is not the biggest line');
   assert.ok(px(runs[0]) > px(runs[2]), 'the name is not above the doing line');
   assert.ok(px(runs[2]) >= 11 && px(runs[3]) >= 11, 'a plate line fell under 11 px');
-  // Four ranks of ink, and the quietest is the spend line.
+  // Two inks: the hero in the strongest, and the name and the two lines under
+  // it in the one that is held to the bare floor in every light and style.
+  // (The spend line was a third, quieter ink, which only read over an outline;
+  // a plate with an outline on two of its four lines read as two typefaces.)
   assert.equal(runs[1].fill, PALETTE.plateInk);
   assert.equal(runs[0].fill, PALETTE.plateInkSecondary);
-  assert.equal(runs[3].fill, PALETTE.plateInkTertiary);
+  assert.equal(runs[2].fill, PALETTE.plateInkSecondary);
+  assert.equal(runs[3].fill, PALETTE.plateInkSecondary);
+  // NO LINE OF A PLATE IS OUTLINED: every one is filled and none is stroked.
+  assert.deepEqual(outlined, [], 'a line of the plate is drawn with an outline');
   // One state dot, beside the hero, in the reserved crimson.
   assert.equal(dots.length, 2, 'the dot is a halo disc under an ink disc');
   assert.equal(dots[1].fill, STATE_COLORS.for_review);

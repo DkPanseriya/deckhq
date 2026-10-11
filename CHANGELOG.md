@@ -6,6 +6,13 @@
 
 ## Unreleased
 
+### Changed
+
+- **A room's plate is set one way.** Its name and its count were drawn bare while the two quiet
+  lines under them, what the room is doing and the day's spend, kept a pale outline, and the block
+  read as two typefaces. All four lines are now bare, in an ink that is held to the floor in every
+  light and style; the order is carried by size and weight.
+
 ## 1.8.0 — 2026-10-11
 
 ### Highlights

@@ -754,9 +754,9 @@ export class SceneLabels extends SceneBake {
         ctx.fill();
       }
       // The name is context — which room — and the hero is the message: what
-      // to do. Both are set BARE, with no outline round them: at their weight
-      // their ink reads against the floor itself. The two quiet rows under
-      // them keep their halo (`floor-type.js`, `textPaint`).
+      // to do. Every row of a plate is set BARE, with no outline round it: its
+      // ink is held to the floor itself (`floor-type.js`, `textPaint`). The
+      // stroke below is for a kind of text that does carry a backing.
       const paint = textPaint(PLATE_KINDS[row.i]);
       // The baseline and the left edge on whole device pixels, so a row is the
       // same row in every room.

@@ -236,11 +236,13 @@ export function badgeInk(fill) {
  * name whose ink was the theme's, is how the night shift's names came to be
  * white on white.
  *
- * A room's NAME and its COUNT are set bare: no outline and no card (R-082, the
- * owner's own words), at a weight that needs neither — both inks are held to
- * the floor itself. The two quiet lines under them keep a hairline of halo,
- * because the quietest ink is spent to its budget against the halo, not
- * against a floor.
+ * A ROOM'S PLATE IS SET BARE, all four lines: no outline and no card (R-082,
+ * the owner's own words). Two lines bare and two outlined read as two
+ * typefaces in one block (the owner, 11 October 2026: "the font styling looks
+ * off when some text has outlines and some don't"). So the two quiet lines
+ * take the name's ink, which is held to the floor itself in every light and
+ * style, and the plate's order is carried by size and weight alone: the count
+ * bold and largest, the name bold, the two lines under them medium and small.
  *
  * @param {string} kind one of `TEXT_KINDS`
  * @param {string} [state] for a badge: the state whose colour its pill is
@@ -253,9 +255,8 @@ export function textPaint(kind, state) {
     case 'plateCount':
       return { ink: PALETTE.plateInk, backing: null };
     case 'plateDoing':
-      return { ink: PALETTE.plateInkSecondary, backing: PALETTE.plateHalo };
     case 'plateTokens':
-      return { ink: PALETTE.plateInkTertiary, backing: PALETTE.plateHalo };
+      return { ink: PALETTE.plateInkSecondary, backing: null };
     case 'roleChip':
       return { ink: opaqueOf(PALETTE.plateHalo), backing: PALETTE.plateInkSecondary };
     case 'badge': {
