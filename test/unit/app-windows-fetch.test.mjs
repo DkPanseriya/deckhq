@@ -239,9 +239,9 @@ test('Windows PowerShell 5.1 is started without the calling shell’s module pat
   // in. The first build in CI stopped exactly there.
   const { authenticodeEnv } = await import('../../app/windows/lib/verify.mjs');
   const env = authenticodeEnv(
-    { PSModulePath: 'C:\pwsh7\Modules', psmodulepath: 'x', PATH: 'C:\Windows', TEMP: 't' },
-    ['C:\a.dll'],
+    { PSModulePath: 'C:/pwsh7/Modules', psmodulepath: 'x', PATH: 'C:/Windows', TEMP: 't' },
+    ['C:/build/a.dll'],
   );
   assert.deepEqual(Object.keys(env).sort(), ['DECKHQ_AUTHENTICODE_FILES', 'PATH', 'TEMP']);
-  assert.equal(env.DECKHQ_AUTHENTICODE_FILES, '["C:\\a.dll"]');
+  assert.deepEqual(JSON.parse(String(env.DECKHQ_AUTHENTICODE_FILES)), ['C:/build/a.dll']);
 });
