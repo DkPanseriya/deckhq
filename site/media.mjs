@@ -70,9 +70,17 @@ export const BUDGET = {
   /**
    * A clip of the 3D office: 1280 pixels wide at sixty frames a second, made
    * somewhere else and brought in finished. This build cannot make one
-   * lighter, so the ceiling is what a clip of that size weighs.
+   * lighter, so the ceiling is what a clip of that size weighs. Three
+   * megabytes since the ten-second walk-through, which was mush at 1.6: a clip
+   * below the first screen is fetched only when it scrolls into view.
    */
-  clip: 1.6 * 1024 * 1024,
+  clip: 3 * 1024 * 1024,
+  /**
+   * The one clip that plays before a reader scrolls, on the 3D page. It is
+   * sent to everybody who has not asked for less motion, so it keeps the
+   * tighter ceiling.
+   */
+  clipFirst: 1.6 * 1024 * 1024,
   /**
    * The 3D page before a reader scrolls, without the clip its first picture
    * may play: the document, its assets and that picture. The clip is held to

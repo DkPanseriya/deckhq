@@ -92,6 +92,27 @@
       "bytes": 178400
     },
     {
+      "name": "clip-orbit.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 2262031
+    },
+    {
+      "name": "clip-orbit.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 92541
+    },
+    {
+      "name": "clip-orbit@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 171278
+    },
+    {
       "name": "clip-rise.mp4",
       "kind": "clip",
       "width": 1280,
@@ -153,6 +174,27 @@
       "width": 1280,
       "height": 720,
       "bytes": 180714
+    },
+    {
+      "name": "clip-walkthrough.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 2792038
+    },
+    {
+      "name": "clip-walkthrough.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 95656
+    },
+    {
+      "name": "clip-walkthrough@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 153287
     },
     {
       "name": "hand-up.png",

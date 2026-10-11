@@ -16,7 +16,7 @@
  *     exactly half the second, each inside the site's 400 KB for a still;
  *   - a clip is copied byte for byte, and only if it is what the site plays:
  *     H.264 in a plain MP4 at sixty frames a second, no wider than 2000
- *     pixels, at most 1.6 MB. Its first frame becomes the pair it lies over;
+ *     pixels, at most 3 MB. Its first frame becomes the pair it lies over;
  *   - a file that is neither a PNG nor an MP4 is refused, by its extension
  *     and by its first bytes, and so is a name this script does not know. A
  *     sheet of frames or a grid of poses is not on the list, so it is not on
@@ -46,7 +46,7 @@ export const MAX_WIDTH = 2000;
 /** What a still may weigh, at either density: the site's own rule. */
 export const STILL_BUDGET = 400 * 1024;
 /** What a clip may weigh. */
-export const CLIP_BUDGET = 1.6 * 1024 * 1024;
+export const CLIP_BUDGET = 3 * 1024 * 1024;
 
 /** The stills: the approved file's name, and the name it has on the site. */
 export const STILLS = [
@@ -151,7 +151,7 @@ export function checkClip(name, bytes) {
   };
   // Its weight before anything is read out of it: a file too heavy to take
   // is not worth parsing.
-  if (bytes.length > CLIP_BUDGET) refuse(`${Math.round(bytes.length / 1024)} KB, over 1.6 MB`);
+  if (bytes.length > CLIP_BUDGET) refuse(`${Math.round(bytes.length / 1024)} KB, over 3 MB`);
   const info = inspectMp4(bytes);
   if (info.fragmented || info.top.join(' ') !== 'ftyp moov mdat') refuse('not a plain MP4');
   if (info.codec !== 'avc1') refuse(`${info.codec}, not H.264`);

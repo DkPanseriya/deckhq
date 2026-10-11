@@ -856,8 +856,10 @@ test('WEIGHT: every picture is inside the budget for what it is', async () => {
   assert.ok(BUDGET.still <= 400 * 1024, 'the budget for a still was raised');
   assert.ok(BUDGET.loop <= 1024 * 1024, 'the budget for a loop was raised');
   // A clip of the 3D office is not made here and cannot be made lighter
-  // here: 1280 pixels at sixty frames a second, held to 1.6 MB.
-  assert.ok(BUDGET.clip <= 1.6 * 1024 * 1024, 'the budget for a 3D clip was raised');
+  // here: 1280 pixels at sixty frames a second, held to 3 MB. It was 1.6 until the
+  // ten-second walk-through, which at that weight was mush; a clip is fetched
+  // only when it scrolls into view, so the ceiling is per clip and not per page.
+  assert.ok(BUDGET.clip <= 3 * 1024 * 1024, 'the budget for a 3D clip was raised');
   let checked = 0;
   for (const file of walk(path.join(out, 'media'), PICTURES)) {
     const size = fs.statSync(file).size;
@@ -2166,7 +2168,11 @@ test('WEIGHT: the 3D page before scrolling, and what the strip costs the home pa
     `3d.html is ${(first / 1024).toFixed(0)} KB before scrolling`,
   );
   const withClip = pageWeight(out, '3d.html', { dpr: 2, all: false });
-  assert.ok(withClip - first <= BUDGET.clip, 'more than one clip plays before a reader scrolls');
+  assert.ok(BUDGET.clipFirst <= 1.6 * 1024 * 1024, 'the first clip’s own budget was raised');
+  assert.ok(
+    withClip - first <= BUDGET.clipFirst,
+    'more than one clip plays before a reader scrolls, or the first one is over its 1.6 MB',
+  );
   assert.equal(withClip > first, media3d().has('clip-rise.mp4'), 'the first picture and its clip');
   // One picture is asked for at once; every other, and every clip under the
   // first, waits to be scrolled to.
@@ -2218,7 +2224,10 @@ test('3D: a still with a clip becomes the clip over its first frame, and is the 
   // the clip arrives nothing has to be written.
   const source = fs.readFileSync(path.join(siteDir, 'pages', '3d.html'), 'utf8');
   const named = [...source.matchAll(/<img\b[^>]*\sdata-clip="([\w-]+)"[^>]*>/g)];
-  assert.ok(named.length >= 6, `expected the stills to name their clips; found ${named.length}`);
+  // Two since the robots' cards went back to their stills: a robot's clip
+  // opens on a small figure in a doorway, and lying over the card it hid the
+  // picture in which the robot can be seen.
+  assert.ok(named.length >= 2, `expected the stills to name their clips; found ${named.length}`);
   for (const [tag, clip] of named) {
     assert.match(clip, /^clip-(rise|states|stem|bale|brick|mote)$/);
     assert.match(tag, /\sdata-clip-alt="[^"]{40,}"/, `${clip} has no words of its own`);
@@ -2250,8 +2259,8 @@ test('3D: the import takes a PNG or an MP4 it knows by name, and nothing else', 
   // real loop of the site's own passes, and the same bytes cut short do not.
   assert.equal(checkClip('loop-office.mp4', mp4).fps, 60);
   assert.throws(
-    () => checkClip('big.mp4', Buffer.concat([mp4, Buffer.alloc(2 * 1024 * 1024)])),
-    /over 1\.6 MB/,
+    () => checkClip('big.mp4', Buffer.concat([mp4, Buffer.alloc(4 * 1024 * 1024)])),
+    /over 3 MB/,
   );
   assert.throws(() => checkClip('a.gif', mp4), /not a PNG or an MP4/);
   // The names are a list, and the list is the sections of the page.
