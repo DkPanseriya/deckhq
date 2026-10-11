@@ -71,6 +71,27 @@
       "bytes": 181898
     },
     {
+      "name": "clip-mote.mp4",
+      "kind": "clip",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1303147
+    },
+    {
+      "name": "clip-mote.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 87896
+    },
+    {
+      "name": "clip-mote@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 178400
+    },
+    {
       "name": "clip-rise.mp4",
       "kind": "clip",
       "width": 1280,

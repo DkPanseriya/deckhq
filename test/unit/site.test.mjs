@@ -1224,7 +1224,7 @@ test('the stylesheet and the script stay inside their budgets', () => {
   // 40 KB. It was 32 KB while the stylesheet was two files, and they had
   // filled it: 32.5 KB of the 32.8. The third file is the line across every
   // page, the strip under the home page's first screen and the 3D page, and
-  // the three together measure 36.9 KB (11 October 2026). The script did not
+  // the three together measure 36.4 KB (11 October 2026). The script did not
   // grow: the line's light is a keyframe, and nothing in it needs a script.
   assert.ok(css <= 40 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 40 KB`);
   assert.ok(js <= 6 * 1024, `site.js is ${(js / 1024).toFixed(1)} KB, over 6 KB`);
@@ -1237,7 +1237,8 @@ test('every page carries the skip link, the nav and the menu', () => {
     assert.match(html, /<a class="skip-link" href="#main">/, `${where} has no skip link`);
     assert.match(html, /<main id="main">/, `${where} has nothing for the skip link to reach`);
     assert.match(html, /<nav class="site-nav" aria-label="Sections">/, `${where} has no nav`);
-    // Five links fit on the bar. Under 48rem the row collapses into a
+    // Six links fit on the bar, the sixth being 3D with its tag: looked at
+    // 770 pixels wide, the narrowest it is shown. Under 48rem the row is a
     // `<details>` menu, which is why the site navigates with scripting off.
     assert.ok(!/nav-more/.test(html), `${where} still carries the More group`);
     assert.match(html, /<details class="nav-toggle">/, `${where} has no narrow-screen menu`);
@@ -2152,11 +2153,12 @@ test('3D: the e-mail button is on the strip and the 3D page when there is a form
 test('WEIGHT: the 3D page before scrolling, and what the strip costs the home page', async () => {
   const { BUDGET, pageWeight, media3d } = await import('../../site/build.mjs');
   // 900 KB before a reader scrolls: the document, the stylesheet, the script,
-  // the mark and the first picture at its dense size. Measured at 403 KB with
-  // the still (11 October 2026). When the clip of the floor rising has been
-  // brought in, the first picture is its first frame and the clip plays over
-  // it; a clip is held to 1.6 MB of its own, is not in the 900, and a reader
-  // who asked for less motion is never sent it.
+  // the mark and the first picture at its dense size. Measured on 11 October
+  // 2026: 403 KB while that picture was a still, 257 KB now that it is the
+  // still the clip of the floor rising came with. The clip plays over it and
+  // is NOT in the 900: it is 1310 KB, held to 1.6 MB of its own, so a reader
+  // who lets it play is sent 1567 KB before scrolling, and one who asked for
+  // less motion is sent the 257.
   assert.ok(BUDGET.firstView3d <= 900 * 1024, 'the 3D first-view budget was raised');
   const first = pageWeight(out, '3d.html', { dpr: 2, all: false, videos: false });
   assert.ok(
