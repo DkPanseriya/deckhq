@@ -1,0 +1,186 @@
+{
+  "media": [
+    {
+      "name": "bale.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 110170
+    },
+    {
+      "name": "bale@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 364430
+    },
+    {
+      "name": "brick.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 111089
+    },
+    {
+      "name": "brick@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 387247
+    },
+    {
+      "name": "hand-up.png",
+      "kind": "still",
+      "width": 480,
+      "height": 480,
+      "bytes": 103394
+    },
+    {
+      "name": "hand-up@2x.png",
+      "kind": "still",
+      "width": 960,
+      "height": 960,
+      "bytes": 370094
+    },
+    {
+      "name": "mote.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 110369
+    },
+    {
+      "name": "mote@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 375927
+    },
+    {
+      "name": "night.png",
+      "kind": "still",
+      "width": 720,
+      "height": 405,
+      "bytes": 111506
+    },
+    {
+      "name": "night@2x.png",
+      "kind": "still",
+      "width": 1440,
+      "height": 810,
+      "bytes": 380673
+    },
+    {
+      "name": "office.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 97035
+    },
+    {
+      "name": "office@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 353519
+    },
+    {
+      "name": "panel.png",
+      "kind": "still",
+      "width": 720,
+      "height": 405,
+      "bytes": 101247
+    },
+    {
+      "name": "panel@2x.png",
+      "kind": "still",
+      "width": 1440,
+      "height": 810,
+      "bytes": 347520
+    },
+    {
+      "name": "states.png",
+      "kind": "still",
+      "width": 720,
+      "height": 405,
+      "bytes": 117433
+    },
+    {
+      "name": "states@2x.png",
+      "kind": "still",
+      "width": 1440,
+      "height": 810,
+      "bytes": 400598
+    },
+    {
+      "name": "stem.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 107084
+    },
+    {
+      "name": "stem@2x.png",
+      "kind": "still",
+      "width": 1280,
+      "height": 720,
+      "bytes": 384167
+    },
+    {
+      "name": "thumb-night.png",
+      "kind": "still",
+      "width": 320,
+      "height": 180,
+      "bytes": 29018
+    },
+    {
+      "name": "thumb-night@2x.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 92303
+    },
+    {
+      "name": "thumb-office.png",
+      "kind": "still",
+      "width": 320,
+      "height": 180,
+      "bytes": 28919
+    },
+    {
+      "name": "thumb-office@2x.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 97035
+    },
+    {
+      "name": "thumb-states.png",
+      "kind": "still",
+      "width": 320,
+      "height": 180,
+      "bytes": 29709
+    },
+    {
+      "name": "thumb-states@2x.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 95200
+    },
+    {
+      "name": "thumb-stem.png",
+      "kind": "still",
+      "width": 320,
+      "height": 180,
+      "bytes": 34859
+    },
+    {
+      "name": "thumb-stem@2x.png",
+      "kind": "still",
+      "width": 640,
+      "height": 360,
+      "bytes": 107084
+    }
+  ]
+}
