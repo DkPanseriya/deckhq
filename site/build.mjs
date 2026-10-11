@@ -102,8 +102,8 @@ const PAGES = [
     slug: 'index',
     title: `DeckHQ: ${TAGLINE[0].toLowerCase()}${TAGLINE.slice(1)}`,
     description:
-      'The agent that finished an hour ago is still waiting for you. DeckHQ puts every Claude ' +
-      'Code and Codex session on one office floor until you clear it. Local, free, MIT.',
+      'The agent that finished an hour ago is still waiting for you. Every Claude Code ' +
+      'and Codex session on one office floor until you clear it. Local, free, MIT.',
     loop: 'hero-walk',
   },
   {
@@ -112,15 +112,15 @@ const PAGES = [
     title: 'Features',
     description:
       'Every session on one floor, the queue only you clear, crews and juniors, worktrees as ' +
-      'benches, the session panel, Studio and the app window. A picture of each.',
+      'benches, the session panel, Studio, and a picture you can post.',
   },
   {
     slug: 'look',
     nav: 'Look',
     title: 'Look',
     description:
-      'Eleven styles, three lights, room colours, three themes and four agent sizes. Every ' +
-      'picture is the same floor, repainted.',
+      'Eleven styles, three lights, room colours, three themes and four agent sizes. The ' +
+      'eleven styles are one floor, repainted.',
   },
   {
     slug: 'install',
@@ -164,6 +164,83 @@ const PAGES = [
     unlisted: true,
   },
 ];
+
+/**
+ * Addresses this site used to have, which a README on npm, a release note or a
+ * search result may still send a reader to. Each is a small page that forwards
+ * to where its subject is now, with a plain link for a browser that does not
+ * follow a refresh. None carries a word of the page it replaces, none is in
+ * the sitemap, and each asks not to be indexed.
+ *
+ * `to` is an address on this site; `name` is what moved, for the title;
+ * `moved` is the sentence the page says; `label` is the link.
+ */
+const REDIRECTS = [
+  {
+    slug: 'studio',
+    to: 'features.html#studio',
+    name: 'The Studio page',
+    moved: 'Studio is a section of the Features page now.',
+    label: 'Studio, on Features',
+  },
+  {
+    slug: 'characters',
+    to: 'features.html#see',
+    name: 'The characters page',
+    moved: 'The robots and their six states are on the Features page now.',
+    label: 'The six states, on Features',
+  },
+  {
+    slug: 'model',
+    to: 'features.html#needs-you',
+    name: 'The model page',
+    moved: 'How the queue works is on the Features page now.',
+    label: 'Know who needs you, on Features',
+  },
+  {
+    slug: 'adapters',
+    to: 'features.html#runtimes',
+    name: 'The adapters page',
+    moved: 'Which coding tools DeckHQ reads is a table on the Features page now.',
+    label: 'Runtimes, on Features',
+  },
+  {
+    slug: 'hooks-and-privacy',
+    to: 'privacy.html',
+    name: 'The hooks and privacy page',
+    moved: 'Hooks and privacy are one page now, under the name What it never does.',
+    label: 'What it never does',
+  },
+  {
+    slug: 'docs',
+    to: 'faq.html#manual',
+    name: 'The documentation',
+    moved: 'The documentation is the manual, and the manual is in the repository.',
+    label: 'The way to the manual',
+  },
+  {
+    // A page below the root, so its links resolve from the root, as the 404
+    // page's do. `log/` is served this file too.
+    slug: 'log/index',
+    to: 'changelog.html',
+    name: 'The engineering log',
+    moved: 'The engineering log is no longer published. Each release is in the changelog.',
+    label: 'The changelog',
+    base: '/',
+  },
+];
+
+for (const r of REDIRECTS) {
+  PAGES.push({
+    slug: r.slug,
+    title: `${r.name} has moved`,
+    description: `${r.moved} This address forwards there, and so does the link on it.`,
+    redirect: r.to,
+    generated: true,
+    unlisted: true,
+    ...(r.base ? { base: r.base } : {}),
+  });
+}
 
 /**
  * What a public page may never say. These are the names the planning
@@ -250,14 +327,20 @@ function head(page) {
       ? hint(page.preload, '(min-width: 40rem)') + hint(`${page.preload}-phone`, NARROW)
       : '';
   const base = page.base ? `\n    <base href="${esc(page.base)}" />` : '';
-  // No `<link rel="canonical">`: a page's own address is in `og:url`, and the
-  // rule that no `<link>` on this site names an absolute URL has no exception.
+  // No `<link rel="canonical">` on a page of its own: its address is in
+  // `og:url`, and the rule that no `<link>` on this site names an absolute URL
+  // has no exception. A page that only forwards names where it forwards to,
+  // as a path on this site, which keeps that rule.
   const index = page.unlisted ? '\n    <meta name="robots" content="noindex" />' : '';
+  const forward = page.redirect
+    ? `\n    <meta http-equiv="refresh" content="0; url=${esc(page.redirect)}" />` +
+      `\n    <link rel="canonical" href="${esc(page.redirect.split('#')[0])}" />`
+    : '';
   return `<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />${base}
     <title>${esc(full)}</title>
-    <meta name="description" content="${esc(page.description)}" />${index}
+    <meta name="description" content="${esc(page.description)}" />${index}${forward}
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#131419" />
     <meta property="og:type" content="website" />
@@ -410,7 +493,7 @@ ${indentBlock(markdown(release.highlights), 12)}
     )
     .join('\n');
   return `      <div class="page-head wrap">
-        <h1>Changelog</h1>
+        <h1>Changelog.</h1>
         <p class="lede">What each release brought, in a paragraph.</p>
       </div>
       <div class="wrap">
@@ -424,6 +507,23 @@ ${sections}
       </div>`;
 }
 
+/**
+ * A page that forwards: one sentence saying where its subject went, and a
+ * link there for a browser that does not follow the refresh in its `<head>`.
+ *
+ * @param {(typeof REDIRECTS)[number]} r
+ */
+function redirectBody(r) {
+  return `      <div class="page-head wrap">
+        <h1>This page has moved.</h1>
+        <p class="lede">${esc(r.moved)}</p>
+        <p class="actions">
+          <a class="btn" href="${esc(r.to)}">${esc(r.label)}</a>
+          <a class="btn btn--ghost" href="index.html">Back to the floor</a>
+        </p>
+      </div>`;
+}
+
 function build() {
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
@@ -431,6 +531,7 @@ function build() {
   let written = 0;
   /** @param {string} rel @param {string} content */
   const write = (rel, content) => {
+    fs.mkdirSync(path.dirname(path.join(OUT, rel)), { recursive: true });
     fs.writeFileSync(path.join(OUT, rel), content);
     written++;
   };
@@ -447,9 +548,12 @@ function build() {
   // The bodies first, because the pictures are published from what the pages
   // actually show: a capture no page uses is not on the site.
   const bodies = PAGES.map((page) => {
-    const source = page.generated
-      ? changelogBody(releases)
-      : read(path.join('site', 'pages', `${page.slug}.html`));
+    const moved = REDIRECTS.find((r) => r.slug === page.slug);
+    const source = moved
+      ? redirectBody(moved)
+      : page.generated
+        ? changelogBody(releases)
+        : read(path.join('site', 'pages', `${page.slug}.html`));
     return { page, body: fill(resolveOptional(source), slots) };
   });
   const shown = new Set([PREVIEW]);
@@ -520,16 +624,20 @@ function build() {
   if (first > BUDGET.firstView) {
     throw new Error(`the home page's first view is ${Math.round(first / 1024)} KB`);
   }
+  // A screen under 40rem is offered the walk at half the width.
+  const phone = pageWeight(OUT, 'index.html', { all: false, narrow: true });
   const kb = (n) => `${Math.round(n / 1024)} KB`;
   const heaviest = weights.reduce((a, b) => (b.bytes > a.bytes ? b : a));
   const home = weights.find((w) => w.page === 'index.html');
 
   process.stdout.write(
-    `site: home ${kb(first)} before scrolling, ${kb(home.bytes)} read to the bottom\n` +
+    `site: home ${kb(first)} before scrolling (${kb(phone)} on a phone), ` +
+      `${kb(home.bytes)} read to the bottom\n` +
       `site: heaviest page ${heaviest.page} at ${kb(heaviest.bytes)}; ` +
       `heaviest picture ${media.heaviest.file} at ${kb(media.heaviest.bytes)}\n` +
       `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
-      ` (${PAGES.length} pages, ${releases.length} releases, ${media.count} pictures` +
+      ` (${PAGES.length - REDIRECTS.length} pages, ${REDIRECTS.length} forwarding addresses,` +
+      ` ${releases.length} releases, ${media.count} pictures` +
       ` at ${(media.bytes / 1024 / 1024).toFixed(1)} MB, ${INSTALLERS.length} installers)\n`,
   );
 }
@@ -599,6 +707,7 @@ export {
   INSTALLERS,
   INSTALL_COMMANDS,
   PAGES,
+  REDIRECTS,
   PREVIEW,
   SITE_ORIGIN,
   STYLES,

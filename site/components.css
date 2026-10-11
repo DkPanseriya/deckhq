@@ -250,8 +250,30 @@
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* A row of a report is a line of its own, and a value too long for the box
+   goes on under the value, not under the eighteen characters of its label. */
+
+.term > i,
+.term > span {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.term > span {
+  padding-left: 18ch;
+  text-indent: -18ch;
+}
+
+/* A step smaller on a phone, where a path would not fit the value column. */
+@media (max-width: 39.99rem) {
+  .term {
+    padding: var(--s-2);
+    font-size: var(--t-micro);
+  }
 }
 
 .band--deep .term {
@@ -291,8 +313,9 @@
   font-size: var(--t-small);
 }
 
-/* The way with the two longest lines sets them a step smaller, to fit. */
-.way--wide .cmd code {
+/* The longest lines are set a step smaller, to fit their column. */
+.way--wide .cmd code,
+.cols .cmd code {
   font-size: var(--t-micro);
 }
 
@@ -617,6 +640,34 @@ tbody th {
   .versus tbody td {
     font-size: var(--t-small);
   }
+
+  /* A name and a status share a line; the sentence runs under them. */
+  .runtimes {
+    display: block;
+    min-width: 0;
+  }
+
+  .runtimes :is(thead, tbody) {
+    display: block;
+  }
+
+  .runtimes tr {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  .runtimes :is(th, td):nth-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .runtimes :is(th, td):nth-child(3) {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+
+  .runtimes tr:not(:last-child) td:nth-child(3) {
+    border-bottom: 1px solid var(--line);
+  }
 }
 
 /* A real sequence, so it is numbered: six steps, three to a row. */
@@ -786,9 +837,10 @@ tbody th {
   color: var(--ink);
 }
 
+/* The footer's last row starts where its columns do. */
 .foot-note {
   margin-top: var(--s-6);
-  max-width: none;
+  max-width: calc(var(--wrap) + 2 * var(--gutter));
   color: var(--muted);
 }
 

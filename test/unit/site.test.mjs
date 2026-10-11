@@ -92,6 +92,29 @@ function walk(dir, exts) {
 
 let out = '';
 
+/**
+ * The directory a page's relative addresses resolve from: its own, or the
+ * site's root for a page that carries `<base href="/" />`.
+ *
+ * @param {string} page @param {string} html
+ */
+const anchorOf = (page, html) => (/<base href="\/" \/>/.test(html) ? out : path.dirname(page));
+
+/**
+ * Addresses the site used to have. Each forwards to where its subject is now
+ * (`site/build.mjs`, `REDIRECTS`), because a README on npm and a release note
+ * once sent a reader there. The home page's forwarding is to a section.
+ */
+const FORWARDS = {
+  'studio.html': 'features.html#studio',
+  'characters.html': 'features.html#see',
+  'model.html': 'features.html#needs-you',
+  'adapters.html': 'features.html#runtimes',
+  'hooks-and-privacy.html': 'privacy.html',
+  'docs.html': 'faq.html#manual',
+  'log/index.html': 'changelog.html',
+};
+
 before(() => {
   out = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-site-'));
   const built = spawnSync(process.execPath, [path.join(siteDir, 'build.mjs'), '--out', out], {
@@ -162,21 +185,27 @@ test('the one-line installers are published, byte for byte, at the URL the pages
 
 test('every internal link resolves to a file that exists', () => {
   const pages = walk(out, ['.html']);
-  assert.equal(pages.length, 8, 'the site is eight pages');
+  assert.equal(
+    pages.length,
+    8 + Object.keys(FORWARDS).length,
+    'the site is eight pages and the addresses that forward to them',
+  );
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf8');
-    const where = path.relative(out, page);
-    // The one absolute path on the site is the 404 page's `<base>`: GitHub
-    // Pages serves that file for a missing address at any depth, so its links
-    // have to resolve from the site's own root. It is checked on its own, and
-    // no other page may carry one.
+    const where = path.relative(out, page).replace(/\\/g, '/');
+    // The one absolute path on the site is a `<base>`. GitHub Pages serves
+    // the 404 page for a missing address at any depth, and one forwarding
+    // page sits below the root, so the links of those two have to resolve
+    // from the site's own root. No other page may carry one.
     const base = html.match(/<base href="([^"]+)" \/>/);
-    assert.equal(base ? base[1] : null, where === '404.html' ? '/' : null, `${where}: base`);
+    const rooted = where === '404.html' || where.includes('/');
+    assert.equal(base ? base[1] : null, rooted ? '/' : null, `${where}: base`);
     const links = html.replace(/<base [^>]*>/, '');
+    const from = anchorOf(page, html);
     for (const m of links.matchAll(/(?:href|src)="([^"]+)"/g)) {
       const href = m[1];
       if (/^(https?:|mailto:|#)/.test(href)) continue;
-      const target = path.resolve(path.dirname(page), href.split('#')[0]);
+      const target = path.resolve(from, href.split('#')[0]);
       assert.ok(fs.existsSync(target), `${where} points at ${href}, which was not built`);
     }
     // A `srcset` names files too, and a dense screen fetches the second one.
@@ -184,7 +213,7 @@ test('every internal link resolves to a file that exists', () => {
       for (const candidate of m[1].split(',')) {
         const file = candidate.trim().split(/\s+/)[0];
         assert.ok(
-          fs.existsSync(path.resolve(path.dirname(page), file)),
+          fs.existsSync(path.resolve(from, file)),
           `${where} offers ${file} in a srcset, which was not built`,
         );
       }
@@ -436,22 +465,48 @@ test('the markdown converter handles what a release note contains', async () => 
 });
 
 test('the site publishes no page the blueprint used to put here', () => {
-  // WP-95a. The five that went, by the URL they had: a stranger who followed
-  // an old link gets a 404 from GitHub Pages rather than the document.
-  for (const gone of [
-    'docs.html',
-    'model.html',
-    'adapters.html',
-    'hooks-and-privacy.html',
-    'log/index.html',
-    'log/1.html',
-    // 1.7.0 · merged into Features, and the scheme script that went with the
-    // light scheme.
-    'characters.html',
-    'studio.html',
-    'theme.js',
-  ]) {
+  // WP-95a. The pages that went are not published: an entry of the log and
+  // the scheme script that went with the light scheme are a 404.
+  for (const gone of ['log/1.html', 'log/2.html', 'theme.js']) {
     assert.ok(!fs.existsSync(path.join(out, gone)), `${gone} is still published`);
+  }
+});
+
+test('FORWARD: an address the site used to have sends its reader on, and says nothing else', () => {
+  // The README that npm showed for 1.7.0 linked `studio.html`, which was a
+  // 404. Every address a README, a release note or the old site itself gave
+  // out now forwards: a refresh, a plain link for a browser that follows
+  // none, and not a sentence of the page that used to be there.
+  for (const [old, to] of Object.entries(FORWARDS)) {
+    const file = path.join(out, old);
+    assert.ok(fs.existsSync(file), `${old} is a 404`);
+    const html = fs.readFileSync(file, 'utf8');
+    assert.ok(
+      html.includes(`<meta http-equiv="refresh" content="0; url=${to}" />`),
+      `${old} does not forward to ${to}`,
+    );
+    assert.ok(
+      html.includes(`<link rel="canonical" href="${to.split('#')[0]}" />`),
+      `${old} does not name the page it moved to`,
+    );
+    assert.match(html, /<meta name="robots" content="noindex" \/>/, `${old} asks to be indexed`);
+    const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+    assert.ok(main.includes(`<a class="btn" href="${to}">`), `${old} has no link to ${to}`);
+    const words = main
+      .replace(/<[^>]*>/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
+    assert.ok(words < 40, `${old} says ${words} words; it only forwards`);
+    assert.ok(!/<img[^>]*media\//.test(main), `${old} shows a picture`);
+    // Where it sends a reader is a page that exists, at a section that exists.
+    const [target, section] = to.split('#');
+    const landed = fs.readFileSync(path.join(out, target), 'utf8');
+    if (section) assert.ok(landed.includes(`id="${section}"`), `${to} is not there`);
+  }
+  // None of them is offered to a crawler as a page.
+  const listed = fs.readFileSync(path.join(out, 'sitemap.txt'), 'utf8');
+  for (const old of Object.keys(FORWARDS)) {
+    assert.ok(!listed.includes(`/${old}`), `the sitemap lists ${old}`);
   }
 });
 
@@ -472,7 +527,7 @@ test('the build copies every image its pages reference', () => {
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
     for (const m of html.matchAll(/<(?:img|source)[^>]*\ssrc="([^"]+)"/g)) {
-      const target = path.resolve(path.dirname(page), m[1]);
+      const target = path.resolve(anchorOf(page, html), m[1]);
       assert.ok(fs.existsSync(target), `${path.relative(out, page)} shows a missing ${m[1]}`);
     }
   }
@@ -861,6 +916,19 @@ test('MOTION: every loop is a video at sixty frames a second, and it moves', asy
     assert.ok(info.frames >= 120, `${where} has ${info.frames} frame(s)`);
     assert.equal(info.frames, Math.round(info.seconds * 60), `${where}: frames and duration`);
     assert.equal(info.sync[0], 1, `${where} does not open on a key frame`);
+    // A narrow file is its loop again for a phone: the same frames at half
+    // the width or less, and the same shape to a pixel. What moves in it and
+    // what it lies over are its loop's, which is checked as any other is.
+    if (/-narrow\.mp4$/.test(file)) {
+      const wide = inspectMp4(fs.readFileSync(file.replace(/-narrow\.mp4$/, '.mp4')));
+      assert.equal(info.frames, wide.frames, `${where} is not its loop, frame for frame`);
+      assert.ok(info.width <= wide.width / 2, `${where} is ${info.width} px wide; not narrow`);
+      assert.ok(
+        Math.abs(info.height - (wide.height * info.width) / wide.width) <= 1,
+        `${where} is not the shape of its loop`,
+      );
+      continue;
+    }
     // A video of a floor that was not animating is a still that costs more.
     // Measured: one picture held for 120 frames at 1404x1212 has a median
     // frame of 95 bytes; the quietest loop here, Your Office, 379.
@@ -897,11 +965,21 @@ test('MOTION: every loop is a video at sixty frames a second, and it moves', asy
       }
       assert.match(attrs, /\swidth="\d+" height="\d+"/, `${where}: a video with no size`);
       assert.ok(!/\ssrc=/.test(attrs), `${where}: a video names its file where no query guards it`);
-      const source = inner.match(
-        /^<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>$/,
-      );
-      assert.ok(source, `${where}: a video without exactly one guarded source: ${inner}`);
+      // One source, or two where the loop has a narrow file: that one first,
+      // for a screen under 40rem. Every source is guarded by the motion query.
+      const sources = [
+        ...inner.matchAll(
+          /<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>/g,
+        ),
+      ];
+      assert.equal(sources.map((s) => s[0]).join(''), inner, `${where}: an unguarded source`);
+      assert.ok(sources.length === 1 || sources.length === 2, `${where}: ${inner}`);
+      const source = sources[sources.length - 1];
       assert.equal(source[2], motion, `${where} plays ${source[1]} whatever the reader asked for`);
+      if (sources.length === 2) {
+        assert.equal(sources[0][1], `${source[1]}-narrow`, `${where}: the narrow file's name`);
+        assert.equal(sources[0][2], `(max-width: 39.99rem) and ${motion}`, `${where}: its query`);
+      }
       // The still it lies over, which carries the words a screen reader gets.
       const before = html.slice(0, html.indexOf(whole));
       const img = before.slice(before.lastIndexOf('<img'));
@@ -1310,11 +1388,12 @@ test('the home page leads with the walk, and every band picture is lazy', async 
     'the first frame of the walk is not preloaded',
   );
   assert.ok(!/<link[^>]*\.mp4/.test(home), 'a video is preloaded by a link');
-  // Reduced motion gets the still, in the markup and not from a script: the
-  // one source is guarded by the query, and the video plays by itself.
+  // Reduced motion gets the still, in the markup and not from a script: both
+  // sources are guarded by the query, and the video plays by itself. A screen
+  // under 40rem is offered the walk at 1200 pixels, ahead of the one at 2400.
   assert.match(
     hero,
-    /<span class="loop"><img\b[^>]*><video autoplay muted loop playsinline preload="metadata"[^>]*><source src="media\/hero-walk\.mp4" type="video\/mp4" media="\(prefers-reduced-motion: no-preference\)" \/><\/video><\/span>/,
+    /<span class="loop"><img\b[^>]*><video autoplay muted loop playsinline preload="metadata"[^>]*><source src="media\/hero-walk-narrow\.mp4" type="video\/mp4" media="\(max-width: 39\.99rem\) and \(prefers-reduced-motion: no-preference\)" \/><source src="media\/hero-walk\.mp4" type="video\/mp4" media="\(prefers-reduced-motion: no-preference\)" \/><\/video><\/span>/,
     'the hero plays whatever the reader asked for',
   );
   // The still is the video's own first frame at twice the size the page
@@ -1403,6 +1482,14 @@ test('what a reader downloads before scrolling the home page', async () => {
   // And read to the bottom with every loop playing, it is under 3 MB.
   const whole = pageWeight(out, 'index.html', { dpr: 2, all: true });
   assert.ok(whole <= 3 * 1024 * 1024, `the home page is ${(whole / 1024).toFixed(0)} KB`);
+  // A phone is offered the walk at 1200 pixels, not 2400, and its first view
+  // is back inside the 600 KB the page was held to before the walk was video.
+  const phone = pageWeight(out, 'index.html', { dpr: 2, all: false, narrow: true });
+  assert.ok(phone < bytes, 'a phone is sent the same video as a desktop');
+  assert.ok(
+    phone <= 600 * 1024,
+    `the home page's first view on a phone is ${(phone / 1024).toFixed(0)} KB, over 600 KB`,
+  );
 });
 
 test('the deployment workflow builds the site it deploys', () => {

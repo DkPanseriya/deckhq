@@ -30,9 +30,9 @@ in the whole team at a glance, walk over to anyone and read what they are doing,
 the next task, send them to the lounge when there is nothing for them, let them go when the work
 is done.
 
-![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in Your Office for review](media/floor.png)
+![The DeckHQ window on its demo floor. The header reads 2 needs you, with one hand up and one for review. Kobe and Ravi wait on a sofa in Your Office; three project rooms stand beside it, one of them with its lights off; five robots rest in the Lounge](media/site/hero.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor, 11 October 2026. The projects are invented._
 
 **Read it in one glance.** The header counts what needs you. Your Office, top left, holds the
 sessions that are waiting on you — finished and waiting on your reply, or **hand up** and blocked
@@ -197,9 +197,9 @@ repository a working-tree diff cannot be attributed to any one of them, and the 
 imply otherwise. A clean repository says _nothing uncommitted_ rather than showing you an empty
 space, because "no changes" is itself review-relevant.
 
-![The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project's working tree at +142 −18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line](media/panel-review-card.png)
+![The review card on the oldest session in the queue, Emeka in orbital-api, waiting 1d 2h: what the agent said rendered as markdown, what changed in the project's working tree at +142 −18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the session's tokens as one quiet line](media/site/panel.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor, 11 October 2026._
 
 The furniture works too. A room's shelf opens that project's folder; its screen runs that
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
@@ -266,7 +266,9 @@ script. `deckhq app --pin` asks again whenever you want it; `--no-pin` never ask
 
 ![The DeckHQ floor in a Chrome application window on Windows 11: its own title bar reading "(7) DeckHQ" with the DeckHQ mark, no tab strip and no address bar, the queue strip along the top and the office below it](media/app-window.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture of a real window, September 2026. The title bar and the missing tab strip are what you get
+today; the floor inside it has been redrawn since. A desktop window is the one picture here no
+script can retake, so it waits for somebody at a Windows desktop._
 
 `deckhq app` reuses the DeckHQ you already have running for this state directory — the one a
 running daemon published in `~/.deckhq/daemon.json`, the one your installed hooks post to, then
@@ -1114,9 +1116,9 @@ back on its own. Monday morning it is Wrapped instead — the week's turns per r
 whether the longest wait fell, the room that never slept, the busiest hour, and how many times an
 agent said _"You're absolutely right"_ — and from 1 December, the year so far.
 
-![Wrapped for the week, over the dimmed floor: turns per room, tokens, spend with its rate card, the longest wait, the room that never slept, the session sent the most, the busiest hour, and the count of one phrase](media/wrapped-weekly.png)
+![Wrapped for the week, over the dimmed floor: 275 turns across 6 rooms, tokens, the longest wait, the room that never slept, the session sent the most, the busiest hour, and the count of one phrase. Show cost is off, so there is no spend row](media/wrapped-weekly.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor with nine days of invented ledger, 11 October 2026._
 
 Every number is a replay of the event ledger on this machine. Nothing is emailed, uploaded or
 counted anywhere else.
@@ -1247,13 +1249,13 @@ floor preferences — and `deckhq layout import my-floor.json` applies it. It ca
 transcript and no acknowledgement, and a malformed file is refused whole with the reason, never
 half-applied. It does name your project folders, so read one before you send it anywhere.
 
-![The floor in the night shift theme: the same office, cooler and dimmer, with the state colours unchanged](media/theme-night-shift.png)
+![The floor in the night shift theme: the same office, cooler and dimmer, with the state colours unchanged](media/site/theme-night-shift.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor, 11 October 2026._
 
-![The floor in the blueprint theme: drafting-table blue with white line work, and the state colours unchanged](media/theme-blueprint.png)
+![The floor in the blueprint theme: drafting-table blue with white line work, and the state colours unchanged](media/site/theme-blueprint.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor, 11 October 2026._
 
 **Supporter pack: more themes and avatars; everything that captures, queues or acts is free.** A
 pack is a single signed file — `deckhq pack install <file>` copies it into `~/.deckhq/packs/` and a
@@ -1270,9 +1272,9 @@ that locally. `deckhq pack verify <file>` shows you what is in one before you in
 `deckhq pack remove <name>` puts the floor back. `packs/supporter-sample/` in this repository is a
 real one, source and all.
 
-![The settings sheet's theme picker with a Supporter pack installed: the shipped themes and the pack's warehouse and garden beside them](media/pack-picker.png)
+![The Look panel with the sample Supporter pack installed. Under Theme, the shipped Default, Night shift and Blueprint, and the pack's Warehouse and Garden beside them](media/pack-picker.png)
 
-_Capture — September 2026, before the figure took its current form._
+_Capture: the running product on its demo floor with `packs/supporter-sample` installed, 11 October 2026._
 
 ## Options
 

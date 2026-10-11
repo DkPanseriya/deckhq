@@ -62,10 +62,15 @@
     <div class="split-copy">
       <h2>Check it.</h2>
       <p>
-        <code>deckhq doctor</code> ends with a line named <code>egress</code>: the sockets DeckHQ
-        has open to anywhere but your own machine.
+        <code>deckhq doctor</code> has a row named <code>egress</code>. It states the rule; it is
+        not a measurement, and it does not pretend to be one. These you can measure yourself.
       </p>
       <ul class="facts">
+        <li>
+          <strong>The address is one constant.</strong> <code>HOST</code> in
+          <code>src/daemon.mjs</code> is <code>127.0.0.1</code>, and the floor is served under a
+          policy that lets the page connect to its own origin and nowhere else.
+        </li>
         <li>
           <strong>The source is public, under MIT.</strong> The package has zero dependencies, so
           there is nothing underneath it to read.
@@ -82,10 +87,11 @@
       </ul>
     </div>
     <div class="split-media">
-      <pre class="term" aria-label="The last lines of deckhq doctor"><i>$ deckhq doctor</i>
-  ...
-  state           ~/.deckhq/state.json, writable
-  egress          <b>none. no outbound sockets.</b></pre>
+      <pre class="term" aria-label="Two rows of deckhq doctor"><i>$ deckhq doctor</i>
+<span>  ...</span>
+<span>  state           ~/.deckhq/state.json, writable</span>
+<span>  egress          <b>none. no outbound sockets.</b></span>
+<span>  ...</span></pre>
     </div>
   </div>
 </section>
@@ -100,10 +106,15 @@
         <h3>Reads</h3>
         <ul class="plain">
           <li>
-            Claude Code transcripts under <code>~/.claude/projects/</code>, in bounded chunks: the
-            head for the title, the tail for state. Never a whole one.
+            Claude Code transcripts under <code>~/.claude/projects/</code>. The scan reads each in
+            bounded chunks: the head for the title, the tail for state. Wrapped, when you open it,
+            reads them through to count one phrase.
           </li>
           <li><code>claude agents --json</code>, for which sessions are alive.</li>
+          <li>
+            <code>claude mcp list</code>, for the MCP servers row. Claude Code checks its own
+            servers to answer; DeckHQ connects to none of them.
+          </li>
           <li>
             Codex session files under <code>~/.codex/sessions/</code>, when Codex is installed.
           </li>

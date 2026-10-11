@@ -49,8 +49,8 @@
             needs a read.
           </li>
           <li>
-            They are counted separately. The header reads
-            <strong>2 hands up · 4 for review</strong>.
+            They are counted separately. The header has a number for each:
+            <strong>2 hands up</strong>, <strong>4 for review</strong>.
           </li>
         </ul>
       </div>
@@ -84,7 +84,7 @@
       <figure class="split-media shot shot--ui">
         <img
           src="media/panel.png"
-          alt="The session panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a code block reading npm test, 214 passing, the two files that changed with plus 142 and minus 18, and three buttons: 1 Reply, 2 Approve, 3 Bench."
+          alt="The session panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a code block reading npm test, 214 passing, what changed in orbital-api at plus 142 and minus 18 across 3 files, and three buttons: 1 Reply, 2 Approve, 3 Bench."
         />
       </figure>
     </div>
@@ -240,8 +240,9 @@
       <li>
         <h3>Describe the idea.</h3>
         <p>
-          <code>deckhq studio enable</code> on one project, and a real <code>claude</code> session
-          asks you what you are building.
+          <code>deckhq studio enable &lt;dir&gt; --yes</code> turns it on for one project. Then
+          <strong>Studio: plan this project</strong> starts a real <code>claude</code> session that
+          asks what you are building.
         </p>
       </li>
       <li>
@@ -333,7 +334,8 @@
         <h3>A worktree is a bench, and the branch is written on it.</h3>
         <p>
           Five checkouts of one repository are one room. The main checkout has the desks in the
-          middle; each git worktree somebody is working in is a bench against the wall.
+          middle; each git worktree somebody is working in is a bench against the wall. So is a
+          repository mounted inside another one, with its folder's name on the bench.
         </p>
       </article>
       <article class="c4">
@@ -406,8 +408,10 @@
       <h2>Before you install anything.</h2>
       <p class="cmd"><code>npx deckhq doctor</code></p>
       <p>
-        It counts the sessions on your disk and installs nothing, writes nothing and sends nothing.
-        Read the <code>on the floor</code> row: that is how many you have, finished ones included.
+        It counts the sessions on your disk. Before DeckHQ has ever run on a machine it writes
+        nothing, starts no daemon and opens no window: it reads your transcripts and asks
+        <code>claude</code> what is running and which MCP servers it has. Read the
+        <code>on the floor</code> row: that is how many you have, finished ones included.
       </p>
       <ul class="facts">
         <li>
@@ -426,16 +430,19 @@
     </div>
     <div class="split-media">
       <pre class="term" aria-label="Output of npx deckhq doctor"><i>$ npx deckhq doctor</i>
-  claude code     available
-  transcripts     77 sessions across 20 projects
-  running now     6   (claude code's own agent view reports 6)
-  on the floor    <b>77  &#8592; 71 sessions have already finished; the agent view no longer lists them</b>
-  codex           not installed
-  waiting on you  0   (3 waiting, all still running)
-  hooks           installed, port 4400, 285 events, last 1m ago
-  state           ~/.deckhq/state.json, writable
-  egress          <b>none. no outbound sockets.</b></pre>
-      <p class="quiet after-small">A real run, 3 September 2026. Your numbers will differ.</p>
+<span>  claude code     available</span>
+<span>  transcripts     77 sessions across 20 projects</span>
+<span>  running now     6   (claude code's own agent view reports 6)</span>
+<span>  on the floor    <b>77  &#8592; 71 sessions have already finished; the agent view no longer lists them</b></span>
+<span>  codex           not installed</span>
+<span>  waiting on you  0   (3 waiting, all still running)</span>
+<span>  hooks           installed, port 4400, 285 events, last 1m ago</span>
+<span>  state           ~/.deckhq/state.json, writable</span>
+<span>  egress          <b>none. no outbound sockets.</b></span></pre>
+      <p class="quiet after-small">
+        A real run, 3 September 2026. The report prints more rows today, and your numbers will
+        differ.
+      </p>
     </div>
   </div>
 </section>
@@ -481,7 +488,8 @@
       <div class="way">
         <h3>Look before you install</h3>
         <p>
-          The report installs nothing, writes nothing and sends nothing. It prints your own number.
+          The report prints your own number. On a machine DeckHQ has never run on, it leaves no file
+          behind.
         </p>
         <p class="cmd"><code>npx deckhq doctor</code></p>
         <p><a href="install.html">Every way to install, and how to remove it</a></p>

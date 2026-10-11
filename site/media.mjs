@@ -89,9 +89,20 @@ export function declaredMedia() {
     if (!asset.single) names.add(`${asset.name}@2x.png`);
     if (largeWidth(asset)) names.add(`${asset.name}@3x.png`);
     if (asset.kind === 'loop') names.add(`${asset.name}.mp4`);
+    if (asset.kind === 'loop' && asset.narrow) names.add(narrowOf(asset.name));
   }
   return names;
 }
+
+/**
+ * `hero-walk` -> `hero-walk-narrow.mp4`: the same loop at the width the
+ * manifest's `narrow` names, for a screen under 40rem. A phone draws the hero
+ * 343 CSS pixels wide, which is 1029 of its own at three to one, and was sent
+ * 2400.
+ *
+ * @param {string} name
+ */
+export const narrowOf = (name) => `${name}-narrow.mp4`;
 
 /** The loops the manifest declares, by name: `hero-walk`, not a file. */
 export function declaredLoops() {
@@ -195,7 +206,9 @@ export function publishMedia(outDir, files) {
     if (file.endsWith('.gif')) wanted.add(file.replace(/\.gif$/, '.png'));
     else if (declared.has(dense(file))) wanted.add(dense(file));
     if (declared.has(large(file))) wanted.add(large(file));
-    if (loopOf(file, loops)) wanted.add(`${loopOf(file, loops)}.mp4`);
+    const loop = loopOf(file, loops);
+    if (loop) wanted.add(`${loop}.mp4`);
+    if (loop && declared.has(narrowOf(loop))) wanted.add(narrowOf(loop));
   }
   let bytes = 0;
   let heaviest = { file: '', bytes: 0 };
@@ -295,10 +308,17 @@ export function dressImages(body, outDir, tones = {}) {
       const video = imageSize(path.join(outDir, 'media', `${loop}.mp4`));
       if (!video) throw new Error(`media/${loop}.mp4 is not a video this build can measure`);
       const first = /\sfetchpriority="high"/.test(tag);
+      // A loop with a narrow file offers it first, to a screen under 40rem; a
+      // browser takes the first source whose query holds, so a phone is sent
+      // that one and no other.
+      const small = fs.existsSync(path.join(outDir, 'media', narrowOf(loop)))
+        ? `<source src="media/${narrowOf(loop)}" type="video/mp4" ` +
+          `media="${NARROW} and ${MOTION}" />`
+        : '';
       return (
         `<span class="loop">${img}<video${first ? ' autoplay' : ''} muted loop playsinline ` +
         `preload="${first ? 'metadata' : 'none'}" width="${video.width / 2}" ` +
-        `height="${video.height / 2}" aria-hidden="true" tabindex="-1">` +
+        `height="${video.height / 2}" aria-hidden="true" tabindex="-1">${small}` +
         `<source src="media/${loop}.mp4" type="video/mp4" media="${MOTION}" /></video></span>`
       );
     }
@@ -341,7 +361,7 @@ export function assertComingIsLabelled(name, body) {
  *
  * @param {string} outDir
  * @param {string} rel a page, e.g. `features.html`
- * @param {{dpr?: 1|2, all?: boolean}} [opts]
+ * @param {{dpr?: 1|2, all?: boolean, narrow?: boolean}} [opts] `narrow`: a screen under 40rem
  * @returns {number} bytes
  */
 export function pageWeight(outDir, rel, opts = {}) {
@@ -364,9 +384,14 @@ export function pageWeight(outDir, rel, opts = {}) {
     if (fs.existsSync(image)) bytes += fs.statSync(image).size;
   }
   // A video is counted whole: one with `autoplay` is fetched to its last byte
-  // as soon as the page is, and any other when the reader scrolls to it.
-  for (const [tag, src] of html.matchAll(/<video\b[^>]*>\s*<source\b[^>]*\ssrc="([^"]+)"/g)) {
-    if ((!all && !/\sautoplay[\s>]/.test(tag)) || seen.has(src)) continue;
+  // as soon as the page is, and any other when the reader scrolls to it. Of
+  // two sources one is fetched: the narrow file on a phone, the other on
+  // every wider screen.
+  for (const [, tag, inner] of html.matchAll(/(<video\b[^>]*>)([\s\S]*?)<\/video>/g)) {
+    const sources = [...inner.matchAll(/<source\b[^>]*\ssrc="([^"]+)"[^>]*>/g)];
+    const pick = sources.find((s) => /max-width/.test(s[0]) === Boolean(opts.narrow));
+    const src = (pick ?? sources[sources.length - 1] ?? [])[1];
+    if (!src || (!all && !/\sautoplay[\s>]/.test(tag)) || seen.has(src)) continue;
     seen.add(src);
     const video = path.resolve(path.dirname(file), src);
     if (fs.existsSync(video)) bytes += fs.statSync(video).size;
