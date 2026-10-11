@@ -319,8 +319,11 @@
   font-size: var(--t-small);
 }
 
-/* The way with the two longest lines sets them a step smaller, to fit. */
-.way--wide .cmd code {
+/* The way with the two longest lines sets them a step smaller, to fit. So
+   does a command in a row of three or four columns, where
+   `deckhq autostart --install --yes` was cut off at its last word. */
+.way--wide .cmd code,
+.cols .cmd code {
   font-size: var(--t-micro);
 }
 
@@ -644,6 +647,36 @@ tbody th {
 
   .versus tbody td {
     font-size: var(--t-small);
+  }
+
+  /* The third table, a name, a status and a sentence: the first two share a
+     line and the sentence runs under them, so this one does not scroll
+     sideways either. */
+  .runtimes {
+    display: block;
+    min-width: 0;
+  }
+
+  .runtimes :is(thead, tbody) {
+    display: block;
+  }
+
+  .runtimes tr {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  .runtimes :is(th, td):nth-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .runtimes :is(th, td):nth-child(3) {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+
+  .runtimes tr:not(:last-child) td:nth-child(3) {
+    border-bottom: 1px solid var(--line);
   }
 }
 
