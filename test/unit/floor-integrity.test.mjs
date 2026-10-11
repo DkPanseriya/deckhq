@@ -1941,8 +1941,15 @@ test('the header floor counts equal the plan’s drawn totals', () => {
 
     // And nobody has been lost: every session is still counted somewhere.
     assert.equal(c.drawn.benched + c.drawn.wentHome, c.benched);
+    // A finished junior is fired from its place and drawn nowhere: a bucket of
+    // its own, never the lounge's (`junior-hire-fire.test.mjs`).
     assert.equal(
-      c.drawn.atDesk + c.drawn.waiting + c.drawn.lounge + c.drawn.finished + c.drawn.wentHome,
+      c.drawn.atDesk +
+        c.drawn.waiting +
+        c.drawn.lounge +
+        c.drawn.finished +
+        c.drawn.wentHome +
+        c.drawn.juniorsDone,
       c.total - c.letGo,
       `every session lands in exactly one bucket (${JSON.stringify(spec)})`,
     );

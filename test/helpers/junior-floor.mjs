@@ -62,7 +62,8 @@ export function crewFloor(n, leadOver = {}) {
 }
 
 /** @param {any[]} projects @param {any[]} agents */
-export const planFor = (projects, agents) => buildPlan(projects, agents, { stage: STAGE, now: NOW });
+export const planFor = (projects, agents) =>
+  buildPlan(projects, agents, { stage: STAGE, now: NOW });
 
 /** @param {any} plan @param {string} kind @param {string} [id] */
 export const roomOf = (plan, kind, id) =>

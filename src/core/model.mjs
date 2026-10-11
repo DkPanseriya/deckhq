@@ -44,7 +44,7 @@ export {
 
 /** @typedef {'working'|'needs_input'|'stalled'|'for_review'|'ended'} ActivityState */
 /** @typedef {'active'|'benched'|'let_go'} AckState */
-/** @typedef {'desk'|'office'|'lounge'|'let_go'} Placement */
+/** @typedef {'desk'|'office'|'lounge'|'let_go'|'done'} Placement */
 /**
  * Every runtime DeckHQ has an adapter for. Widened by WP-24/25; the registry in
  * `src/adapters/index.mjs` is the list of record and this union has to keep up
@@ -413,6 +413,7 @@ export function counts(agents, opts = {}) {
   let drawnResting = 0;
   let drawnWaiting = 0;
   let wentHome = 0;
+  let juniorsDone = 0;
 
   for (const a of agents) {
     if (a.ackState === 'let_go') {
@@ -447,6 +448,8 @@ export function counts(agents, opts = {}) {
     } else if (where === 'lounge') {
       if (hasRoom) drawnResting++;
       else finished++;
+    } else if (where === 'done') {
+      juniorsDone++;
     }
   }
 
@@ -470,6 +473,12 @@ export function counts(agents, opts = {}) {
       /** Everyone the lounge holds: benched, plus the ended it now rests. */
       lounge: drawnBenched + drawnResting,
       wentHome,
+      /**
+       * Juniors that have finished: fired from their place and drawn nowhere,
+       * never rested in the lounge (`placement`'s `done`). Still in `total`,
+       * in their lead's panel and in the deck.
+       */
+      juniorsDone,
     },
   };
 }

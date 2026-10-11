@@ -55,7 +55,10 @@ test('the owner’s picture: a junior that stops and starts again is never betwe
       rt.step(0.1, { plan, now: t });
       for (const rec of rt.all()) {
         if (rec.agent.subagent !== true) continue;
-        assert.ok(inside(rec, career), `${rec.id} is outside its lead's room (${state}, frame ${i})`);
+        assert.ok(
+          inside(rec, career),
+          `${rec.id} is outside its lead's room (${state}, frame ${i})`,
+        );
       }
       for (const cable of cablesOf(rt.all(), list, { nowMs: t })) {
         assert.ok(
@@ -77,7 +80,10 @@ test('a finished junior is nowhere in the Lounge: no seat, no count, no name', (
   // Whatever else is said of it, a junior is never placed in the Lounge.
   for (const activityState of ['working', 'stalled', 'needs_input', 'for_review', 'ended']) {
     for (const ackState of ['active', 'benched']) {
-      assert.notEqual(placement(junior('claude-code:x', LEAD, { activityState, ackState })), 'lounge');
+      assert.notEqual(
+        placement(junior('claude-code:x', LEAD, { activityState, ackState })),
+        'lounge',
+      );
     }
   }
   const plan = planFor(projects, done);
@@ -106,7 +112,12 @@ test('the header’s buckets still sum to the total, with finished juniors in on
   assert.equal(c.drawn.waiting, 1, 'the junior with its hand up');
   assert.equal(c.drawn.atDesk, 4, 'the lead, two juniors and the bystander');
   assert.equal(
-    c.drawn.atDesk + c.drawn.waiting + c.drawn.lounge + c.drawn.finished + c.drawn.wentHome + c.drawn.juniorsDone,
+    c.drawn.atDesk +
+      c.drawn.waiting +
+      c.drawn.lounge +
+      c.drawn.finished +
+      c.drawn.wentHome +
+      c.drawn.juniorsDone,
     c.total - c.letGo,
     'every session lands in exactly one bucket',
   );
