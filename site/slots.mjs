@@ -41,6 +41,37 @@ export function waitlistHost(url = WAITLIST_URL) {
 }
 
 /**
+ * The e-mail button: a link to the hosted form, in a new tab. It is the same
+ * element wherever it is shown, and where there is no form it is nothing at
+ * all, so no page carries a button with nowhere to go.
+ *
+ * @param {{url?: string, label?: string, kind?: string}} [opts] `kind`: the
+ *   classes after `btn`, for a quieter or a larger one
+ */
+export function waitlistButton({
+  url = WAITLIST_URL,
+  label = 'Tell me when 3D is ready',
+  kind = '',
+} = {}) {
+  if (!waitlistHost(url)) return '';
+  const cls = kind ? `btn ${kind}` : 'btn';
+  return `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`;
+}
+
+/**
+ * The line across the top of every page: what is coming, and the way to it.
+ * A phone is given the shorter sentence, so it stays one line.
+ */
+export function announceBar() {
+  return (
+    `<a class="announce" href="3d.html">` +
+    `<span class="announce-long">Coming: the same office in 3D.</span>` +
+    `<span class="announce-short">Coming: DeckHQ in 3D ·</span> ` +
+    `<span class="announce-go">See it</span></a>`
+  );
+}
+
+/**
  * The ways to follow, as list items: the feed, GitHub's own notification and,
  * only when there is a form to send a reader to, the e-mail button.
  *
@@ -54,7 +85,7 @@ export function followWays({ repo, url = WAITLIST_URL }) {
   if (waitlistHost(url)) {
     ways.push(
       `<li class="follow-mail"><span>One e-mail when it lands. Nothing else.</span>` +
-        `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Tell me when 3D is ready</a></li>`,
+        `${waitlistButton({ url })}</li>`,
     );
   }
   return ways;

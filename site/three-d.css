@@ -1,0 +1,226 @@
+/*
+ * DeckHQ, the site: what it says about the office in 3D.
+ *
+ * The third part of the stylesheet. The office in 3D is not released, and
+ * three things on the site say so: the line across the top of every page, the
+ * strip under the home page's first screen, and the 3D page. Their pieces are
+ * here; `site/build.mjs` joins this file to the other two.
+ *
+ * Every colour here is a token from `site/style.css`. Nothing is fetched.
+ */
+
+/* ------------------------------------------------ the line over the bar */
+
+/* One line, the accent as a ground with the page's dark as its ink: 8.51:1,
+   measured in `test/unit/site.test.mjs`. It is not fixed and cannot be closed:
+   it scrolls away with the page, so it takes one line of a phone, once. */
+.announce {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0.5rem var(--gutter);
+  color: var(--on-accent);
+  font: 600 var(--t-small) / 1.4 var(--sans);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  background: var(--accent);
+}
+
+/* The words sit over the light that crosses the line, never under it. */
+.announce > span {
+  position: relative;
+  z-index: 1;
+}
+
+.announce-go {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.announce-go::after {
+  content: ' \2192';
+}
+
+.announce:focus-visible {
+  outline-color: var(--on-accent);
+  outline-offset: -4px;
+}
+
+/* A phone gets the shorter sentence. Both are in the page; one is shown. */
+.announce-short {
+  display: none;
+}
+
+@media (max-width: 39.99rem) {
+  .announce {
+    font-size: var(--t-micro);
+  }
+
+  .announce-long {
+    display: none;
+  }
+
+  .announce-short {
+    display: inline;
+  }
+}
+
+/* A light crosses the line once, on load, and is gone. It is parked off the
+   left edge, so a reader who asked for less motion never sees it at all. */
+.announce::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, var(--ink), transparent);
+  opacity: 0.5;
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .announce::after {
+    animation: sweep 1500ms 600ms var(--ease) both;
+  }
+}
+
+@keyframes sweep {
+  to {
+    transform: translateX(460%);
+  }
+}
+
+/* The tag beside a name on the bar: a size under the one in a caption. */
+:is(.site-nav, .nav-drawer) .tag {
+  margin: 0 0 0 0.3rem;
+  padding: 0 0.4rem;
+  font-size: 0.6875rem;
+}
+
+/* ------------------------------------------ the strip under the first screen */
+
+/* Half a screen at most: one sentence, two buttons and a row of pictures, so
+   a reader who came for the office in 3D finds it without scrolling for it. */
+.strip3d {
+  padding-block: var(--s-5);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.strip3d-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  margin-bottom: var(--s-3);
+}
+
+.strip3d h2 {
+  font-size: var(--t-sub);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.strip3d-shots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.strip3d-shots a {
+  display: block;
+}
+
+.strip3d figcaption {
+  margin-top: var(--s-1);
+  font-size: var(--t-micro);
+  white-space: nowrap;
+}
+
+/* Narrower than a desk monitor the row runs off the right edge and is pulled
+   along by hand: four pictures a thumb wide would show nothing. */
+@media (max-width: 55.99rem) {
+  .strip3d {
+    padding-block: var(--s-3);
+  }
+
+  .strip3d-shots {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: min(62%, 20rem);
+    gap: var(--s-2);
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--gutter);
+    scrollbar-width: none;
+  }
+
+  .strip3d-shots > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* ------------------------------------------------------------ the 3D page */
+
+/* The page is the pictures. Its first screen is centred, which no other page
+   is, and its headline is the one place the display step is used. */
+.hero3d {
+  padding-top: clamp(1.5rem, 0.6rem + 2.4vw, 3rem);
+  padding-bottom: var(--s-6);
+}
+
+.hero3d-copy {
+  display: grid;
+  gap: var(--s-2);
+  justify-items: center;
+  text-align: center;
+}
+
+.hero3d h1 {
+  font-size: var(--t-display);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.hero3d .actions {
+  justify-content: center;
+  margin-top: var(--s-1);
+}
+
+.btn--large {
+  padding: 0.95rem 1.6rem;
+  font-size: var(--t-body);
+}
+
+/* A clip of the 3D office is the shape of its first frame, corner to corner. */
+.shot3d video {
+  object-position: 50% 50%;
+}
+
+/* The states beside one of them, close: sixteen to nine is as tall as a
+   square when their widths are sixteen to nine. */
+.pair3d {
+  display: grid;
+  grid-template-columns: minmax(0, 16fr) minmax(0, 9fr);
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.stack3d {
+  display: grid;
+  gap: var(--s-5);
+}
+
+.stack3d h3 {
+  margin-bottom: calc(var(--s-3) * -1);
+}
+
+@media (max-width: 55.99rem) {
+  .pair3d {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

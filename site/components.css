@@ -598,10 +598,6 @@ tbody th {
    be off the screen is the one being compared. Each row's head runs the full
    width, and its cells sit under it, side by side. */
 @media (max-width: 39.99rem) {
-  .coming-shots {
-    grid-template-columns: 1fr;
-  }
-
   :is(.versus, .os) {
     display: block;
     min-width: 0;
@@ -697,29 +693,6 @@ tbody th {
   font: 500 var(--t-small) / 1 var(--mono);
 }
 
-/* What is not out yet: half a screen, under the one thing a reader can do. */
-.coming {
-  display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
-  gap: var(--s-4) var(--s-5);
-  align-items: center;
-}
-
-.coming-copy {
-  display: grid;
-  gap: var(--s-2);
-}
-
-.coming h2 {
-  font-size: var(--t-sub);
-}
-
-.coming-shots {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--s-3);
-}
-
 .follow {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -778,7 +751,6 @@ tbody th {
 }
 
 @media (max-width: 55.99rem) {
-  .coming,
   .follow {
     grid-template-columns: 1fr;
   }
