@@ -451,25 +451,28 @@ export function readPng(file) {
  * pixel to one device pixel and nothing is resampled until the final halving.
  * The page loads nothing from the network: no font, no script, no link.
  *
- * @param {{dir:string, name:string, width:number, height:number, html:string,
+ * `scale` is that ratio, for a page photographed larger: 2.4 makes a 1600 px
+ * page 3840 wide, and its parts are then captures taken at 2.4 to one.
+ *
+ * @param {{dir:string, name:string, width:number, height:number, html:string, scale?:number,
  *          parts?:Record<string, {width:number, height:number, data:Uint8Array}>}} opts
- * @returns {Promise<{width:number, height:number, data:Uint8Array}>} at 2x
+ * @returns {Promise<{width:number, height:number, data:Uint8Array}>} at `scale`, 2 by default
  */
 export async function layout(opts) {
-  const { dir, name, width, height, parts = {} } = opts;
+  const { dir, name, width, height, parts = {}, scale = 2 } = opts;
   fs.mkdirSync(dir, { recursive: true });
   let html = opts.html;
   for (const [key, img] of Object.entries(parts)) {
     const file = path.join(dir, `${name}.${key}.png`);
     fs.writeFileSync(file, encodePng(img));
     html = html
-      .replaceAll(`{{${key}.w}}`, String(img.width / 2))
-      .replaceAll(`{{${key}.h}}`, String(img.height / 2))
+      .replaceAll(`{{${key}.w}}`, String(img.width / scale))
+      .replaceAll(`{{${key}.h}}`, String(img.height / scale))
       .replaceAll(`{{${key}}}`, pathToFileUrl(file));
   }
   const page = path.join(dir, `${name}.html`);
   fs.writeFileSync(page, html, 'utf8');
-  return withChrome({ chromePath: findChrome(), width, height, scale: 2 }, async (client) => {
+  return withChrome({ chromePath: findChrome(), width, height, scale }, async (client) => {
     await client.send('Page.navigate', { url: pathToFileUrl(page) });
     await sleep(700);
     const { data } = await client.send('Page.captureScreenshot', {
