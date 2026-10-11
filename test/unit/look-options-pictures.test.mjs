@@ -114,14 +114,26 @@ test('eleven preset cards on both surfaces, each asked of the real painter under
     assert.equal(cards.filter((c) => c.getAttribute('tabindex') === '0').length, 1);
   }
 
-  // In the bar they are a grid of four, every one on screen at once: no
-  // sideways scroller hiding eight of them.
+  // In the bar they are ONE ROW that scrolls sideways (the owner, 11 October:
+  // "keep the floor styles as only one row and horizontally scrolling"). It
+  // was a grid of four, and three rows of pictures pushed the controls under
+  // them off a laptop's screen. That there is more is shown by the strip's
+  // fades and arrows, which is why the scrollbar itself may be hidden.
   const css = read('public/style.css');
   const grid = /\.lookbar-presets\s*\{([^}]*)\}/.exec(css);
   assert.ok(grid, 'style.css has no .lookbar-presets rule');
-  assert.match(grid[1], /grid-template-columns:\s*repeat\(4,/);
-  assert.doesNotMatch(grid[1], /overflow/);
-  assert.equal(Math.ceil(PRESETS.length / 4), 3, 'three short rows');
+  assert.match(grid[1], /display:\s*flex/);
+  assert.doesNotMatch(grid[1], /flex-wrap|grid-template/, 'the row wraps');
+  assert.match(grid[1], /overflow-x:\s*auto/);
+  assert.match(grid[1], /scroll-snap-type:\s*x/);
+  assert.match(css, /\.lookbar-preset\s*\{[^}]*scroll-snap-align:\s*start/);
+  for (const edge of ['before', 'after']) {
+    assert.match(
+      css,
+      new RegExp(`\\.lookbar-strip\\[data-more-${edge}='true'\\]`),
+      `nothing shows there is more ${edge}`,
+    );
+  }
 });
 
 test('every preset card is its own picture, on every theme, and no card is a swatch', () => {

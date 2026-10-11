@@ -58,6 +58,7 @@ import {
   PLANT_DENSITY_IDS,
   PLANT_FAMILY_IDS,
   PROP_DENSITY_IDS,
+  FONT_IDS,
   ROOM_TINT_IDS,
   RUG_PATTERN_IDS,
   RUG_ROLES,
@@ -119,6 +120,8 @@ const LATER_KEYS = Object.freeze({
   light: LIGHT_MOOD_IDS,
   partitions: PARTITION_STYLE_IDS,
   roomTint: ROOM_TINT_IDS,
+  // The face the floor's text is set in. Absent is `system`, the one there is.
+  font: FONT_IDS,
 });
 
 /** The keys a look document may carry, and nothing else. */
@@ -162,6 +165,7 @@ function isPlainObject(v) {
  * @property {string} light
  * @property {string} partitions
  * @property {string} roomTint
+ * @property {string} font
  */
 
 /**
@@ -370,6 +374,7 @@ function droppedOptions(raw, out) {
   check('light', raw.light, out.light);
   check('partitions', raw.partitions, out.partitions);
   check('roomTint', raw.roomTint, out.roomTint);
+  check('font', raw.font, out.font);
   return lost;
 }
 

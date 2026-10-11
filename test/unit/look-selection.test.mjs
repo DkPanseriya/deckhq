@@ -250,6 +250,12 @@ const { wireLookBar } = await import('../../public/app-lookbar.js');
 const { createLookPort, createThemingPort } = await import('../../public/app-look.js');
 const { createSettingsUI } = await import('../../public/settings-ui.js');
 const { dimensionsFor } = await import('../../public/look-ui.js');
+const { groupLabel } = await import('../../public/look-ui-advanced.js');
+/** The LAST group of that name: an Advanced row, where the outside has one too. */
+const groupNamed = (root, label) =>
+  role(root, 'radiogroup')
+    .filter((g) => g.getAttribute('aria-label') === label)
+    .at(-1);
 
 state.setLook(null, catalogue, guards, null);
 state.setThemes({ THEMES, themeByName, swatchesFor: () => [], applyTheme: (name) => name });
@@ -386,14 +392,16 @@ for (const [name, surface] of Object.entries(SURFACES)) {
   });
 }
 
-test('every picker in the catalogue is a radio group in the sheet, by its own name', async () => {
+test('every picker in the catalogue is a radio group in the sheet, by its row’s name', async () => {
   reset();
   await SURFACES.sheet.open();
   for (const picker of LOOK_PICKERS) {
     const dimensions = dimensionsFor(picker, catalogue);
     for (const dimension of dimensions) {
-      const label = dimensions.length > 1 ? `${picker.label} — ${dimension.label}` : picker.label;
-      const g = group(sheetLook(), label);
+      // By the name its ROW is given: the catalogue's own, except the raw light,
+      // which is the Daylight under the outside's four-mood Light control.
+      const label = groupLabel(picker, dimension, dimensions.length);
+      const g = groupNamed(sheetLook(), label);
       assert.ok(g, `"${label}" is in the catalogue and the sheet draws no group for it`);
       assert.equal(role(g, 'radio').length, dimension.ids.length, label);
     }
@@ -438,7 +446,8 @@ test('the sheet and the quick bar are one look: what one wrote is what the other
 
   SURFACES.bar.open();
   assert.equal(checkedIndex(group(el('look-popover'), 'Agent size')), 2);
-  assert.equal(checkedIndex(group(el('look-popover'), 'Theme')), 1);
+  // Night shift is the theme's second option, and the Light control's fourth.
+  assert.equal(checkedIndex(group(el('look-popover'), 'Light')), 3);
 });
 
 test('a late answer to an earlier click does not put a later click back', async () => {

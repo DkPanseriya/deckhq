@@ -39,6 +39,7 @@ import { lookMetrics, validateLook } from '../../public/render/look-guards.js';
 import { resolveLook } from '../../public/render/look-derive.js';
 import { buildLookDocument, validateLookDocument } from '../../src/core/look.mjs';
 import { createLookSection, dimensionsFor, swatchSpecFor } from '../../public/look-ui.js';
+import { groupLabel, rowLabel } from '../../public/look-ui-advanced.js';
 import {
   ADVANCED_GROUPS,
   OUTSIDE_PICKER_IDS,
@@ -266,7 +267,7 @@ const bayName = (bay) => (bay === 'cafe' ? 'café' : bay);
 
 // ------------------------------------------- simple outside, detail inside
 
-test('the outside is exactly six controls — agent size, theme, style, density, light, room colours — and nothing else', () => {
+test('the outside is exactly five controls — agent size, light, style, density, room colours — and nothing else', () => {
   // The owner: "Keep high-level abstract settings like agent size, theme, etc.
   // on the outside." Six, in this order — the four that were there, then the
   // light and the room colours — and every other control on the section is
@@ -279,7 +280,7 @@ test('the outside is exactly six controls — agent size, theme, style, density,
   const outside = byRole(root, 'radiogroup').filter((g) => !within(advanced, g));
   assert.deepEqual(
     outside.map((g) => g.getAttribute('aria-label')),
-    ['Agent size', 'Theme', 'Style', 'Density', 'Light'],
+    ['Agent size', 'Light', 'Style', 'Density'],
   );
   const switches = byRole(root, 'switch');
   assert.deepEqual(
@@ -292,12 +293,12 @@ test('the outside is exactly six controls — agent size, theme, style, density,
     [],
     'a lounge bay is outside the disclosure',
   );
-  // The only buttons outside it are the five groups' own options and the switch.
+  // The only buttons outside it are the four groups' own options and the switch.
   const options = new Set([...outside.flatMap((g) => byRole(g, 'radio')), ...switches]);
   const loose = find(root, (n) => n.tagName === 'BUTTON').filter(
     (b) => !within(advanced, b) && !options.has(b),
   );
-  assert.deepEqual(loose, [], 'something other than the six controls is on the outside');
+  assert.deepEqual(loose, [], 'something other than the five controls is on the outside');
 
   // Each list is the catalogue's, the themes' or the presets' own.
   const count = (label) => byRole(groupNamed(root, label), 'radio').length;
@@ -305,13 +306,15 @@ test('the outside is exactly six controls — agent size, theme, style, density,
   assert.equal(count('Theme'), THEMES.length);
   assert.equal(count('Style'), PRESETS.length);
   assert.equal(count('Density'), densityLevels(catalogue).length);
-  assert.equal(count('Light'), catalogue.LIGHT_MOOD_IDS.length);
+  assert.equal(count('Light'), 4, 'the four curated moods');
+  assert.equal(count('Daylight'), catalogue.LIGHT_MOOD_IDS.length, 'the raw light, under Advanced');
   // And the catalogue pickers out here are the ones the store names. Room
   // colours is not one of them: its whole row is under Advanced, and the
   // switch is two of its three options.
-  assert.deepEqual([...OUTSIDE_PICKER_IDS], ['agentSize', 'light']);
+  assert.deepEqual([...OUTSIDE_PICKER_IDS], ['agentSize']);
   assert.ok(groupNamed(advanced, 'Room colours'), 'the three-way room colours row left Advanced');
-  assert.equal(groupNamed(advanced, 'Light'), undefined, 'the light is drawn twice');
+  assert.equal(groupNamed(advanced, 'Light'), undefined, 'the four moods are drawn twice');
+  assert.ok(groupNamed(advanced, 'Daylight'), 'the raw light is not under Advanced');
 });
 
 test('Advanced is shut by default and holds every other picker in the catalogue — derived, not listed', () => {
@@ -334,15 +337,15 @@ test('Advanced is shut by default and holds every other picker in the catalogue 
   const inside = LOOK_PICKERS.filter((p) => !OUTSIDE_PICKER_IDS.includes(p.id));
   const labels = byClass(advanced, 'settings-label').map((n) => n.textContent);
   assert.deepEqual(
-    labels.filter((label) => inside.some((p) => p.label === label)).sort(),
-    inside.map((p) => p.label).sort(),
+    labels.filter((label) => inside.some((p) => rowLabel(p) === label)).sort(),
+    inside.map((p) => rowLabel(p)).sort(),
   );
   assert.ok(labels.includes('Lounge kit'));
   assert.equal(byRole(advanced, 'checkbox').length, LOUNGE_KIT_BAYS.length);
   for (const picker of inside) {
     const dimensions = dimensionsFor(picker, catalogue);
     for (const d of dimensions) {
-      const label = dimensions.length > 1 ? `${picker.label} — ${d.label}` : picker.label;
+      const label = groupLabel(picker, d, dimensions.length);
       const g = groupNamed(advanced, label);
       assert.ok(g, `"${label}" is not under Advanced`);
       assert.equal(byRole(g, 'radio').length, d.ids.length);
@@ -360,13 +363,14 @@ test('Advanced is shut by default and holds every other picker in the catalogue 
   // From the largest thing a look decides to the smallest.
   assert.deepEqual(
     ADVANCED_GROUPS.map((g) => g.label),
-    ['Walls and room colours', 'Floors', 'Furniture and textiles', 'Plants and props'],
+    ['Theme, light and walls', 'Floors', 'Furniture and textiles', 'Plants and props'],
   );
-  // The partitions and the room colours are the first heading's, and nothing
-  // else is: they are not furniture, which is where the rule used to drop them.
+  // The raw light, the partitions and the room colours are the first heading's,
+  // and nothing else is: they are not furniture, which is where the rule used
+  // to drop them.
   assert.deepEqual(
     advancedGroups(catalogue)[0].pickers.map((p) => p.id),
-    ['partitions', 'roomTint'],
+    ['light', 'partitions', 'roomTint'],
   );
   const grouped = advancedGroups(catalogue).flatMap((g) => g.pickers.map((p) => p.id));
   assert.deepEqual([...grouped].sort(), inside.map((p) => p.id).sort());
@@ -394,7 +398,7 @@ test('the closed disclosure says what is in it, and stays the way it was left', 
   // The heading each change is under says so too.
   const subs = byClass(edited.host, 'settings-look-sub').map((d) => d.children[0].textContent);
   assert.deepEqual(subs, [
-    'Walls and room colours',
+    'Theme, light and walls',
     'Floors — 1 change',
     'Furniture and textiles',
     'Plants and props — 1 change',
@@ -410,7 +414,7 @@ test('the closed disclosure says what is in it, and stays the way it was left', 
   );
   assert.equal(
     byClass(lit.host, 'settings-look-sub')[0].children[0].textContent,
-    'Walls and room colours — 1 change',
+    'Theme, light and walls — 2 changes',
   );
 
   // Remembered per browser: opening it writes, and the next sheet reads.

@@ -53,6 +53,7 @@
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { deviceScaleOf, snapPx } from './device-px.js';
 import { textWidth } from './text-metrics.js';
+import { badgeInk, textPaint } from './floor-type.js';
 import {
   TAU,
   BASE_U,
@@ -195,7 +196,7 @@ export function drawBadge(ctx, ox, oy, u, text, color) {
   ctx.fillStyle = color;
   roundRectFill(ctx, box.x, box.y, box.w, box.h, box.h * 0.32);
   ctx.save();
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = badgeInk(color);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + box.h * 0.04);
@@ -368,12 +369,17 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
   // display. 0.16 of the font is 1.8 px there, and it is never under a device
   // pixel and a half, which is the least that still reads as an outline.
   ctx.lineWidth = labelHaloWidth(px, deviceScaleOf(ctx));
-  ctx.strokeStyle = 'rgba(255,253,249,0.95)';
+  // THE HALO AND THE INK ARE A PAIR, both the theme's (`floor-type.js`): a
+  // dark ink in a pale halo on a light floor, a pale ink in a dark halo on a
+  // dark one. The halo was a constant near-white and the ink was the theme's,
+  // so on the night shift a name was white inside white.
+  const name = textPaint('name');
+  ctx.strokeStyle = /** @type {string} */ (name.backing);
   // The top of the line on a whole device pixel, so a name is rendered the
   // same way wherever on the floor its figure is standing.
   const ty = snapPx(ctx, box.top + dy);
   ctx.strokeText(box.text, lx, ty);
-  ctx.fillStyle = PALETTE.inkWarm;
+  ctx.fillStyle = name.ink;
   ctx.fillText(box.text, lx, ty);
   // Text alignment is global context state. Leaking 'center' out of here
   // pushed every room plate's text off its position.

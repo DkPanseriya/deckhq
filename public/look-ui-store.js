@@ -231,13 +231,55 @@ export function roomColours(c, look) {
 // ------------------------------------------------- outside, and under Advanced
 
 /**
- * The catalogue pickers drawn on the OUTSIDE of both surfaces, and nowhere
- * else. Two: the agent size and the light. The others out there are not
- * catalogue pickers — theme, style and density are not in the catalogue's
- * picker list at all, and room colours is two of a picker's three options,
- * whose whole row is under Advanced.
+ * THE LIGHT, AS A PERSON CHOOSES IT: four curated moods, each a lighting layer
+ * over whichever style is chosen.
+ *
+ * Underneath there are two keys — the floor's `theme` (default, night shift,
+ * blueprint, and whatever a pack adds) and the look's `light` (morning, noon,
+ * evening) — and nine pairs of them, most of which nobody would pick. The four
+ * below are the ones worth offering, and NOTHING STORED CHANGED: a mood is
+ * read off the two keys and written back as the two keys, so a saved floor, a
+ * `?look=` link and an exported look are exactly what they were.
+ *
+ * `light: null` is a mood that leaves the look's light where it is — the night
+ * shift paints its own, and a floor that comes back from it to Morning wants
+ * the morning it left.
  */
-export const OUTSIDE_PICKER_IDS = Object.freeze(['agentSize', 'light']);
+export const LIGHTINGS = Object.freeze([
+  Object.freeze({ id: 'default', label: 'Default', theme: 'default', light: 'noon' }),
+  Object.freeze({ id: 'morning', label: 'Morning', theme: 'default', light: 'morning' }),
+  Object.freeze({ id: 'evening', label: 'Evening', theme: 'default', light: 'evening' }),
+  Object.freeze({ id: 'night', label: 'Night shift', theme: 'night shift', light: null }),
+]);
+
+/**
+ * Which of the four a theme and a look are, or `''` for a pair that is none of
+ * them — `blueprint`, a pack's theme — which stays exactly what it is.
+ * @param {string} theme @param {any} look a normalised look
+ */
+export function lightingOf(theme, look) {
+  // With no look to read — a build whose renderer did not load — a mood is its
+  // theme alone: the default one, or the one that paints its own light.
+  if (!look) {
+    const own = LIGHTINGS.find(
+      (l) => l.theme === theme && (l.light === null || l.id === 'default'),
+    );
+    return own ? own.id : '';
+  }
+  const light = String(look.light);
+  const hit = LIGHTINGS.find((l) => l.theme === theme && (l.light === null || l.light === light));
+  return hit ? hit.id : '';
+}
+
+/**
+ * The catalogue pickers drawn on the OUTSIDE of both surfaces, and nowhere
+ * else. One: the agent size. The others out there are not catalogue pickers —
+ * the light is the four moods above, style and density are not in the
+ * catalogue's picker list at all, and room colours is two of a picker's three
+ * options, whose whole row is under Advanced. The raw `light` picker is under
+ * Advanced too, beside the theme, for the pairs the four do not name.
+ */
+export const OUTSIDE_PICKER_IDS = Object.freeze(['agentSize']);
 
 /**
  * The four headings under Advanced, in the order they are drawn: from the
@@ -245,7 +287,7 @@ export const OUTSIDE_PICKER_IDS = Object.freeze(['agentSize', 'light']);
  * coloured, what the floors are, what stands on them, what grows on them.
  */
 export const ADVANCED_GROUPS = Object.freeze([
-  { id: 'rooms', label: 'Walls and room colours' },
+  { id: 'rooms', label: 'Theme, light and walls' },
   { id: 'floors', label: 'Floors' },
   { id: 'furniture', label: 'Furniture and textiles' },
   { id: 'plants', label: 'Plants and props' },
@@ -263,7 +305,7 @@ export const ADVANCED_GROUPS = Object.freeze([
 export function advancedGroupOf(pickerId) {
   if (pickerId.startsWith('floor.') || pickerId === 'scheme') return 'floors';
   if (pickerId === 'plants' || pickerId === 'props') return 'plants';
-  // The light is drawn outside; on a build that moved it in, it is the rooms'.
+  // The raw light sits beside the theme: the two keys the four moods are made of.
   if (pickerId === 'partitions' || pickerId === 'roomTint' || pickerId === 'light') return 'rooms';
   return 'furniture';
 }
@@ -513,6 +555,46 @@ export function createLookStore(opts) {
     /** The theme the daemon last stored — what a preview is put back to. */
     storedTheme: () => confirmedTheme ?? 'default',
     chooseTheme,
+    /** The four moods this build can offer: one whose theme is not installed is left out. */
+    lightings() {
+      const have = new Set(this.themes().map((/** @type {any} */ t) => t.name));
+      const offered = LIGHTINGS.filter((l) => l.theme === 'default' || have.has(l.theme));
+      // No catalogue, no look: only the moods that are a theme and nothing more.
+      return cat() ? offered : offered.filter((l) => l.id === 'default' || l.light === null);
+    },
+    /** Which of the four the floor is in, or `''` for a pair that is none of them. */
+    lighting() {
+      return lightingOf(this.theme(), look());
+    },
+    /**
+     * What to say when the floor is in none of the four: which theme it IS in,
+     * and where that is chosen. Empty while one of the four is lit.
+     */
+    lightingNote() {
+      if (this.lighting()) return '';
+      const name = String(this.theme());
+      return `${name ? name[0].toUpperCase() + name.slice(1) : 'A theme'} — set under All look options › Advanced`;
+    },
+    /**
+     * Choose a mood: its theme, then its light, each through the write it has
+     * always had. A refusal from either is drawn under the Light control.
+     * @param {string} id one of `LIGHTINGS`
+     */
+    async chooseLighting(id) {
+      const mood = LIGHTINGS.find((l) => l.id === id);
+      if (!mood) return;
+      if (this.theme() !== mood.theme) {
+        await chooseTheme(mood.theme);
+        if (refusal?.from === 'theme') {
+          refusal = { ...refusal, from: 'lighting' };
+          notify();
+          return;
+        }
+      }
+      if (cat() && mood.light && look().light !== mood.light) {
+        await choose(withPath(look(), 'light', mood.light), 'lighting');
+      }
+    },
     /** Paint a theme without storing it; `null` puts the stored one back. @param {string|null} name */
     previewTheme(name) {
       theming?.apply?.(name ?? (themePending || confirmedTheme || 'default'));

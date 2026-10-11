@@ -62,6 +62,7 @@ import {
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
 } from '../../public/render/rig.js';
+import { FONT_FAMILIES } from '../../public/render/floor-type.js';
 import { FIGURE_HALO_POOL_SPAN, PALETTE, STATE_COLORS } from '../../public/render/palette.js';
 
 // ------------------------------------------------------- world <-> screen
@@ -1638,7 +1639,7 @@ function drawPlate(room, snapshot, { zoom = 1, U = 17.5 } = {}) {
 const WIDE_ROOM = { ...PLATE_ROOM, x: 0, y: 0, w: 30, h: 20, plateBand: 3.4 };
 
 test('WP-81: two frames a minute apart set every plate glyph in the same place', () => {
-  // The no-jitter contract. Every number on a plate is set in the mono face,
+  // The no-jitter contract. Every number on a plate is set in the numeric face,
   // so an elapsed figure ticking from `1d 2h` to `1d 3h` moves no glyph that
   // precedes it — and nothing before the tail may move at all. Measured as the
   // recorded x of every run, at two clocks.
@@ -1658,10 +1659,13 @@ test('WP-81: two frames a minute apart set every plate glyph in the same place',
   );
   assert.notEqual(later.runs[1].text, a.runs[1].text, 'the wait never advanced');
   assert.equal(later.runs[1].x, a.runs[1].x);
-  // Every figure is in the mono face, which is what tabular stability is on a
-  // canvas with no `font-variant-numeric` (VISUAL-SPEC §7).
+  // Every figure is in the NUMERIC role (`floor-type.js`): a family whose own
+  // figures are tabular, which is what tabular stability is on a canvas with
+  // no `font-variant-numeric` (VISUAL-SPEC §7). It was a bold monospace.
   for (const run of a.runs) {
-    if (/\d/.test(run.text)) assert.match(run.font, /JetBrains Mono/, run.text);
+    if (!/[0-9]/.test(run.text)) continue;
+    assert.ok(run.font.endsWith(FONT_FAMILIES.system.numeric), `${run.text} is set in ${run.font}`);
+    assert.doesNotMatch(run.font, /monospace/, run.text);
   }
 });
 

@@ -8,18 +8,11 @@
  * never treated as markup anywhere (`test/unit/thought-bubble.test.mjs`).
  */
 
-import {
-  TAU,
-  CHROME_TOP_U,
-  CHROME_BUBBLE_U,
-  CLOUD_FILL,
-  CLOUD_EDGE,
-  DOT_COLOR,
-  sansFont,
-} from './rig-metrics.js';
+import { TAU, CHROME_TOP_U, CHROME_BUBBLE_U } from './rig-metrics.js';
 import { roundRectFill, roundRectStroke } from './rig-pose.js';
 import { PALETTE } from './palette.js';
 import { textWidth } from './text-metrics.js';
+import { textPaint, typeFont } from './floor-type.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 
 // -------------------------------------------------------- the tool bubble
@@ -138,7 +131,7 @@ export function toolBubbleSpan(u) {
  */
 export function toolBubbleBox(ctx, ox, oy, u, summary) {
   const fontPx = Math.max(9, u * 0.5);
-  const font = sansFont(fontPx);
+  const font = typeFont('bubble', fontPx);
   const padX = Math.max(4, u * 0.28);
   const maxTextW = Math.max(
     BUBBLE_MIN_W_PX,
@@ -163,7 +156,7 @@ export function toolBubbleBox(ctx, ox, oy, u, summary) {
  * @returns {string}
  */
 export function toolBubbleShorter(ctx, u, text, share) {
-  const font = sansFont(Math.max(9, u * 0.5));
+  const font = typeFont('bubble', Math.max(9, u * 0.5));
   return fitOneLine(ctx, text, textWidth(ctx, font, text) * share, font);
 }
 
@@ -179,8 +172,10 @@ export function drawToolBubble(ctx, ox, oy, u, summary, spot) {
   const dx = spot ? spot.dx : 0;
   const box = toolBubbleBox(ctx, ox, oy, u, spot ? spot.text : summary);
   box.x += dx;
-  ctx.fillStyle = CLOUD_FILL;
-  ctx.strokeStyle = CLOUD_EDGE;
+  // The bubble's ground and its line are the floor's own pair for text
+  // (`floor-type.js`): pale under dark ink by day, dark under pale by night.
+  ctx.fillStyle = /** @type {string} */ (textPaint('bubble').backing);
+  ctx.strokeStyle = PALETTE.plateInkTertiary;
   ctx.lineWidth = Math.max(0.6, u * 0.045);
 
   // Two trailing beats, rising from beside the head to the bubble: on the
@@ -203,8 +198,8 @@ export function drawToolBubble(ctx, ox, oy, u, summary, spot) {
   roundRectStroke(ctx, box.x, box.y, box.w, box.h, radius);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = sansFont(box.fontPx);
-  ctx.fillStyle = PALETTE.inkWarm;
+  ctx.font = typeFont('bubble', box.fontPx);
+  ctx.fillStyle = textPaint('bubble').ink;
   // Canvas text: the summary is hook payload text, drawn as glyphs and never
   // interpreted. There is no markup path here at all.
   ctx.fillText(box.text, ox + dx, box.y + box.h / 2 + box.h * 0.03);
@@ -226,15 +221,17 @@ export function drawToolIcon(ctx, ox, oy, u, kind) {
   const cx = ox;
   const cy = top + half;
 
-  ctx.fillStyle = CLOUD_FILL;
-  ctx.strokeStyle = CLOUD_EDGE;
+  // The bubble's ground and its line are the floor's own pair for text
+  // (`floor-type.js`): pale under dark ink by day, dark under pale by night.
+  ctx.fillStyle = /** @type {string} */ (textPaint('bubble').backing);
+  ctx.strokeStyle = PALETTE.plateInkTertiary;
   ctx.lineWidth = Math.max(0.6, size * 0.07);
   roundRectFill(ctx, cx - half, top, size, size, size * 0.28);
   roundRectStroke(ctx, cx - half, top, size, size, size * 0.28);
 
   ctx.save();
-  ctx.strokeStyle = DOT_COLOR;
-  ctx.fillStyle = DOT_COLOR;
+  ctx.strokeStyle = textPaint('bubble').ink;
+  ctx.fillStyle = textPaint('bubble').ink;
   ctx.lineWidth = Math.max(0.9, size * 0.1);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';

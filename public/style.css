@@ -97,8 +97,26 @@
   --t-fast: 120ms ease;
   --t-med: 200ms ease;
 
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* TYPE. Three family roles, the same three the floor's text is set in
+     (`render/floor-type.js`, whose `system` font these lists repeat): the
+     SANS for names and sentences, the NUMERIC for anything that is mostly
+     figures and changes while you watch — a family whose own figures are
+     tabular — and the MONO only where the text is code: a command, a path, a
+     key. No face here needs a file: the two this sheet used to name first
+     were never shipped, so most machines were already drawing what came next.
+     A bundled family is one change here and one in `FONT_FAMILIES`. */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+  /* …and the weights a role may take, so a heading in the header, the strip
+     and the panel is the same heading. */
+  --weight-body: 400;
+  --weight-label: 600;
+  --weight-strong: 700;
+  /* A small capital label over a figure: a word, so it is the sans, tracked. */
+  --track-label: 0.08em;
+  --track-tight: -0.012em;
 }
 
 * {
@@ -342,16 +360,17 @@ button {
   min-width: 3.4rem;
 }
 .numeral-v {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 44px;
-  font-weight: 700;
+  font-weight: var(--weight-strong);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 .numeral-k {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-label);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -387,16 +406,17 @@ button {
   gap: 0.4rem;
 }
 .breakdown-v {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   color: var(--ink);
   min-width: 1.4ch;
   text-align: right;
 }
 .breakdown-k {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-label);
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -670,7 +690,7 @@ button {
 }
 .lookbar-label {
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
   color: var(--ink);
 }
 .lookbar-note {
@@ -678,7 +698,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.66rem;
   color: var(--muted);
@@ -745,14 +765,117 @@ button {
    walk. A thumbnail is a picture of four floors, and at six across it is a row
    of colour chips nobody could tell apart — four is as far as it goes. */
 .lookbar-presets {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* ONE ROW THAT SCROLLS SIDEWAYS. Eleven cards wrapped were three rows, and
+     three rows of pictures pushed every control under them off a laptop's
+     screen. The group is the scroller: each card snaps, the scrollbar is
+     hidden because the strip's own fades and arrows say there is more, and
+     the padding keeps a focus ring from being clipped by the scroll box. */
+  display: flex;
   gap: 0.35rem;
+  min-width: 0;
+  padding: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1.6rem;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.lookbar-presets::-webkit-scrollbar {
+  display: none;
+}
+/* The strip: the row, and at whichever edge has more behind it a fade and an
+   arrow. Both are for the eye and the pointer — the keyboard has the group. */
+.lookbar-strip {
+  position: relative;
+  min-width: 0;
+}
+.lookbar-strip::before,
+.lookbar-strip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 2.4rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+.lookbar-strip::before {
+  left: 0;
+  background: linear-gradient(to right, var(--surface), transparent);
+}
+.lookbar-strip::after {
+  right: 0;
+  background: linear-gradient(to left, var(--surface), transparent);
+}
+.lookbar-strip[data-more-before='true']::before,
+.lookbar-strip[data-more-after='true']::after {
+  opacity: 1;
+}
+.lookbar-strip-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0 0.12rem;
+  transform: translateY(-50%);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.lookbar-strip-btn:hover {
+  background: var(--line-2);
+}
+.lookbar-strip-btn--prev {
+  left: 0.15rem;
+}
+.lookbar-strip-btn--next {
+  right: 0.15rem;
+}
+.lookbar-strip[data-more-before='true'] .lookbar-strip-btn--prev,
+.lookbar-strip[data-more-after='true'] .lookbar-strip-btn--next {
+  display: grid;
+}
+/* The two short controls that turn a style, side by side on one line. */
+.lookbar-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+.lookbar-pair .lookbar-row--switch {
+  display: block;
+}
+.lookbar-pair .lookbar-row--switch .lookbar-row-head {
+  margin-bottom: 0.4rem;
+}
+/* Half a popover is not wide enough for a name and its note on one line: the
+   name stays whole, and the switch's own word says what the note would. */
+.lookbar-pair .lookbar-label {
+  white-space: nowrap;
+}
+.lookbar-pair .lookbar-row--switch .lookbar-note {
+  display: none;
+}
+.lookbar-pair .look-switch {
+  min-height: 2.05rem;
 }
 .lookbar-preset {
   display: flex;
+  flex: 0 0 6.1rem;
   flex-direction: column;
   gap: 0.28rem;
+  scroll-snap-align: start;
   min-width: 0;
   padding: 0.22rem 0.22rem 0.28rem;
   background: none;
@@ -1022,13 +1145,6 @@ button {
     display: none;
   }
 }
-/* On a phone-width window four cards across are each too narrow for a name;
-   three across is four rows, and the popover scrolls as it already may. */
-@media (max-width: 440px) {
-  .lookbar-presets {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
 
 /* ----------------------------------------------------------------- app */
 .app {
@@ -1205,7 +1321,8 @@ button {
 .panel-title {
   margin: 0;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--track-tight);
   line-height: 1.3;
   flex: 1 1 auto;
   overflow-wrap: anywhere;
@@ -3356,7 +3473,8 @@ button {
 }
 
 .strip-when {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
+  font-weight: var(--weight-label);
   font-variant-numeric: tabular-nums;
   font-size: 0.72rem;
   color: var(--ink);
@@ -3372,7 +3490,7 @@ button {
 }
 .strip-who {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--weight-label);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3480,9 +3598,9 @@ button {
   flex: 1 1 auto;
   margin: 0;
   font-size: 0.86rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--track-tight);
 }
 /* The shortcut is IN the title, not in a tooltip: a way out nobody can see is
    not a way out. */

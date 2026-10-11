@@ -187,16 +187,17 @@ export function createLookParts(ctx) {
 export const sentence = (/** @type {string} */ s) => (s ? `${s[0].toUpperCase()}${s.slice(1)}` : s);
 
 /**
- * THE SIX CONTROLS ON THE OUTSIDE, as data — what each surface then draws in
+ * THE FIVE CONTROLS ON THE OUTSIDE, as data — what each surface then draws in
  * its own classes. One list, so the sheet and the bar cannot offer different
  * things or word them differently.
  *
- * Agent size, theme, style, density, light, room colours: the choices somebody
- * arrives already knowing they want — "bigger", "darker", "that one", "calmer",
- * "evening", "tell my rooms apart". Everything finer is under Advanced, in the
- * sheet.
+ * Agent size, light, style, density, room colours: the choices somebody
+ * arrives already knowing they want — "bigger", "evening", "that one",
+ * "calmer", "tell my rooms apart". Everything finer is under Advanced, in the
+ * sheet — the theme and the raw light among it, which are the two keys the
+ * Light control's four moods are made of (`LIGHTINGS`).
  *
- * Five are one choice out of a list (`kind: 'choice'`); room colours is a
+ * Four are one choice out of a list (`kind: 'choice'`); room colours is a
  * decision with two answers (`kind: 'switch'`), and carries `checked`, the word
  * for its `state`, and an `onToggle` in place of the list.
  *
@@ -237,21 +238,22 @@ export function outsideControls(store) {
       });
     }
   }
-  const themes = store.themes();
-  if (themes.length > 1) {
+  // THE LIGHT: the theme and the look's light as ONE choice of four moods, a
+  // lighting layer over whichever style is chosen (`LIGHTINGS`). On a floor
+  // that is in none of them — blueprint, a pack's theme — nothing is lit and
+  // the note says which theme it is and where that is chosen.
+  const moods = store.lightings();
+  if (moods.length > 1) {
+    const value = store.lighting();
     out.push({
-      id: 'theme',
-      label: 'Theme',
-      note: '',
-      help: '',
-      value: store.theme(),
-      options: themes.map((/** @type {any} */ theme) => ({
-        id: theme.name,
-        label: sentence(theme.name),
-        title: theme.blurb,
-        theme,
-      })),
-      onChange: (/** @type {string} */ next) => void store.chooseTheme(next),
+      id: 'lighting',
+      label: 'Light',
+      note: value ? 'time of day' : store.lightingNote(),
+      help: 'The time of day the office is lit for. It goes over whichever style is chosen.',
+      hint: value ? '' : `${store.lightingNote()}.`,
+      value,
+      options: moods.map((/** @type {any} */ m) => ({ id: m.id, label: m.label })),
+      onChange: (/** @type {string} */ next) => void store.chooseLighting(next),
     });
   }
   if (c && (c.PRESETS || []).length) {
@@ -284,18 +286,6 @@ export function outsideControls(store) {
       value,
       options: levels.map((/** @type {any} */ l) => ({ id: l.id, label: l.label })),
       onChange: (/** @type {string} */ next) => void store.chooseDensity(next),
-    });
-  }
-  const light = c ? (c.LOOK_PICKERS || []).find((/** @type {any} */ p) => p.id === 'light') : null;
-  if (light) {
-    out.push({
-      id: 'light',
-      label: light.label,
-      note: 'daylight and shadows',
-      help: 'Where the daylight falls from, its colour, and how long the shadows are.',
-      value: String(look.light),
-      options: light.options.map((/** @type {any} */ o) => ({ id: o.id, label: o.label })),
-      onChange: (/** @type {string} */ next) => void store.choosePath('light', next, 'light'),
     });
   }
   const rooms = c ? store.roomColours() : null;

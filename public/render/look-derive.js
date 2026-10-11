@@ -33,6 +33,7 @@
  */
 
 import { PALETTE, overridePalette, resetPalette, washedCarpet } from './palette.js';
+import { setFloorFont } from './floor-type.js';
 import {
   DEFAULT_THEME_NAME,
   THEMES,
@@ -536,6 +537,7 @@ export function zoneEdges(materials, adjacency) {
  * @property {ReturnType<typeof lightFor>} light           the mood, on this floor
  * @property {ReturnType<typeof partitionsFor>} partitions the style and its colours
  * @property {ReturnType<typeof roomTintFor>} roomTint     the level, its tints and accents
+ * @property {string} font                                 the face the floor's text is set in
  */
 
 /**
@@ -610,6 +612,8 @@ export function resolveLook(look, theme) {
     light: lightFor(l.light, floor),
     partitions: partitionsFor(l.partitions, floor),
     roomTint: roomTintFor(l.roomTint, zones.rooms.field, floor),
+    // Which face the floor's text is set in: not a colour and not a material.
+    font: l.font,
   };
 }
 
@@ -654,12 +658,14 @@ export function applyLook(look, themeName, root) {
   if (theme.name === DEFAULT_THEME_NAME && sameLook(resolved.look, DEFAULT_LOOK)) resetPalette();
   else overridePalette(resolved.tokens);
   if (root) applyChromeTheme(theme.name, root);
+  setFloorFont(resolved.font);
   return adopt(resolved);
 }
 
 /** Put the floor back exactly as it ships. For the daemon's reload, and for tests. */
 export function resetLook() {
   resetPalette();
+  setFloorFont(DEFAULT_LOOK.font);
   return adopt(resolveLook(DEFAULT_LOOK, DEFAULT_THEME_NAME));
 }
 

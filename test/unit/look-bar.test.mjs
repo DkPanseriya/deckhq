@@ -42,6 +42,7 @@ import {
 } from '../../public/render/look-options.js';
 import { validateLook } from '../../public/render/look-guards.js';
 import { LOOK_HINT_TEXT, LOOK_KEY, SETTINGS_KEY, createLookBar } from '../../public/look-ui-bar.js';
+import { lookExtraRows } from '../../public/look-extra-rows.js';
 import { buildCommandEntries } from '../../public/palette-commands.js';
 import {
   currentSection,
@@ -267,6 +268,7 @@ function mount(opts = {}) {
     },
     openSheet: (/** @type {any} */ section) => void sheets.push(section),
     isBusy: opts.isBusy,
+    extraRows: opts.extraRows,
     announce: (/** @type {string} */ text) => void said.push(text),
   });
   return {
@@ -422,14 +424,15 @@ test('both keys are listed where keys are looked up: the palette, and the guide�
 
 // ---------------------------------------------- 2 · the three controls
 
-test('the popover holds exactly six controls, read out of the catalogue, and a way to the rest', () => {
+test('the popover holds exactly five controls, read out of the catalogue, and a way to the rest', () => {
   const m = mount();
   m.bar.open();
   const names = byRole(m.popoverEl, 'radiogroup').map((g) => g.getAttribute('aria-label'));
-  // The six high-level choices, and nothing finer: a floor material per zone,
-  // a rug, a plant family are under Advanced in the sheet, not here. Five are
-  // lists and the sixth is a switch.
-  assert.deepEqual(names, ['Agent size', 'Theme', 'Style', 'Density', 'Light']);
+  // The five high-level choices, in the order they are read, and nothing
+  // finer: a floor material per zone, a rug, a plant family, the theme and the
+  // raw light are under Advanced in the sheet, not here. Four are lists and
+  // the fifth is a switch.
+  assert.deepEqual(names, ['Agent size', 'Light', 'Style', 'Density']);
   const switches = byRole(m.popoverEl, 'switch');
   assert.deepEqual(
     switches.map((b) => [b.getAttribute('aria-label'), b.getAttribute('aria-checked')]),
@@ -437,15 +440,38 @@ test('the popover holds exactly six controls, read out of the catalogue, and a w
   );
   assert.deepEqual(
     byRole(group(m.popoverEl, 'Light'), 'radio').map((b) => b.textContent),
-    catalogue.LIGHT_MOOD_IDS.map((id) => catalogue.LIGHT_MOODS[id].label),
-    'the lights are the catalogue’s, in the order of a day',
+    ['Default', 'Morning', 'Evening', 'Night shift'],
+    'Light is the four curated moods: the theme and the light as one choice',
   );
   const buttons = all(m.popoverEl).filter((n) => n.tagName === 'BUTTON');
+  // The Style strip's two arrows are for a pointer: out of the Tab order and
+  // hidden from a screen reader, which has the radio group itself.
+  const arrows = byClass(m.popoverEl, 'lookbar-strip-btn');
+  assert.equal(arrows.length, 2);
+  for (const arrow of arrows) {
+    assert.deepEqual(
+      [arrow.getAttribute('tabindex'), arrow.getAttribute('aria-hidden')],
+      ['-1', 'true'],
+    );
+  }
   assert.equal(
     buttons.length,
-    byRole(m.popoverEl, 'radio').length + switches.length + 1,
-    'the popover holds a control that is not one of the six, or the link',
+    byRole(m.popoverEl, 'radio').length + switches.length + arrows.length + 1,
+    'the popover holds a control that is not one of the five, the strip’s arrows, or the link',
   );
+  // STYLE IS ONE ROW: the radio group is the scroller inside the strip, and
+  // nothing else is — eleven cards, one line.
+  const strip = byClass(m.popoverEl, 'lookbar-strip')[0];
+  assert.ok(strip.contains(group(m.popoverEl, 'Style')), 'the Style group is the strip’s row');
+  assert.equal(byClass(m.popoverEl, 'lookbar-presets').length, 1);
+  // Density and Room colours share the last line.
+  const pair = byClass(m.popoverEl, 'lookbar-pair')[0];
+  assert.ok(pair.contains(group(m.popoverEl, 'Density')) && pair.contains(switches[0]));
+  // THE ORDER, top to bottom: size, light, style, then the pair, then the link.
+  const order = all(m.popoverEl)
+    .filter((n) => ['radiogroup', 'switch'].includes(n.getAttribute('role') || ''))
+    .map((n) => n.getAttribute('aria-label'));
+  assert.deepEqual(order, ['Agent size', 'Light', 'Style', 'Density', 'Room colours']);
   assert.deepEqual(
     byRole(group(m.popoverEl, 'Density'), 'radio').map((b) => b.textContent),
     ['Calm', 'Normal', 'Lively'],
@@ -459,10 +485,7 @@ test('the popover holds exactly six controls, read out of the catalogue, and a w
   );
   assert.deepEqual(sizes, ['Small', 'Medium', 'Large', 'Auto']);
 
-  assert.deepEqual(
-    byRole(group(m.popoverEl, 'Theme'), 'radio').map((b) => b.textContent),
-    ['Default', 'Night shift', 'Blueprint'],
-  );
+  assert.equal(group(m.popoverEl, 'Theme'), undefined, 'the theme is a row of the popover');
 
   const cards = byRole(group(m.popoverEl, 'Style'), 'radio');
   assert.equal(cards.length, PRESETS.length);
@@ -488,7 +511,7 @@ test('the popover holds exactly six controls, read out of the catalogue, and a w
 test('each group is one Tab stop on the chosen option, and arrows move the choice', async () => {
   const m = mount();
   m.bar.open();
-  for (const label of ['Agent size', 'Theme', 'Style', 'Density', 'Light']) {
+  for (const label of ['Agent size', 'Light', 'Style', 'Density']) {
     const stops = byRole(group(m.popoverEl, label), 'radio').filter(
       (b) => b.getAttribute('tabindex') === '0',
     );
@@ -522,15 +545,15 @@ test('Agent size posts the look the floor has with one key changed, and nothing 
   assert.deepEqual(checked(group(m.popoverEl, 'Style')), ['Night lab']);
 });
 
-test('Theme goes through the settings route, and the window is painted in what was STORED', async () => {
+test('Night shift goes through the settings route, and the window is painted in what was STORED', async () => {
   const m = mount();
   m.bar.open();
-  radio(group(m.popoverEl, 'Theme'), 'Night shift').fire('click');
+  radio(group(m.popoverEl, 'Light'), 'Night shift').fire('click');
   await tick();
   assert.deepEqual(m.saves, [{ theme: 'night shift' }]);
   assert.deepEqual(m.painted, ['night shift']);
-  assert.deepEqual(m.looks, [], 'a theme is not a look');
-  assert.deepEqual(checked(group(m.popoverEl, 'Theme')), ['Night shift']);
+  assert.deepEqual(m.looks, [], 'the night shift is a theme, and a theme is not a look');
+  assert.deepEqual(checked(group(m.popoverEl, 'Light')), ['Night shift']);
 });
 
 test('a theme the settings route did not store is not painted', async () => {
@@ -547,10 +570,15 @@ test('a theme the settings route did not store is not painted', async () => {
     openSheet: () => {},
   });
   bar.open();
-  radio(group(m.popoverEl, 'Theme'), 'Blueprint').fire('click');
+  // With no renderer the Light control is the two moods that are a theme.
+  assert.deepEqual(
+    byRole(group(m.popoverEl, 'Light'), 'radio').map((b) => b.textContent),
+    ['Default', 'Night shift'],
+  );
+  radio(group(m.popoverEl, 'Light'), 'Night shift').fire('click');
   await tick();
   assert.deepEqual(m.painted, []);
-  assert.deepEqual(checked(group(m.popoverEl, 'Theme')), ['Default']);
+  assert.deepEqual(checked(group(m.popoverEl, 'Light')), ['Default']);
 });
 
 test('a Style posts that preset’s whole style, by name — and leaves the agent size alone', async () => {
@@ -677,7 +705,7 @@ test('Escape closes it, hands focus back to the button, and does not reach the f
 test('a click outside closes it; a click inside, or on its own button, does not', () => {
   const m = mount();
   m.bar.open();
-  m.doc.fire('pointerdown', { target: radio(group(m.popoverEl, 'Theme'), 'Blueprint') });
+  m.doc.fire('pointerdown', { target: radio(group(m.popoverEl, 'Light'), 'Evening') });
   assert.equal(m.popoverEl.hidden, false);
   m.doc.fire('pointerdown', { target: m.buttonEl });
   assert.equal(m.popoverEl.hidden, false);
@@ -931,4 +959,90 @@ test('the nav sticks, on the sheet’s own ground, and a jump lands clear of it'
   assert.match(nav[1], /position:\s*sticky/);
   assert.match(nav[1], /background:\s*var\(--surface\)/, 'rows would show through a clear nav');
   assert.match(CSS, /\.settings-section\s*\{\s*scroll-margin-top:/);
+});
+
+// ------------------------------------------------- the slot after Agent size
+
+test('THE SLOT: this build answers with no extra rows, and the popover draws no heading and no gap for it', () => {
+  assert.deepEqual(lookExtraRows({ store: null, parts: null, port: null, el: () => null }), []);
+  const m = mount();
+  m.bar.open();
+  // Every child of the popover is one of its own: four rows, the pair, the foot.
+  assert.deepEqual(
+    m.popoverEl.children.map((n) => n.className),
+    ['lookbar-row', 'lookbar-row', 'lookbar-row', 'lookbar-pair', 'lookbar-foot'],
+  );
+});
+
+test('THE SLOT: a build with a row of its own has it drawn between Agent size and Light, on the keyboard like the rest', async () => {
+  const picked = [];
+  let value = 'classic';
+  const m = mount({
+    extraRows: (/** @type {any} */ ctx) => [
+      {
+        id: 'agentStyle',
+        label: 'Agent style',
+        note: 'who stands on the floor',
+        node: ctx.parts.radioGroup({
+          name: 'agentStyle',
+          label: 'Agent style',
+          className: 'lookbar-seg',
+          itemClass: 'lookbar-seg-btn',
+          options: [
+            { id: 'classic', label: 'Classic' },
+            { id: 'other', label: 'Other' },
+          ],
+          value,
+          onChange: (/** @type {string} */ next) => {
+            picked.push(next);
+            value = next;
+          },
+        }),
+      },
+    ],
+  });
+  m.bar.open();
+  const order = all(m.popoverEl)
+    .filter((n) => ['radiogroup', 'switch'].includes(n.getAttribute('role') || ''))
+    .map((n) => n.getAttribute('aria-label'));
+  assert.deepEqual(order, [
+    'Agent size',
+    'Agent style',
+    'Light',
+    'Style',
+    'Density',
+    'Room colours',
+  ]);
+  const row = m.popoverEl.children[1];
+  assert.equal(row.className, 'lookbar-row');
+  assert.equal(byClass(row, 'lookbar-label')[0].textContent, 'Agent style');
+  assert.equal(byClass(row, 'lookbar-note')[0].textContent, 'who stands on the floor');
+  // One Tab stop, and the arrows move it: the popover's own radio group.
+  const stops = byRole(group(m.popoverEl, 'Agent style'), 'radio').filter(
+    (b) => b.getAttribute('tabindex') === '0',
+  );
+  assert.deepEqual(
+    stops.map((b) => b.textContent),
+    ['Classic'],
+  );
+  stops[0].fire('keydown', keyEvent('ArrowRight'));
+  await tick();
+  assert.deepEqual(picked, ['other']);
+});
+
+test('THE SLOT: a row that throws, or is not a row, costs its own row and not the popover', () => {
+  for (const extraRows of [
+    () => {
+      throw new Error('a private row fell over');
+    },
+    () => [null, { id: 'x', label: 'No control' }],
+    () => null,
+  ]) {
+    const m = mount({ extraRows });
+    assert.doesNotThrow(() => m.bar.open());
+    assert.deepEqual(
+      byRole(m.popoverEl, 'radiogroup').map((g) => g.getAttribute('aria-label')),
+      ['Agent size', 'Light', 'Style', 'Density'],
+    );
+  }
 });

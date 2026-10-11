@@ -22,7 +22,8 @@ import { PALETTE, STATE_COLORS } from './palette.js';
 import { formatElapsed, labelHaloWidth } from './rig.js';
 import { deviceScaleOf, snapPx, snapWidth } from './device-px.js';
 import { textWidth } from './text-metrics.js';
-import { labelFontSize, sansFont } from './rig-metrics.js';
+import { labelFontSize } from './rig-metrics.js';
+import { textPaint, typeFont } from './floor-type.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 import { waitingSince } from '../floor-rule.js';
 import { worldToScreen } from './agents.js';
@@ -31,11 +32,15 @@ import { now as clockNow } from '../clock.js';
 
 export { MAX_LABEL_OFFSET_ATTEMPTS, resolveLabelCollisions } from './label-spots.js';
 
-export const FONT_UI = "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif";
-// Every number is set in the mono face so tabular-nums-style stability holds on canvas,
-// which has no font-variant-numeric of its own (docs/03-VISUAL-SPEC.md §7).
-export const FONT_MONO =
-  "'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace";
+/**
+ * A PLATE'S FOUR ROWS, as type roles and as kinds of text (`floor-type.js`):
+ * which face each is set in, and what each is painted with. Every number is in
+ * the NUMERIC role — a family whose figures are tabular — which is how a count
+ * stays still on a canvas, where there is no `font-variant-numeric`. It was a
+ * bold monospace, and that is what made a room's plate read as a terminal.
+ */
+export const PLATE_ROLES = Object.freeze(['roomName', 'roomCount', 'roomDoing', 'roomTokens']);
+export const PLATE_KINDS = Object.freeze(['plateName', 'plateCount', 'plateDoing', 'plateTokens']);
 
 /**
  * THE PLATE SCALES WITH THE PLAN (WP-59).
@@ -541,10 +546,10 @@ export function resolveBadgeCollisions(items, bodies = []) {
  * It was 0.23, which closed the counters of the 11 px rows.
  */
 export const PLATE_ROWS = Object.freeze([
-  { px: 12.5, weight: 700, mono: false, lead: 12, halo: 2 }, // 0 title
-  { px: 14, weight: 700, mono: true, lead: 16, halo: 2.24 }, // 1 hero
-  { px: 11, weight: 600, mono: false, lead: 12, halo: 1.76 }, // 2 doing
-  { px: 11, weight: 600, mono: true, lead: 11, halo: 1.76 }, // 3 tertiary
+  { px: 12.5, lead: 12, halo: 2 }, // 0 title — `roomName`
+  { px: 14, lead: 16, halo: 2.24 }, // 1 hero — `roomCount`
+  { px: 11, lead: 12, halo: 1.76 }, // 2 doing — `roomDoing`
+  { px: 11, lead: 11, halo: 1.76 }, // 3 tertiary — `roomTokens`
 ]);
 
 /** How far a row's descenders reach below its baseline, for the band fit. */
@@ -673,7 +678,7 @@ export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
     const px = size(i, 'px');
     cursor += size(i, 'lead');
     const y = topLeft.y + cursor;
-    const font = `${row.weight} ${px.toFixed(2)}px ${row.mono ? FONT_MONO : FONT_UI}`;
+    const font = typeFont(/** @type {any} */ (PLATE_ROLES[i]), px, true);
     const wide = (/** @type {string} */ s) => textWidth(ctx, font, s);
     const dotted = i === 1 && plate.dot ? PLATE_DOT_GAP * k : 0;
     // The hero shortens rather than truncates: a cut number is a wrong number.
@@ -733,12 +738,6 @@ export class SceneLabels extends SceneBake {
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
 
-    const ink = [
-      PALETTE.plateInkSecondary, // the name is context: which room
-      PALETTE.plateInk, // the hero is the message: what to do
-      PALETTE.plateInkSecondary,
-      PALETTE.plateInkTertiary,
-    ];
     for (const row of laid.rows) {
       ctx.font = row.font;
       if (row.dotted) {
@@ -754,15 +753,23 @@ export class SceneLabels extends SceneBake {
         ctx.fillStyle = plate.dot;
         ctx.fill();
       }
-      ctx.strokeStyle = PALETTE.plateHalo;
-      // 0.16 of the type and never under a device pixel and a half, which is a
-      // figure's name's own rule (`labelHaloWidth`); the baseline and the left
-      // edge on whole device pixels, so a row is the same row in every room.
-      ctx.lineWidth = Math.max(row.halo, labelHaloWidth(row.px, dev));
+      // The name is context — which room — and the hero is the message: what
+      // to do. Both are set BARE, with no outline round them: at their weight
+      // their ink reads against the floor itself. The two quiet rows under
+      // them keep their halo (`floor-type.js`, `textPaint`).
+      const paint = textPaint(PLATE_KINDS[row.i]);
+      // The baseline and the left edge on whole device pixels, so a row is the
+      // same row in every room.
       const tx = snapPx(ctx, row.x + row.dotted);
       const ty = snapPx(ctx, row.y);
-      ctx.strokeText(row.text, tx, ty);
-      ctx.fillStyle = ink[row.i];
+      if (paint.backing) {
+        ctx.strokeStyle = paint.backing;
+        // 0.16 of the type and never under a device pixel and a half, which is
+        // a figure's name's own rule (`labelHaloWidth`).
+        ctx.lineWidth = Math.max(row.halo, labelHaloWidth(row.px, dev));
+        ctx.strokeText(row.text, tx, ty);
+      }
+      ctx.fillStyle = paint.ink;
       ctx.fillText(row.text, tx, ty);
     }
     ctx.restore();
@@ -797,10 +804,10 @@ export class SceneLabels extends SceneBake {
     const text = restingChipLine(chip.count);
     const px = labelFontSize(this._characterScale());
     ctx.save();
-    ctx.font = sansFont(px);
+    ctx.font = typeFont('chip', px);
     // The chip's box and its rule on whole device pixels: a 1 px border at a
     // fractional offset is a 2 px border at half strength.
-    const w = snapPx(ctx, textWidth(ctx, sansFont(px), text) + px * 1.1);
+    const w = snapPx(ctx, textWidth(ctx, typeFont('chip', px), text) + px * 1.1);
     const h = snapPx(ctx, px * 1.7);
     const box = { x: snapPx(ctx, at.x - w / 2), y: snapPx(ctx, at.y - h / 2), w, h };
     const rule = snapWidth(ctx, 1);

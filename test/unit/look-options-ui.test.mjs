@@ -61,23 +61,20 @@ const read = (/** @type {string} */ file) => fs.readFileSync(path.join(REPO, fil
 
 // =============================================================== 1 · light
 
-test('Light is a three-way segment on the outside of both surfaces, and it moves one key', async () => {
+test('Light is four curated moods on the outside of both surfaces: the theme and the daylight as ONE choice', async () => {
   const w = world();
-  const lights = catalogue.LIGHT_MOOD_IDS.map((id) => catalogue.LIGHT_MOODS[id].label);
-  assert.deepEqual(lights, ['Morning', 'Noon', 'Evening'], 'in the order of a day');
-
+  const moods = ['Default', 'Morning', 'Evening', 'Night shift'];
   const root = w.sheet();
   const seg = group(root, 'Light');
   assert.ok(seg, 'the sheet has no Light control');
   assert.ok(!advancedOf(root).contains(seg), 'Light is under Advanced, not on the outside');
   assert.deepEqual(
     byRole(seg, 'radio').map((b) => b.textContent),
-    lights,
+    moods,
   );
-  assert.deepEqual(checked(seg), ['Noon']);
-  // It is one of the style's modifiers: a name, and the control under it.
-  assert.ok(cellOf(root, 'Light').contains(seg));
+  assert.deepEqual(checked(seg), ['Default']);
 
+  // A DAYTIME MOOD moves one key of the look, and nothing else.
   radio(seg, 'Evening').fire('click');
   await tick();
   assert.equal(w.posted.length, 1, 'one click, one post');
@@ -97,9 +94,66 @@ test('Light is a three-way segment on the outside of both surfaces, and it moves
   assert.equal(w.look().light, 'morning');
   assert.deepEqual(checked(group(w.popoverEl, 'Light')), ['Morning']);
   assert.deepEqual(checked(group(w.sheet(), 'Light')), ['Morning']);
-  // Light is a change from the preset like any other, and says so.
+  // The daylight is a change from the preset like any other, and says so.
   assert.equal(w.store.styleEdited(), true);
   assert.deepEqual(w.store.changedPaths(), ['light']);
+
+  // NIGHT SHIFT is the theme, stored where a theme always was; the look is
+  // not touched, so the morning it left is the morning it comes back to.
+  const posts = w.posted.length;
+  radio(group(w.popoverEl, 'Light'), 'Night shift').fire('click');
+  await tick();
+  assert.equal(w.store.theme(), 'night shift');
+  assert.equal(w.posted.length, posts, 'a theme is not a look');
+  assert.equal(w.look().light, 'morning');
+  assert.deepEqual(checked(group(w.popoverEl, 'Light')), ['Night shift']);
+  assert.deepEqual(checked(group(w.sheet(), 'Light')), ['Night shift']);
+
+  // DEFAULT is both keys: the default theme, and noon.
+  radio(group(w.popoverEl, 'Light'), 'Default').fire('click');
+  await tick();
+  await tick();
+  assert.deepEqual([w.store.theme(), w.look().light], ['default', 'noon']);
+  assert.deepEqual(checked(group(w.popoverEl, 'Light')), ['Default']);
+
+  // THE TWO KEYS THEMSELVES are under Advanced, for a pair the four do not name.
+  const inside = advancedOf(w.sheet());
+  assert.deepEqual(
+    byRole(group(inside, 'Theme'), 'radio').map((b) => b.textContent),
+    ['Default', 'Night shift', 'Blueprint'],
+  );
+  assert.deepEqual(
+    byRole(group(inside, 'Daylight'), 'radio').map((b) => b.textContent),
+    catalogue.LIGHT_MOOD_IDS.map((id) => catalogue.LIGHT_MOODS[id].label),
+    'the raw light is the catalogue’s, in the order of a day',
+  );
+  assert.equal(group(w.popoverEl, 'Theme'), undefined, 'the popover has a Theme row');
+});
+
+test('a floor saved as blueprint opens as blueprint: none of the four is lit, and a quiet line says which it is', async () => {
+  const w = world();
+  w.sheet();
+  radio(group(advancedOf(w.sheet()), 'Theme'), 'Blueprint').fire('click');
+  await tick();
+  assert.equal(w.store.theme(), 'blueprint', 'blueprint is still reachable, under Advanced');
+  assert.equal(w.store.lighting(), '');
+  for (const root of [w.sheet(), (w.bar.open(), w.popoverEl)]) {
+    const seg = group(root, 'Light');
+    assert.deepEqual(checked(seg), [], 'one of the four is lit on a blueprint floor');
+    // Still on the keyboard: its first option is the Tab stop.
+    assert.equal(byRole(seg, 'radio')[0].getAttribute('tabindex'), '0');
+    assert.ok(
+      all(root).some((n) =>
+        /^Blueprint — set under All look options › Advanced/.test(n.textContent),
+      ),
+      'nothing says which theme the floor is in',
+    );
+  }
+  // Choosing one of the four leaves blueprint, as it would leave any theme.
+  radio(group(w.popoverEl, 'Light'), 'Evening').fire('click');
+  await tick();
+  await tick();
+  assert.deepEqual([w.store.theme(), w.look().light], ['default', 'evening']);
 });
 
 test('Light is operable from the keyboard like every other segment', async () => {
@@ -107,34 +161,34 @@ test('Light is operable from the keyboard like every other segment', async () =>
   for (const surface of ['sheet', 'bar']) {
     if (surface === 'bar') w.bar.open();
     const root = () => (surface === 'sheet' ? w.sheet() : w.popoverEl);
-    await w.store.choosePath('light', 'noon', 'light');
+    await w.store.chooseLighting('default');
     const seg = group(root(), 'Light');
     // One Tab stop, on the chosen option.
     const stops = byRole(seg, 'radio').filter((b) => b.getAttribute('tabindex') === '0');
     assert.deepEqual(
       stops.map((b) => b.textContent),
-      ['Noon'],
+      ['Default'],
       `${surface}: Light is not one Tab stop on its chosen option`,
     );
     let prevented = 0;
     stops[0].fire('keydown', { key: 'ArrowRight', preventDefault: () => prevented++ });
     await tick();
     assert.equal(prevented, 1, `${surface}: the arrow was left to scroll as well`);
-    assert.equal(w.look().light, 'evening', `${surface}: ArrowRight did not move the light`);
+    assert.equal(w.look().light, 'morning', `${surface}: ArrowRight did not move the light`);
     // The redraw replaced the button; the keyboard is on its successor.
-    assert.equal(w.doc.activeElement.textContent, 'Evening', `${surface}: the focus was lost`);
+    assert.equal(w.doc.activeElement.textContent, 'Morning', `${surface}: the focus was lost`);
     assert.equal(w.doc.activeElement.getAttribute('aria-checked'), 'true');
-    // It wraps, and Home goes to the start of the day.
-    w.doc.activeElement.fire('keydown', { key: 'ArrowRight', preventDefault: () => {} });
+    // End goes to the night shift, which is a theme; Home comes back to both keys.
+    w.doc.activeElement.fire('keydown', { key: 'End', preventDefault() {} });
     await tick();
-    assert.equal(w.look().light, 'morning', `${surface}: the segment does not wrap`);
-    radio(group(root(), 'Light'), 'Morning').fire('keydown', { key: 'End', preventDefault() {} });
+    assert.equal(w.store.theme(), 'night shift', `${surface}: End did not reach the night shift`);
+    assert.equal(w.doc.activeElement.textContent, 'Night shift', `${surface}: the focus was lost`);
+    w.doc.activeElement.fire('keydown', { key: 'Home', preventDefault() {} });
     await tick();
-    assert.equal(w.look().light, 'evening');
+    await tick();
+    assert.deepEqual([w.store.theme(), w.look().light], ['default', 'noon']);
   }
 });
-
-// ======================================================== 2 · room colours
 
 test('Room colours is a real switch on both surfaces: Subtle off, Zoned on, and it stays where it was put', async () => {
   const w = world();
@@ -223,28 +277,27 @@ test('the third level is under Advanced, and the switch says it is neither of it
 
 // ================================================= 3 · outside and inside
 
-test('the outside is six controls on both surfaces, out of one list, and Advanced holds the rest', () => {
+test('the outside is five controls on both surfaces, out of one list, and Advanced holds the rest', () => {
   const w = world();
   const controls = outsideControls(w.store);
   assert.deepEqual(
     controls.map((c) => [c.id, c.kind]),
     [
       ['agentSize', 'choice'],
-      ['theme', 'choice'],
+      ['lighting', 'choice'],
       ['preset', 'choice'],
       ['density', 'choice'],
-      ['light', 'choice'],
       ['roomColours', 'switch'],
     ],
   );
-  // The same six on both, in the same order and by the same names.
+  // The same five on both, in the same order and by the same names.
   const drawn = (root) =>
     all(root).filter((n) => ['radiogroup', 'switch'].includes(n.getAttribute('role') || ''));
   const names = (nodes) => nodes.map((n) => n.getAttribute('aria-label'));
   const root = w.sheet();
   w.bar.open();
   const labels = controls.map((c) => c.label);
-  assert.deepEqual(labels, ['Agent size', 'Theme', 'Style', 'Density', 'Light', 'Room colours']);
+  assert.deepEqual(labels, ['Agent size', 'Light', 'Style', 'Density', 'Room colours']);
   assert.deepEqual(names(drawn(root).filter((n) => !advancedOf(root).contains(n))), labels);
   assert.deepEqual(names(drawn(w.popoverEl)), labels);
 
@@ -253,7 +306,7 @@ test('the outside is six controls on both surfaces, out of one list, and Advance
   const inside = advancedGroups(catalogue).flatMap((g) => g.pickers.map((p) => p.id));
   assert.deepEqual([...inside, ...OUTSIDE_PICKER_IDS].sort(), LOOK_PICKERS.map((p) => p.id).sort());
   assert.ok(inside.includes('partitions') && inside.includes('roomTint'));
-  assert.ok(!inside.includes('light'), 'the light is drawn twice');
+  assert.ok(inside.includes('light'), 'the raw light is under Advanced, where it is the Daylight');
   // …and the two new rows are under the first heading, which is theirs.
   const first = byClass(advancedOf(root), 'settings-look-sub')[0];
   assert.equal(first.children[0].textContent, ADVANCED_GROUPS[0].label);
@@ -300,12 +353,13 @@ test('a refused light shows the guard’s sentence in the Light row of each surf
   assert.deepEqual(w.posted, [], 'a refused light was posted');
   assert.equal(w.look().light, 'noon');
   const root = w.sheet();
-  assert.deepEqual(checked(group(root, 'Light')), ['Noon'], 'the refused option is lit');
-  // In its own row: inside the Light cell, under the control, and nowhere else.
-  const cell = cellOf(root, 'Light');
-  assert.deepEqual(reasons(cell), [`${problem.reason}. Nothing was changed.`]);
-  assert.deepEqual(reasons(root), reasons(cell), 'the reason is drawn twice, or somewhere else');
-  assert.equal(cell.children.indexOf(byRole(cell, 'status')[0]), cell.children.length - 1);
+  assert.deepEqual(checked(group(root, 'Light')), ['Default'], 'the refused option is lit');
+  // Once, on the outside, straight after the Light row and before Style.
+  assert.deepEqual(reasons(root), [`${problem.reason}. Nothing was changed.`]);
+  const status = byRole(root, 'status')[0];
+  const rows = status.parentNode.children;
+  assert.ok(rows[rows.indexOf(status) - 1].contains(group(root, 'Light')), 'not under Light');
+  assert.ok(!advancedOf(root).contains(status));
   assert.equal(advancedOf(root).open, false, 'a refusal on the outside opened Advanced');
 
   // And the same in the bar, under the Light row.
@@ -316,8 +370,8 @@ test('a refused light shows the guard’s sentence in the Light row of each surf
   const row = byClass(w.popoverEl, 'lookbar-row').find((r) => r.textContent.startsWith('Light'));
   assert.deepEqual(reasons(row), [`${problem.reason}. Nothing was changed.`]);
   assert.deepEqual(reasons(w.popoverEl), reasons(row));
-  assert.deepEqual(checked(group(w.popoverEl, 'Light')), ['Noon']);
-  // The other two lights are still there to be chosen, and choosing one clears it.
+  assert.deepEqual(checked(group(w.popoverEl, 'Light')), ['Default']);
+  // The other moods are still there to be chosen, and choosing one clears it.
   radio(group(w.popoverEl, 'Light'), 'Morning').fire('click');
   await tick();
   assert.equal(w.look().light, 'morning');

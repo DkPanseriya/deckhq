@@ -16,6 +16,7 @@
  */
 
 import { channelsOf, mixHex, PALETTE } from './palette.js';
+import { typeFont } from './floor-type.js';
 import { registerBodyScale, scaleAll } from './plan-scale.js';
 
 export const TAU = Math.PI * 2;
@@ -343,26 +344,22 @@ export function truncateLabel(label) {
   return `${cut}…`;
 }
 
-export const monoFontCache = new Map();
+/**
+ * The face a wait badge is lettered in: the `badge` role (`floor-type.js`) —
+ * the numeric family, so a timer's figures line up and do not shiver as they
+ * count. It was a bold monospace nobody ships.
+ * @param {number} px
+ */
 export function monoFont(px) {
-  const key = Math.round(px);
-  let f = monoFontCache.get(key);
-  if (f === undefined) {
-    f = `700 ${key}px "JetBrains Mono", monospace`;
-    monoFontCache.set(key, f);
-  }
-  return f;
+  return typeFont('badge', px);
 }
 
-export const sansFontCache = new Map();
+/**
+ * The face a name is set in: the `agentName` role (`floor-type.js`).
+ * @param {number} px
+ */
 export function sansFont(px) {
-  const key = Math.round(px);
-  let f = sansFontCache.get(key);
-  if (f === undefined) {
-    f = `600 ${key}px "IBM Plex Sans", system-ui, sans-serif`;
-    sansFontCache.set(key, f);
-  }
-  return f;
+  return typeFont('agentName', px);
 }
 
 // ----------------------------------------------------- the scaling law (§2)

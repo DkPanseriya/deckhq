@@ -288,16 +288,9 @@ test('Agent size POSTs a whole look document to /api/look, with one key changed'
   reset();
   el('look-btn').click();
   assert.equal(el('look-popover').hidden, false);
-  // Four sizes, the themes, the presets, the three density steps and the three
-  // lights. Room colours is a switch, so it is not among the radios.
-  assert.equal(
-    radios().length,
-    4 +
-      THEMES.length +
-      PRESETS.length +
-      catalogue.PLANT_DENSITY_IDS.length +
-      catalogue.LIGHT_MOOD_IDS.length,
-  );
+  // Four sizes, the four moods of the Light control, the presets and the three
+  // density steps. Room colours is a switch, so it is not among the radios.
+  assert.equal(radios().length, 4 + 4 + PRESETS.length + catalogue.PLANT_DENSITY_IDS.length);
 
   radio('Large').click();
   await tick(5);
@@ -354,7 +347,7 @@ test('the bar writes to two routes and no others, and neither of them is asked f
   el('look-btn').click();
   radio('Small').click();
   await tick(5);
-  radio('Blueprint').click();
+  radio('Night shift').click();
   await tick(5);
   radio('Workshop').click();
   await tick(5);
@@ -400,7 +393,9 @@ test('a look the real guard refuses is not sent, and its reason is in the popove
   await tick(5);
 
   assert.deepEqual(posts(), [], 'a refused look reached the daemon');
-  const verdict = guards.validateLook({ ...refused, agentSize: 'large' }, 'default');
+  // On the theme the tab is PAINTED in, which is the one the popover's guard
+  // is handed — an earlier body here left the window in the night shift.
+  const verdict = guards.validateLook({ ...refused, agentSize: 'large' }, state.paintedTheme());
   assert.equal(verdict.ok, false);
   const said = all(el('look-popover'))
     .filter((n) => n.className === 'lookbar-refusal')

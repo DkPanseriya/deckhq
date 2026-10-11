@@ -26,14 +26,14 @@
 
 import { PALETTE } from './palette.js';
 import { snapPx } from './device-px.js';
-import { sansFont } from './rig-metrics.js';
+import { typeFont } from './floor-type.js';
 import { roundRectPath } from './rig-pose.js';
 import { textWidth } from './text-metrics.js';
 
 /**
  * The smallest a role word is set, in screen px. A step under a name's own
  * 11 px, because it is one of a handful of known words and not a name to be
- * read letter by letter; it is still a size `sansFont` sets whole.
+ * read letter by letter; it is still a size `typeFont` sets whole.
  */
 export const ROLE_CHIP_MIN_PX = 10;
 /** A role word's size as a share of the name under it. */
@@ -90,7 +90,7 @@ function opaque(colour) {
  */
 export function stackRole(ctx, name, role, namePx) {
   const px = roleChipFontSize(namePx);
-  const cw = textWidth(ctx, sansFont(px), role) + px;
+  const cw = textWidth(ctx, typeFont('chip', px), role) + px;
   const ch = px * 1.36;
   const mid = name.x + name.w / 2;
   const w = Math.max(name.w, cw);
@@ -122,7 +122,7 @@ export function drawRoleChip(ctx, chip, role, dx, dy) {
   ctx.fillStyle = PALETTE.plateInkSecondary;
   roundRectPath(ctx, x, y, chip.w, chip.h, chip.h * 0.3);
   ctx.fill();
-  ctx.font = sansFont(chip.px);
+  ctx.font = typeFont('chip', chip.px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = opaque(PALETTE.plateHalo);

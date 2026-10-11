@@ -12,12 +12,13 @@
  *
  * So the header carries two buttons, and this is what they do:
  *
- *   - **Look** opens a small popover with the six high-level choices — agent
- *     size, theme, style, density, light and room colours — and a link to the
+ *   - **Look** opens a small popover with the five high-level choices — agent
+ *     size, light, style, density and room colours, in that order, with a slot
+ *     after the size for a build's own rows (`look-extra-rows.js`) — and a link to the
  *     whole section.
  *   - **Settings** opens the sheet at the top.
  *
- * The six are the same six the top of the sheet's Look section draws, out of
+ * The five are the same five the top of the sheet's Look section draws, out of
  * the same list (`outsideControls`) and the same store. Nothing finer is here:
  * a floor material per zone belongs under Advanced, in the sheet.
  *
@@ -49,10 +50,14 @@
  */
 
 import { createLookStore } from './look-ui-store.js';
+import { lookExtraRows } from './look-extra-rows.js';
 import { createLookParts, outsideControls } from './look-ui-parts.js';
 
 /** The hint's one line. In `index.html` too, where a test can read it. */
 export const LOOK_HINT_TEXT = 'Change the floor, the furniture and the agent size here.';
+
+/** The two short controls that share one line at the foot of the popover. */
+const PAIRED = Object.freeze(['density', 'roomColours']);
 
 /** The floor keys the two buttons answer to, named once for the tooltips. */
 export const LOOK_KEY = 'L';
@@ -79,12 +84,16 @@ export const SETTINGS_KEY = ',';
  * @param {(text:string) => void} [opts.announce]
  * @param {any} [opts.store]             the look store both surfaces share
  * @param {number} [opts.debounceMs]     read only by a store made here
+ * @param {(ctx:any) => any[]} [opts.extraRows]  the slot after Agent size;
+ *   `look-extra-rows.js`'s own when none is given
  */
 export function createLookBar(opts) {
   const { doc, buttonEl, popoverEl, hintEl, hintDismissEl, settingsBtnEl } = opts;
   const { look: port, theming, getSettings, saveSetting, openSheet } = opts;
   const isBusy = opts.isBusy || (() => false);
   const announce = opts.announce || (() => {});
+  /** The slot after Agent size: this build's own, unless a caller hands one in. */
+  const extraRows = opts.extraRows || lookExtraRows;
   /**
    * The look, the theme, what is pending and the last refusal all live in the
    * store (`look-ui-store.js`), and the shell hands this bar the SAME store it
@@ -126,7 +135,85 @@ export function createLookBar(opts) {
   /** Is there anything to put in a popover? Without a renderer there is not. */
   const hasControls = () => Boolean(cat()) || themes().length > 1;
 
-  // ---------------------------------------------------------------- pieces
+  // ------------------------------------------------------- the style strip
+
+  /** How far the strip was scrolled, kept across the redraw every choice causes. */
+  let stripLeft = 0;
+  /** True for the first draw after an open: the chosen card is brought to the middle. */
+  let stripFresh = false;
+  /** Work to do once the popover's nodes are in the document. @type {Array<() => void>} */
+  const afterDraw = [];
+
+  /**
+   * THE STYLES, AS ONE ROW THAT SCROLLS SIDEWAYS.
+   *
+   * Eleven cards do not fit across a popover, and wrapped they were three rows
+   * that pushed everything under them off a laptop's screen. So they are one
+   * row: the radio group is the scroller, each card snaps, and that there is
+   * more is SHOWN — a fade and an arrow at whichever edge has more behind it.
+   *
+   * The keyboard is the radio group's own (arrows, Home, End: `radioGroup`),
+   * and a card that takes the focus is scrolled into view by the browser. The
+   * two arrow buttons are for a pointer, so they are out of the Tab order and
+   * hidden from a screen reader, which has the group. A wheel turned over the
+   * row moves it sideways, since that is the only way it can move.
+   *
+   * @param {any} group the radio group @returns {any} the strip to draw
+   */
+  function styleStrip(group) {
+    const strip = el('div', 'lookbar-strip');
+    /** @param {number} dir @param {string} glyph */
+    const arrow = (dir, glyph) => {
+      const btn = el(
+        'button',
+        `lookbar-strip-btn lookbar-strip-btn--${dir < 0 ? 'prev' : 'next'}`,
+        glyph,
+      );
+      btn.type = 'button';
+      btn.setAttribute('tabindex', '-1');
+      btn.setAttribute('aria-hidden', 'true');
+      btn.addEventListener('click', () => {
+        const step = dir * Math.max(120, (Number(group.clientWidth) || 0) * 0.8);
+        if (group.scrollBy) group.scrollBy({ left: step, behavior: 'smooth' });
+        else group.scrollLeft = (Number(group.scrollLeft) || 0) + step;
+      });
+      return btn;
+    };
+    const edges = () => {
+      const left = Number(group.scrollLeft) || 0;
+      const room = (Number(group.scrollWidth) || 0) - (Number(group.clientWidth) || 0);
+      strip.setAttribute('data-more-before', String(left > 1));
+      strip.setAttribute('data-more-after', String(left < room - 1));
+    };
+    group.addEventListener('scroll', () => {
+      stripLeft = Number(group.scrollLeft) || 0;
+      edges();
+    });
+    group.addEventListener(
+      'wheel',
+      (/** @type {any} */ e) => {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        group.scrollLeft = (Number(group.scrollLeft) || 0) + e.deltaY;
+        e.preventDefault?.();
+      },
+      { passive: false },
+    );
+    strip.append(arrow(-1, '‹'), group, arrow(1, '›'));
+    afterDraw.push(() => {
+      const fresh = stripFresh;
+      stripFresh = false;
+      group.scrollLeft = stripLeft;
+      const on = [...(group.children || [])].find(
+        (/** @type {any} */ b) => b.getAttribute?.('aria-checked') === 'true',
+      );
+      // Opened: the chosen card in the middle. Redrawn: only as far as it takes
+      // to keep it in view, so the row does not jump under the hand.
+      on?.scrollIntoView?.({ block: 'nearest', inline: fresh ? 'center' : 'nearest' });
+      stripLeft = Number(group.scrollLeft) || 0;
+      edges();
+    });
+    return strip;
+  }
 
   /**
    * One of the six controls: its name, a quiet note beside it, the control,
@@ -187,11 +274,40 @@ export function createLookBar(opts) {
       value: control.value,
       onChange: control.onChange,
     });
-    wrap.append(head, group);
+    wrap.append(head, pictures ? styleStrip(group) : group);
     for (const problem of store.refusalsFor(control.id)) {
       wrap.appendChild(parts.refusalBox(problem, 'lookbar-refusal'));
     }
     host.appendChild(wrap);
+  }
+
+  /**
+   * THE SLOT after Agent size (`look-extra-rows.js`): a build with more than
+   * one way to draw a session puts its row here. Each row is drawn as the six
+   * are — name, quiet note, control, and its refusal under it — and a slot that
+   * answers with nothing, or throws, draws nothing: no heading and no gap.
+   * @param {any} host
+   */
+  function drawExtraRows(host) {
+    /** @type {any[]} */
+    let rows = [];
+    try {
+      rows = extraRows({ store, parts, port, el }) || [];
+    } catch {
+      rows = [];
+    }
+    for (const row of rows) {
+      if (!row || !row.node) continue;
+      const wrap = el('div', 'lookbar-row');
+      const head = el('div', 'lookbar-row-head');
+      head.appendChild(el('span', 'lookbar-label', String(row.label || '')));
+      if (row.note) head.appendChild(el('span', 'lookbar-note', String(row.note)));
+      wrap.append(head, row.node);
+      for (const problem of store.refusalsFor(row.id)) {
+        wrap.appendChild(parts.refusalBox(problem, 'lookbar-refusal'));
+      }
+      host.appendChild(wrap);
+    }
   }
 
   /** Everything the popover is drawn from, as one comparable string. */
@@ -215,7 +331,28 @@ export function createLookBar(opts) {
     drawn = signature();
     stops.clear();
     popoverEl.textContent = '';
-    for (const control of outsideControls(store)) drawControl(popoverEl, control);
+    afterDraw.length = 0;
+    // THE ORDER: agent size, the slot, light, style — a row each — then the
+    // two that turn a style, side by side on one line, so the whole popover
+    // fits a laptop's screen without scrolling the floor behind it.
+    const controls = outsideControls(store);
+    const short = controls.filter((c) => PAIRED.includes(c.id));
+    /** @type {any} */
+    let pair = null;
+    for (const control of controls) {
+      if (short.length === 2 && PAIRED.includes(control.id)) {
+        if (!pair) {
+          pair = el('div', 'lookbar-pair');
+          popoverEl.appendChild(pair);
+        }
+        drawControl(pair, control);
+        continue;
+      }
+      drawControl(popoverEl, control);
+      if (control.id === 'agentSize') drawExtraRows(popoverEl);
+    }
+    // No agent-size row on this build: the slot is still asked, at the top.
+    if (!controls.some((c) => c.id === 'agentSize')) drawExtraRows(popoverEl);
     const foot = el('div', 'lookbar-foot');
     const all = el('button', 'link-btn lookbar-all', 'All look options…');
     all.type = 'button';
@@ -224,6 +361,8 @@ export function createLookBar(opts) {
     foot.append(all, el('span', 'lookbar-foot-keys', 'Esc to close'));
     popoverEl.appendChild(foot);
     // A redraw replaced the button the hand was on; put the hand back.
+    // Now that every node is in the document: the strip's scroll, and its edges.
+    for (const job of afterDraw) job();
     if (focusKey) stops.get(focusKey)?.focus?.();
   }
 
@@ -254,6 +393,8 @@ export function createLookBar(opts) {
     shown = true;
     store.clearRefusal();
     focusKey = '';
+    stripFresh = true;
+    stripLeft = 0;
     popoverEl.hidden = false;
     buttonEl.setAttribute('aria-expanded', 'true');
     render();
