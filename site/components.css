@@ -250,8 +250,36 @@
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A report is a label and a value. Each row is its own line, and a value too
+   long for the box goes on under the value above it, not under the label:
+   two spaces and a sixteen-character label are the eighteen it hangs by. The
+   rows carry the line breaks, so the ones between them in the markup are
+   folded away. */
+.term {
+  white-space: normal;
+}
+
+.term > i,
+.term > span {
+  display: block;
+  white-space: pre-wrap;
+}
+
+.term > span {
+  padding-left: 18ch;
+  text-indent: -18ch;
+}
+
+/* On a phone the value column is twenty characters wide at the body's small
+   size, and a path does not fit in twenty. One step down the scale it does. */
+@media (max-width: 39.99rem) {
+  .term {
+    padding: var(--s-2);
+    font-size: var(--t-micro);
+  }
 }
 
 .band--deep .term {
@@ -786,9 +814,11 @@ tbody th {
   color: var(--ink);
 }
 
+/* A paragraph is held to a measure; this one is the footer's last row and
+   starts where its columns do, so it takes the wrap's width back. */
 .foot-note {
   margin-top: var(--s-6);
-  max-width: none;
+  max-width: calc(var(--wrap) + 2 * var(--gutter));
   color: var(--muted);
 }
 

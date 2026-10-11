@@ -50,8 +50,12 @@ const TYPES = {
   '.xml': 'application/atom+xml; charset=utf-8',
   '.png': 'image/png',
   '.gif': 'image/gif',
+  '.mp4': 'video/mp4',
   '.svg': 'image/svg+xml',
 };
+
+/** The pages a reader stays on: every one but the addresses that forward. */
+const SHOWN = PAGES.filter((p) => !p.redirect);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const say = (line) => process.stdout.write(`${line}\n`);
@@ -209,7 +213,9 @@ async function main() {
         return result.value;
       };
 
-      for (const page of PAGES) {
+      // A page that only forwards is gone before it can be measured; where it
+      // lands is one of the pages below.
+      for (const page of SHOWN) {
         const name = page.slug === 'index' ? 'home' : page.slug;
         for (const size of SIZES) {
           await setSize(client, size);
@@ -276,7 +282,7 @@ async function main() {
     say(`\n${failures} problem(s).`);
     process.exitCode = 1;
   } else {
-    say(`\n${PAGES.length} pages at ${SIZES.length} sizes and at 360: no problems.`);
+    say(`\n${SHOWN.length} pages at ${SIZES.length} sizes and at 360: no problems.`);
   }
 }
 
