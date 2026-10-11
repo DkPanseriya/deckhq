@@ -14,6 +14,8 @@
     "",
     "A loop is one video, `name.mp4`, at `width` (twice the width a page shows it",
     "at) and sixty frames a second, with its first frame beside it as a still.",
+    "`narrow` writes the loop a second time, `name-narrow.mp4`, at that width: the",
+    "file a screen under 40rem is offered, where 2400 pixels are four times too many.",
     "",
     "Nothing here is a mockup. An asset a fixture cannot reach is reported by the",
     "run and left out of the site; it is never staged by hand."
@@ -65,6 +67,7 @@
         "h": 468
       },
       "width": 2400,
+      "narrow": 1200,
       "note": "the home page's first picture: a session finishes, crosses the corridor into Your Office and sits"
     },
     {
@@ -137,12 +140,12 @@
       "kind": "still",
       "population": "demo",
       "crop": {
-        "x": 732,
-        "y": 752,
-        "w": 224,
-        "h": 150
+        "x": 722,
+        "y": 753,
+        "w": 244,
+        "h": 164
       },
-      "width": 896,
+      "width": 976,
       "note": "two juniors beside their lead, each under a Junior chip"
     },
     {

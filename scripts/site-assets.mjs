@@ -126,7 +126,9 @@ const say = (line) => process.stdout.write(`${line}\n`);
  * @property {number} [fps]       frames a second; 60 unless it says otherwise
  * @property {number} [seconds]
  * @property {number} [bitrate]   bits a second for the video
- * @property {string} note        what the picture is of, for `--list`
+ * @property {number} [narrow]    a loop only: write it again at this width, as
+ *   `name-narrow.mp4`, for a screen under 40rem
+ * @property {string} note       what the picture is of, for `--list`
  */
 
 /** @returns {{viewport:{width:number,height:number}, assets: Asset[]}} */
@@ -681,6 +683,24 @@ await withChrome(
             `  ok   ${asset.name.padEnd(22)} ${((Date.now() - t0) / 1000).toFixed(1)}s\n` +
               `       ${describeVideo(r)}`,
           );
+          // `narrow`: the same frames again at that width, for a phone, which
+          // draws the loop 343 CSS pixels wide and has no use for 2400. The
+          // encoder scales each frame as it takes it, so this costs one more
+          // pass over frames already taken, and no second recording.
+          if (asset.narrow) {
+            const even = (n) => 2 * Math.round(n / 2);
+            const small = await writeVideo(
+              file.replace(/\.mp4$/, '-narrow.mp4'),
+              taken.frames,
+              taken.fps,
+              {
+                width: even(asset.narrow),
+                height: even((taken.height * asset.narrow) / taken.width),
+                keyEvery: taken.frames.length,
+              },
+            );
+            say(`       ${describeVideo(small)}`);
+          }
           continue;
         }
 

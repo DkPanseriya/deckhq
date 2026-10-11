@@ -493,7 +493,7 @@ ${indentBlock(markdown(release.highlights), 12)}
     )
     .join('\n');
   return `      <div class="page-head wrap">
-        <h1>Changelog</h1>
+        <h1>Changelog.</h1>
         <p class="lede">What each release brought, in a paragraph.</p>
       </div>
       <div class="wrap">
@@ -624,12 +624,15 @@ function build() {
   if (first > BUDGET.firstView) {
     throw new Error(`the home page's first view is ${Math.round(first / 1024)} KB`);
   }
+  // A screen under 40rem is offered the walk at half the width.
+  const phone = pageWeight(OUT, 'index.html', { all: false, narrow: true });
   const kb = (n) => `${Math.round(n / 1024)} KB`;
   const heaviest = weights.reduce((a, b) => (b.bytes > a.bytes ? b : a));
   const home = weights.find((w) => w.page === 'index.html');
 
   process.stdout.write(
-    `site: home ${kb(first)} before scrolling, ${kb(home.bytes)} read to the bottom\n` +
+    `site: home ${kb(first)} before scrolling (${kb(phone)} on a phone), ` +
+      `${kb(home.bytes)} read to the bottom\n` +
       `site: heaviest page ${heaviest.page} at ${kb(heaviest.bytes)}; ` +
       `heaviest picture ${media.heaviest.file} at ${kb(media.heaviest.bytes)}\n` +
       `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +

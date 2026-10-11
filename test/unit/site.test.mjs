@@ -916,6 +916,19 @@ test('MOTION: every loop is a video at sixty frames a second, and it moves', asy
     assert.ok(info.frames >= 120, `${where} has ${info.frames} frame(s)`);
     assert.equal(info.frames, Math.round(info.seconds * 60), `${where}: frames and duration`);
     assert.equal(info.sync[0], 1, `${where} does not open on a key frame`);
+    // A narrow file is its loop again for a phone: the same frames at half
+    // the width or less, and the same shape to a pixel. What moves in it and
+    // what it lies over are its loop's, which is checked as any other is.
+    if (/-narrow\.mp4$/.test(file)) {
+      const wide = inspectMp4(fs.readFileSync(file.replace(/-narrow\.mp4$/, '.mp4')));
+      assert.equal(info.frames, wide.frames, `${where} is not its loop, frame for frame`);
+      assert.ok(info.width <= wide.width / 2, `${where} is ${info.width} px wide; not narrow`);
+      assert.ok(
+        Math.abs(info.height - (wide.height * info.width) / wide.width) <= 1,
+        `${where} is not the shape of its loop`,
+      );
+      continue;
+    }
     // A video of a floor that was not animating is a still that costs more.
     // Measured: one picture held for 120 frames at 1404x1212 has a median
     // frame of 95 bytes; the quietest loop here, Your Office, 379.
@@ -952,11 +965,21 @@ test('MOTION: every loop is a video at sixty frames a second, and it moves', asy
       }
       assert.match(attrs, /\swidth="\d+" height="\d+"/, `${where}: a video with no size`);
       assert.ok(!/\ssrc=/.test(attrs), `${where}: a video names its file where no query guards it`);
-      const source = inner.match(
-        /^<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>$/,
-      );
-      assert.ok(source, `${where}: a video without exactly one guarded source: ${inner}`);
+      // One source, or two where the loop has a narrow file: that one first,
+      // for a screen under 40rem. Every source is guarded by the motion query.
+      const sources = [
+        ...inner.matchAll(
+          /<source src="media\/([\w-]+)\.mp4" type="video\/mp4" media="([^"]+)" \/>/g,
+        ),
+      ];
+      assert.equal(sources.map((s) => s[0]).join(''), inner, `${where}: an unguarded source`);
+      assert.ok(sources.length === 1 || sources.length === 2, `${where}: ${inner}`);
+      const source = sources[sources.length - 1];
       assert.equal(source[2], motion, `${where} plays ${source[1]} whatever the reader asked for`);
+      if (sources.length === 2) {
+        assert.equal(sources[0][1], `${source[1]}-narrow`, `${where}: the narrow file's name`);
+        assert.equal(sources[0][2], `(max-width: 39.99rem) and ${motion}`, `${where}: its query`);
+      }
       // The still it lies over, which carries the words a screen reader gets.
       const before = html.slice(0, html.indexOf(whole));
       const img = before.slice(before.lastIndexOf('<img'));
@@ -1365,11 +1388,12 @@ test('the home page leads with the walk, and every band picture is lazy', async 
     'the first frame of the walk is not preloaded',
   );
   assert.ok(!/<link[^>]*\.mp4/.test(home), 'a video is preloaded by a link');
-  // Reduced motion gets the still, in the markup and not from a script: the
-  // one source is guarded by the query, and the video plays by itself.
+  // Reduced motion gets the still, in the markup and not from a script: both
+  // sources are guarded by the query, and the video plays by itself. A screen
+  // under 40rem is offered the walk at 1200 pixels, ahead of the one at 2400.
   assert.match(
     hero,
-    /<span class="loop"><img\b[^>]*><video autoplay muted loop playsinline preload="metadata"[^>]*><source src="media\/hero-walk\.mp4" type="video\/mp4" media="\(prefers-reduced-motion: no-preference\)" \/><\/video><\/span>/,
+    /<span class="loop"><img\b[^>]*><video autoplay muted loop playsinline preload="metadata"[^>]*><source src="media\/hero-walk-narrow\.mp4" type="video\/mp4" media="\(max-width: 39\.99rem\) and \(prefers-reduced-motion: no-preference\)" \/><source src="media\/hero-walk\.mp4" type="video\/mp4" media="\(prefers-reduced-motion: no-preference\)" \/><\/video><\/span>/,
     'the hero plays whatever the reader asked for',
   );
   // The still is the video's own first frame at twice the size the page
@@ -1458,6 +1482,14 @@ test('what a reader downloads before scrolling the home page', async () => {
   // And read to the bottom with every loop playing, it is under 3 MB.
   const whole = pageWeight(out, 'index.html', { dpr: 2, all: true });
   assert.ok(whole <= 3 * 1024 * 1024, `the home page is ${(whole / 1024).toFixed(0)} KB`);
+  // A phone is offered the walk at 1200 pixels, not 2400, and its first view
+  // is back inside the 600 KB the page was held to before the walk was video.
+  const phone = pageWeight(out, 'index.html', { dpr: 2, all: false, narrow: true });
+  assert.ok(phone < bytes, 'a phone is sent the same video as a desktop');
+  assert.ok(
+    phone <= 600 * 1024,
+    `the home page's first view on a phone is ${(phone / 1024).toFixed(0)} KB, over 600 KB`,
+  );
 });
 
 test('the deployment workflow builds the site it deploys', () => {
