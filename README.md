@@ -20,8 +20,9 @@ npx deckhq app      # the floor, in a window of its own
 
 `doctor` only reports. One real run read `on the floor 77 ← 71 sessions have already finished;
 the agent view no longer lists them` (3 September 2026); yours will differ. Before DeckHQ has ever
-run on a machine it writes nothing, starts no daemon, opens no window and sends nothing: it reads
-the transcripts on your disk and asks `claude` what is running.
+run on a machine it writes nothing, starts no daemon, opens no window and makes no connection of
+its own: it reads the transcripts on your disk and asks `claude` what is running and which MCP
+servers it has, and Claude Code checks those servers itself, as it does when it starts.
 
 `app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and the first time
 asks once whether you want a Desktop and Start Menu icon. Both need Node 18 or newer, nothing else.
