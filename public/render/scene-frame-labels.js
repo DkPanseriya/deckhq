@@ -40,7 +40,12 @@ import {
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
 import { crewChipBoxes } from './crew-draw.js';
-import { abbreviateName, resolveLabelCollisions, WALL_CLEAR_PX } from './label-spots.js';
+import {
+  abbreviateName,
+  resolveLabelCollisions,
+  TAG_GAP_PX,
+  WALL_CLEAR_PX,
+} from './label-spots.js';
 import { figureBox } from './leader-line.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
 import { placeBubbles } from './bubble-spots.js';
@@ -200,6 +205,22 @@ export function roomFloor(rooms, rec, camera) {
   const a = worldToScreen({ x: room.x, y: room.y }, camera);
   const b = worldToScreen({ x: room.x + room.w, y: room.y + room.h }, camera);
   return { x: a.x + pad, y: a.y + pad, w: b.x - a.x - pad * 2, h: b.y - a.y - pad * 2 };
+}
+
+/**
+ * The desk a crew member is cabled to, on screen: the anchor `assignSeats`
+ * wrote on its seat, or its lead's own seat. Nobody outside a formation has one.
+ * @param {any} rec @param {Map<string, any>} byId every record in the frame
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ * @returns {{x:number, y:number}|undefined}
+ */
+function crewDesk(rec, byId, camera) {
+  const seat = rec.targetSeat;
+  if (!seat || seat.crew !== true) return undefined;
+  const at = seat.crewAnchor || byId.get(String(seat.crewOf))?.targetSeat;
+  return at && Number.isFinite(at.x) && Number.isFinite(at.y)
+    ? worldToScreen(at, camera)
+    : undefined;
 }
 
 /**
@@ -373,6 +394,11 @@ export function planFrameLabels(ctx, view) {
       side: u * SELECTION_RING_R,
       // A two-row tag is as far from its feet as its near row is.
       lift: box.chip ? (box.chip.h + ROLE_CHIP_GAP) / 2 : 0,
+      // And keeps air over its chip and under its name: two tags are two.
+      gap: box.chip ? TAG_GAP_PX : 0,
+      // On a crew's arc, the desk it is cabled to: a tag that has to leave its
+      // junior goes to the junior's own side of the arc, not the desk's.
+      desk: crewDesk(rec, screenOf, camera),
       variants,
     };
     tiers[live ? (isNeedsYouAgent(agent) ? 0 : 1) : 2].push(item);

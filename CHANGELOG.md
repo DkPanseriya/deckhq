@@ -16,6 +16,12 @@
   would cross one is passed over for the next free place; only a name with no other place has its
   line bent round whoever is in the way, or cut short. A type that a crew says once, such as
   `Explore ×2`, is tied to the nearest robot of that type.
+- **Two juniors' tags no longer read as one block.** `Junior / Explore ×2` and
+  `Junior / general-purpose` sat one directly under the other with nothing between them, both on
+  the far side of somebody else. A tag with a **Junior** chip now keeps four pixels of floor over
+  and under itself, and a tag that has to leave its junior goes to that junior's own side of the
+  crew's arc — over the head of one that sits above the desk, to the right of one on the right —
+  before it goes anywhere on the desk's side.
 
 ## 1.7.1 — 2026-10-11
 
