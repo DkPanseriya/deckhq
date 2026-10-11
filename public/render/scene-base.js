@@ -108,8 +108,18 @@ export class SceneBase {
   _holdBusy = '';
   /** @type {Map<string, any>|null} */ // the desk chair each agent is in (`deskSeatsOf`)
   _seatKeep = null;
+  /** @type {any} */ // `junior-hold.js`: the finished juniors still at their place
+  _juniors = null;
   /** Whether a held room is owed a re-plan; `scene.js` has the rule. */
   _settleHold() {}
+  /**
+   * Seat a snapshot and sync the runtime to it; `scene.js` has the rule.
+   * @param {any[]} _agents @param {boolean} [_steady] @param {boolean} [_fresh]
+   * @returns {Map<string, any>}
+   */
+  _seat(_agents, _steady, _fresh) {
+    return new Map();
+  }
   /** @type {number} */ // bumped by every `setState`: the snapshot the frame is laid out from
   _stateGen = 0;
   /** @type {number} */ // bumped by every `repaint`: the palette the frame is painted in

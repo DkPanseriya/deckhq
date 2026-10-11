@@ -158,23 +158,33 @@ export function isSubagent(agent) {
  * It is the one question here that needs a second agent, so it is asked only
  * when the caller hands over the snapshot's index (`byId`).
  *
+ * A JUNIOR IS HIRED AND FIRED, AND IS NEVER IN THE LOUNGE. The owner: _"they
+ * do not belong to main chat sessions, so they should not go to lounge area,
+ * rather directly fired and hired."_ Its turn ends and starts again many times
+ * inside one turn of its lead's, and resting "like anyone else" walked it to
+ * the Lounge and back each time. So a junior has three answers: at its place
+ * while it works, in Your Office while its own hand is up, and `done` — on no
+ * part of the floor, and still in its lead's panel and the deck — otherwise.
+ *
  * @param {FloorAgent} agent
  * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
- * @returns {'desk'|'office'|'lounge'|'let_go'}
+ * @returns {'desk'|'office'|'lounge'|'let_go'|'done'}
  */
 export function placement(agent, byId) {
   if (agent.ackState === 'let_go') return 'let_go';
-  // A JUNIOR IS PLACED BY ITS OWN STATE, NEVER BY ITS PARENT'S (bug 201). This
-  // used to return `desk` for every junior, and `assignSeats` then stood each
-  // one beside its parent wherever the parent was — so a senior waiting on the
-  // reception sofa had its thirteen working juniors drawn working in the
-  // office, and the room they were working in had thirteen empty desks. A
-  // junior is `working` or `ended` (`state-machine-compute.mjs` never gives one
-  // `for_review`), may raise its own hand, and is never benched; each of those
-  // goes to the zone it would put anybody else in. Which DESK a working junior
-  // takes is `assignSeats`'s question, and the parent only answers that one.
-  if (agent.ackState === 'benched') return 'lounge';
   const state = agent.activityState;
+  // A JUNIOR IS PLACED BY ITS OWN STATE, NEVER BY ITS PARENT'S (bug 201). It
+  // used to be `desk` whatever it did, and a senior on the reception sofa had
+  // its thirteen working juniors drawn working in the office. A junior is
+  // `working` or `ended` (`state-machine-compute.mjs` never gives one
+  // `for_review`), may raise its own hand, and nothing benches one. Which DESK
+  // a working junior takes is `assignSeats`'s question.
+  if (isSubagent(agent)) {
+    if (agent.ackState === 'benched') return 'done';
+    if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) return 'office';
+    return /** @type {readonly string[]} */ (AT_DESK_STATES).includes(state) ? 'desk' : 'done';
+  }
+  if (agent.ackState === 'benched') return 'lounge';
   if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) {
     return workingJuniorsOf(agent, byId) > 0 ? 'desk' : 'office';
   }
@@ -440,9 +450,9 @@ export function floorPopulation(agents, opts = {}) {
     // record's own counts and draw that worktree a room of nobody.
     const pid = homeProjectOf(a, byId);
     const own = a.projectId == null ? '' : String(a.projectId);
-    // WP-89, bug 201: a crew is the juniors AT A DESK. A finished one rests in
-    // the lounge and a raised hand waits in the office, like anyone else, and
-    // neither is in the formation the desk draws.
+    // WP-89, bug 201: a crew is the juniors AT A DESK. A finished one is on no
+    // part of the floor (`placement`) and a raised hand waits in the office,
+    // and neither is in the formation the desk draws.
     if (isSubagent(a)) {
       if (a.parentId != null && pid && isDeskAgent(a, byId))
         bump(juniorsPerParent, `${pid}\u0000${String(a.parentId)}`);
@@ -631,8 +641,8 @@ export function awayRooms(projects, pop) {
  * WHO THE FLOOR DRAWS NOBODY FOR: an agent who went home, and an active agent
  * that is not on the floor in its own right (ended, almost always) in a repo
  * with no live room. `buildPlan`'s `hidden`, here since bug 201 because the
- * repo it asks about is the agent's HOME room (`homeProjectOf`) — a finished
- * junior of a live parent rests in the lounge like anyone else of that room.
+ * repo it asks about is the agent's HOME room (`homeProjectOf`). A finished
+ * junior of a live room is not in it: it has no seat, and that draws nobody.
  * @param {FloorAgent[]} agents
  * @param {Set<string>} roomIds the repos that earned a full room
  * @param {ReturnType<typeof floorPopulation>} pop

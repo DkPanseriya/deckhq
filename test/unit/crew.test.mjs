@@ -628,7 +628,8 @@ test('audit F10: the chip is +N for the undrawn, and "working" is over the whole
   const seats = assignSeats(plan, agents);
   const records = agents
     .filter((a) => seats.get(a.id)?.crew === true)
-    .map((a) => ({ id: a.id, agent: a, targetSeat: seats.get(a.id), x: 0, y: 0 }));
+    // Each at its seat: a chip counts the members in the formation (`inFormation`).
+    .map((a) => ({ ...seats.get(a.id), id: a.id, agent: a, targetSeat: seats.get(a.id) }));
   assert.equal(records.length, CREW_DRAW_CAP);
   /** @type {string[]} */
   const texts = [];

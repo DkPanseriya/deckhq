@@ -539,19 +539,23 @@ export function renderDeckTable(agents, opts, doc) {
  * most recent first (`floor-resting.js`). The queue's own rows, so a session
  * reads the same here as it does while it is waiting; the first column is how
  * long it has rested rather than how long it has waited, and its heading says
- * so. No groups and no crews: a resting junior is a row like anyone.
+ * so. No crews: a junior is a row like anyone, in the second group.
  *
  * @param {any[]} agents
  * @param {{now?:number, selectedId?:string|null}} opts
  * @param {{createElement:(tag:string)=>any}} doc
+ * @param {any[]} [juniors] the juniors that have finished (`finishedJuniorsOf`)
  */
-export function renderRestingTable(agents, opts, doc) {
+export function renderRestingTable(agents, opts, doc, juniors) {
   const table = doc.createElement('table');
   table.className = 'deck-table';
 
   const caption = doc.createElement('caption');
   caption.className = 'sr-only';
-  caption.textContent = 'Resting in the lounge, most recently active first.';
+  caption.textContent =
+    Array.isArray(juniors) && juniors.length
+      ? 'Resting in the lounge, most recently active first. Then the juniors that have finished, which are not on the floor.'
+      : 'Resting in the lounge, most recently active first.';
   table.appendChild(caption);
 
   const thead = doc.createElement('thead');
@@ -573,6 +577,16 @@ export function renderRestingTable(agents, opts, doc) {
     tbody.appendChild(buildRow(agent, opts, doc));
   }
   table.appendChild(tbody);
+  // The juniors that have finished: fired from their place and drawn nowhere,
+  // so not the lounge's, and still a row each (`finishedJuniorsOf`). A group of
+  // their own, ruled off from the lounge's people as a stall is from a hand.
+  if (Array.isArray(juniors) && juniors.length) {
+    const done = doc.createElement('tbody');
+    done.className = 'deck-group';
+    done.setAttribute('data-group', 'juniors-done');
+    for (const agent of juniors) done.appendChild(buildRow(agent, opts, doc));
+    table.appendChild(done);
+  }
   return table;
 }
 

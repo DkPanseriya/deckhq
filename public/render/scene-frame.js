@@ -277,6 +277,8 @@ export class SceneFrame extends SceneStatic {
       tape.ref(rec.agent);
       tape.num(rec.x);
       tape.num(rec.y);
+      // A junior that starts to fold away leaves its crew's tag and chip.
+      tape.num(rec.leftAt ?? -1);
     }
     this._tapeWaits(tape, clockNow());
     if (tape.end() && this._layout) return this._layout;

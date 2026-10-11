@@ -642,7 +642,7 @@ test('counts() agrees with needsYou() about juniors, breakdown included', () => 
   assert.equal(c.total, 4, 'juniors are still counted as people on the floor');
 });
 
-test('a junior is placed by its own state, exactly as anybody else is (bug 201)', () => {
+test('a junior is placed by its own state, and where anybody else would rest it is done', () => {
   // WP-41 said "a junior is only ever beside its parent" and answered `desk`
   // for every junior, so a senior waiting on the reception sofa had its working
   // juniors drawn working in the office. A junior's ZONE is its own state's;
@@ -650,13 +650,16 @@ test('a junior is placed by its own state, exactly as anybody else is (bug 201)'
   assert.equal(placement(agent({ activityState: 'working', subagent: true })), 'desk');
   assert.equal(placement(agent({ activityState: 'stalled', subagent: true })), 'desk');
   assert.equal(placement(agent({ activityState: 'needs_input', subagent: true })), 'office');
-  assert.equal(placement(agent({ activityState: 'ended', subagent: true })), 'lounge');
-  assert.equal(placement(agent({ ackState: 'benched', subagent: true })), 'lounge');
+  // This read `lounge` for both, "exactly as anybody else". A junior is hired
+  // and fired at its place and never rests (`junior-hire-fire.test.mjs`).
+  assert.equal(placement(agent({ activityState: 'ended', subagent: true })), 'done');
+  assert.equal(placement(agent({ ackState: 'benched', subagent: true })), 'done');
   for (const activityState of ['working', 'needs_input', 'stalled', 'for_review', 'ended']) {
     for (const ackState of ['active', 'benched', 'let_go']) {
       const a = agent({ activityState, ackState });
       const j = agent({ activityState, ackState, subagent: true });
-      assert.equal(placement(j), placement(a), `junior ${activityState}/${ackState}`);
+      const zone = placement(a) === 'lounge' ? 'done' : placement(a);
+      assert.equal(placement(j), zone, `junior ${activityState}/${ackState}`);
     }
   }
   // The renderer's mirror of the same rule must agree, on every case.

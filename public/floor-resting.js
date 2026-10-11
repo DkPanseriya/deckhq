@@ -80,3 +80,24 @@ export function restingAgentsOf(snapshot, opts = {}) {
   const roomIds = new Set(awayRooms(snap.projects || [], pop).onFloor.map(idOf));
   return restingOrder(agents, offTheFloor(agents, roomIds, pop));
 }
+
+/**
+ * THE JUNIORS THAT HAVE FINISHED, most recently active first — a group of
+ * their own under the Resting tab's rows.
+ *
+ * They used to be in the lounge and so in that tab, a row like anyone. A
+ * junior is fired from its place now and is never in the lounge (`placement`'s
+ * `done`), and one the floor does not draw must still be a row somewhere: the
+ * same row, in the same tab, under the lounge's people and not among them.
+ * None of them is in `restingAgentsOf`, so the lounge's count is the lounge's.
+ *
+ * @param {{agents?:FloorAgent[]}} snapshot
+ * @returns {FloorAgent[]}
+ */
+export function finishedJuniorsOf(snapshot) {
+  const agents = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : [];
+  const at = (/** @type {any} */ a) => Number(a.lastActivityAt) || 0;
+  return agents
+    .filter((a) => a && placement(a) === 'done')
+    .sort((a, b) => at(b) - at(a) || String(a.id).localeCompare(String(b.id)));
+}

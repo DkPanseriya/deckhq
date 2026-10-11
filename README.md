@@ -64,7 +64,8 @@ view's own count beside its own.
   `3` bench, or `O` to bring the window that session is running in to the front.
 - **A crew, when a session starts three or more sub-agents.** The juniors sit in an arc around the
   desk, each with a cable to it that pulses while that junior's transcript is still being written
-  and goes grey when it stops.
+  and goes grey when it stops. A junior appears at its place and, a few seconds after it has
+  finished, is gone from it: it never walks to the lounge.
 - **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` clears one,
   and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
 

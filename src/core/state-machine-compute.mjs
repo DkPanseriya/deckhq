@@ -288,7 +288,7 @@ export class RegistryCompute extends RegistrySnapshot {
       // would queue in the office for ever with a crimson badge over its head.
       //
       // So a finished junior is `ended`, which is what it is: it stops, and
-      // the adapter stops reporting it, and it walks off the floor. Nothing
+      // the adapter stops reporting it, and it is fired from its place. Nothing
       // about it reaches `store.setAck` — `_markForReview` WRITES
       // `reviewSince`, a user-owned field, keyed by an id that will never be
       // seen again. The parent's own fields are untouched either way, and the

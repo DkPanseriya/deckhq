@@ -23,7 +23,13 @@ import { assignSeats } from '../../public/render/agents.js';
 import { buildLounge, LOUNGE_CHIP_ZONE } from '../../public/render/plan-service.js';
 import { restingChipLine } from '../../public/render/plan-plate.js';
 import { LOUNGE_AREA_MAX, LOUNGE_STANDING_ROWS } from '../../public/render/plan-proportions.js';
-import { behindTheChip, restingAgentsOf, restingOrder } from '../../public/floor-resting.js';
+import {
+  behindTheChip,
+  finishedJuniorsOf,
+  restingAgentsOf,
+  restingOrder,
+} from '../../public/floor-resting.js';
+import { NOW, crewFloor, jid } from '../helpers/junior-floor.mjs';
 import { placement } from '../../public/floor-rule.js';
 import { renderRestingTable } from '../../public/deck.js';
 import { counts } from '../../src/core/model.mjs';
@@ -288,4 +294,42 @@ test('a click on the chip opens the deck on the people resting', () => {
   );
   assert.match(paint, /onSelect\(id, \{ openPanel: true \}\)/);
   assert.doesNotMatch(paint, /fetch\(/);
+});
+
+test('a finished junior is not the lounge’s, and is still a row: a group of its own in the tab', () => {
+  // It rested in the lounge once and was a row here for that. It is fired from
+  // its place now (`junior-hire-fire.test.mjs`), and the row is what is kept.
+  const { agents, projects } = crewFloor(4);
+  const list = agents.map((a) =>
+    a.id === jid(1) || a.id === jid(3) ? { ...a, activityState: 'ended' } : a,
+  );
+  list.push({ ...agents[0], id: 'claude-code:rest', activityState: 'ended' });
+  const snapshot = { projects, agents: list };
+  const resting = restingAgentsOf(snapshot, { now: NOW });
+  const juniors = finishedJuniorsOf(snapshot);
+  assert.deepEqual(
+    resting.map((a) => a.id),
+    ['claude-code:rest'],
+    'the lounge’s own',
+  );
+  assert.deepEqual(juniors.map((a) => a.id).sort(), [jid(1), jid(3)]);
+  const table = renderRestingTable(resting, { now: NOW, selectedId: null }, doc, juniors);
+  const groups = all(table).filter((n) => n.tagName === 'TBODY');
+  assert.deepEqual(
+    groups.map((g) => g.attrs['data-group']),
+    ['resting', 'juniors-done'],
+  );
+  const rowsOf = (g) =>
+    all(g)
+      .filter((n) => n.className.split(' ').includes('deck-row'))
+      .map((r) => r.attrs['data-id']);
+  assert.deepEqual(rowsOf(groups[0]), ['claude-code:rest']);
+  assert.deepEqual(rowsOf(groups[1]).sort(), [jid(1), jid(3)]);
+  // With none, the table is the one it always was.
+  assert.equal(renderRestingTable(resting, { now: NOW }, doc, []).children.length, 3);
+  assert.match(
+    read('app.js'),
+    /getFinishedJuniors: \(\) => finishedJuniorsOf\(latestSnapshot\)/,
+    'the app does not hand the deck its finished juniors',
+  );
 });

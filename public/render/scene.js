@@ -48,8 +48,9 @@
  * ============================================================================
  */
 
-import { AgentRuntime, assignSeats, deskSeatsOf } from './agents.js';
+import { AgentRuntime, deskSeatsOf } from './agents.js';
 import { FurnishingHold, roomHeadcounts, sameBuilding } from './plan-hold.js';
+import { JuniorHold, syncFloor } from './junior-hold.js';
 import { now as clockNow } from '../clock.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
@@ -232,17 +233,11 @@ export class Scene extends SceneInput {
       // from their old seat to their new one and nobody else moves. Where it
       // is the same building — the same rooms and doors, which is what a held
       // room keeps it — whoever was already walking carries on (`steady`).
-      if (this._plan) {
-        this._runtime.sync(previousAgents, this._plan, this._seats(previousAgents), {
-          now: animMs(),
-          steady: sameBuilding(replaced, this._plan),
-        });
-      }
+      if (this._plan) this._seat(previousAgents, sameBuilding(replaced, this._plan));
     }
 
     if (this._plan) {
-      const seatMap = this._seats(agents);
-      this._runtime.sync(agents, this._plan, seatMap, { now: animMs() });
+      const seatMap = this._seat(agents);
       // Where everybody at a desk now sits, so nobody changes chairs because a
       // neighbour left (`assignKept`). The page's own memory, never written.
       this._seatKeep = deskSeatsOf(this._plan, seatMap);
@@ -256,13 +251,24 @@ export class Scene extends SceneInput {
   }
 
   /**
-   * Everybody's seat in the plan in hand: `assignSeats`, with the two things
-   * the page knows and the snapshot does not — whose panel is open, and which
-   * desk chair each of them was last in.
+   * Seat everybody in the plan in hand and sync the runtime to it
+   * (`syncFloor`): `assignSeats`, with the three things the page knows and the
+   * snapshot does not — whose panel is open, which desk chair each of them was
+   * last in, and which juniors finished a moment ago and still have their
+   * place (`junior-hold.js`).
    * @param {any[]} agents
+   * @param {boolean} [steady] the plan is the same building as the last one
+   * @param {boolean} [fresh] seat without the chairs remembered: a re-plan
+   * @returns {Map<string, any>} everybody's seat
    */
-  _seats(agents) {
-    return assignSeats(this._plan, agents, { selectedId: this._selectedId, keep: this._seatKeep });
+  _seat(agents, steady, fresh) {
+    const hold = this._juniors || (this._juniors = new JuniorHold());
+    return syncFloor(this._runtime, hold, this._plan, agents, {
+      now: animMs(),
+      steady: steady === true,
+      selectedId: this._selectedId,
+      keep: fresh === true ? null : this._seatKeep,
+    });
   }
 
   /**
@@ -296,6 +302,11 @@ export class Scene extends SceneInput {
    * is held on this is two comparisons.
    */
   _settleHold() {
+    // And a third, with no re-plan in it: a finished junior whose moment at its
+    // place is over is fired now (`junior-hold.js`), snapshot or no snapshot.
+    if (this._plan && this._juniors && animMs() >= this._juniors.dueAt) {
+      this._seat((this._snapshot && this._snapshot.agents) || []);
+    }
     const hold = this._hold;
     if (!hold || !this._plan) return;
     if (!hold.waiting && clockNow() < hold.dueAt) return;
@@ -449,8 +460,7 @@ export class Scene extends SceneInput {
     if (next === this._selectedId) return;
     this._selectedId = next;
     if (!this._plan) return;
-    const agents = (this._snapshot && this._snapshot.agents) || [];
-    this._runtime.sync(agents, this._plan, this._seats(agents), { now: animMs() });
+    this._seat((this._snapshot && this._snapshot.agents) || []);
     // The loop is stopped while the tab is hidden, and a selection can still
     // arrive there (a notification, the palette). Draw so the ring and the walk
     // are current whether or not anything is animating.

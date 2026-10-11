@@ -537,12 +537,18 @@ function dist(a, b) {
  * is the END value rather than the first frame — §1.2's rule — so a still
  * picture still says who is working and who has finished, which is exactly what
  * §3.2 asks the reduced form to keep.
- * @param {{lastGrowthAt?:number|null}} member
+ *
+ * A JUNIOR THAT HAS ENDED IS NOT ALIVE, however lately its file moved: its
+ * last record is the one that ended it. It is held at its place for a moment
+ * before it is fired (`junior-hold.js`), and for that moment its cable is the
+ * grey one and its laptop is shut, which is how the eye is told it is done.
+ * @param {{lastGrowthAt?:number|null, activityState?:string}} member
  * @param {number} nowMs
  * @param {{reduced?:boolean}} [opts]
  * @returns {number} 0..1
  */
 export function crewCableLive(member, nowMs, opts) {
+  if (member && member.activityState === 'ended') return 0;
   const at = Number(member && member.lastGrowthAt);
   if (!Number.isFinite(at) || at <= 0) return 0;
   const quiet = nowMs - at - CREW_ACTIVE_MS;
@@ -578,6 +584,29 @@ export function crewCableExtent(nowMs, rec, opts) {
   if (born === null || reduced) return 1;
   const t = pinned ? ((pin % 1) + 1) % 1 : (nowMs - born) / CREW_CABLE_MS;
   return Math.min(1, Math.max(0, t));
+}
+
+/**
+ * IS THIS MEMBER IN ITS FORMATION — seated in a crew, and standing in the room
+ * that crew is in?
+ *
+ * A CABLE EXISTS ONLY BETWEEN A JUNIOR IN THE FORMATION AND ITS LEAD'S DESK,
+ * and a crew's tag and chip count only the members this is true of. The seat
+ * says which crew; where the record stands says whether it is there. A junior
+ * is hired at its place and never walks to it from another room
+ * (`AgentRuntime#sync`), so on the floor this is true of every crew seat's
+ * record — and it is asked anyway, of the record, every frame, because the
+ * owner's picture was a cable drawn to a junior two rooms away on the strength
+ * of its seat alone.
+ * @param {{x?:number, y?:number, targetSeat?:any}|null} rec
+ * @returns {boolean}
+ */
+export function inFormation(rec) {
+  const seat = rec && rec.targetSeat;
+  if (!seat || seat.crew !== true) return false;
+  const room = seat.crewRoom;
+  if (!room) return true;
+  return pointInRect(/** @type {{x:number, y:number}} */ (rec), room);
 }
 
 /**

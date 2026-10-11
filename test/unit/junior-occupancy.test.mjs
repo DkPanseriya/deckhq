@@ -17,7 +17,8 @@
  *     a formation, anchored to the parent's desk or — the parent away — to the
  *     room's primary desk, with the parent's name on it.
  *   - waiting            -> the office, like anyone else.
- *   - ended / benched    -> the lounge, like anyone else.
+ *   - ended              -> on no part of the floor: fired from its place, never
+ *     rested (`junior-hire-fire.test.mjs`). It read "the lounge, like anyone else".
  *
  * Everything is asked of the REAL plan and the REAL seating pass, because the
  * defect was a rule true in `placement()` (a working junior was `desk`) and false
@@ -250,20 +251,23 @@ test('bug 201: every working junior is in its room, whatever its parent is doing
   }
 });
 
-test('bug 201: a finished or waiting junior is in the zone anybody else would be', () => {
+test('bug 201: a waiting junior is in the office, and a finished one is on no part of the floor', () => {
+  // This asked for the finished junior in the lounge, "like anybody else". The
+  // owner then watched juniors walk there and back all day: a junior is hired
+  // and fired at its place (`junior-hire-fire.test.mjs`), and never rests.
   const parent = agent('claude-code:p');
   const done = junior('claude-code:done', parent.id, { activityState: 'ended' });
   const hand = junior('claude-code:hand', parent.id, {
     activityState: 'needs_input',
     needsInputSince: NOW - MIN,
   });
-  assert.equal(placement(done), 'lounge');
+  assert.equal(placement(done), 'done');
   assert.equal(placement(hand), 'office');
   const agents = [parent, done, hand];
   const projects = [{ id: 'career-ops', name: 'career-ops', sessionCount: 1, activeCount: 1 }];
   const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
   const seats = assignSeats(plan, agents);
-  assert.ok(inside(seats.get(done.id), room(plan, 'lounge')), 'an ended junior rests');
+  assert.equal(seats.get(done.id), undefined, 'a finished junior has no seat');
   assert.ok(inside(seats.get(hand.id), room(plan, 'office')), 'a raised hand waits on you');
 });
 
@@ -291,7 +295,8 @@ test('bug 201: the away crew’s desk carries the parent’s name, and the chip 
   const seats = assignSeats(plan, agents);
   const records = agents
     .filter((a) => seats.get(a.id)?.crew === true)
-    .map((a) => ({ id: a.id, agent: a, targetSeat: seats.get(a.id), x: 0, y: 0 }));
+    // Each at its seat: a chip counts the members in the formation (`inFormation`).
+    .map((a) => ({ ...seats.get(a.id), id: a.id, agent: a, targetSeat: seats.get(a.id) }));
   /** @type {{text:string, x:number, y:number}[]} */
   const texts = [];
   const ctx = new Proxy(

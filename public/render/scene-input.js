@@ -25,9 +25,7 @@ import {
   DEFAULT_VIEW_H,
 } from './scene-camera.js';
 import { setDeviceScale } from './device-px.js';
-import { assignSeats } from './agents.js';
 import { SceneDraw } from './scene-draw.js';
-import { animMs } from './scene-agent.js';
 
 /** Pointer travel past which a press counts as a pan rather than a click. */
 export const DRAG_SLOP_PX = 4;
@@ -327,13 +325,7 @@ export class SceneInput extends SceneDraw {
     // in the wrong room, and `three@selected` is the golden that finally
     // photographed it. `sync` snaps rather than walks on a new plan object,
     // which is right: nobody's own state changed, the building did.
-    const agents = (this._snapshot && this._snapshot.agents) || [];
-    this._runtime.sync(
-      agents,
-      this._plan,
-      assignSeats(this._plan, agents, { selectedId: this._selectedId }),
-      { now: animMs() },
-    );
+    this._seat((this._snapshot && this._snapshot.agents) || [], false, true);
     if (!this._running) this._draw();
   }
 
