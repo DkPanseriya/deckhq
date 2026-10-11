@@ -26,9 +26,10 @@ import {
   ownerShapedFloor,
   populationFloor,
 } from '../helpers/large-floor.mjs';
-import { drawnBox, frameAt, hits, measuringCtx } from '../helpers/label-frame.mjs';
+import { drawnBox, frameAt, hits, measuringCtx, tiesOf } from '../helpers/label-frame.mjs';
 import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
 import { drawDots } from '../../public/render/rig-props.js';
+import { turnIsOpen } from '../../public/render/life.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { worldToScreen } from '../../public/render/agents.js';
 import { characterScaleFor, lodForFigure } from '../../public/render/scene-lod.js';
@@ -578,7 +579,8 @@ test('no thought cloud is over a name, a role chip, a wait badge or a crew chip'
         .filter((it) => f.labels.plan.get(it.id))
         .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
       const chrome = f.labels.obstacles.filter((o) => /^(badge|pill|chip):/.test(o.id));
-      const taken = [...names, ...chrome];
+      // And the line that ties a name to its figure: a cloud is not opened across one.
+      const taken = [...names, ...chrome, ...tiesOf(f)];
       assert.ok(names.length > 0, `${name}: the floor has names to be covered`);
       for (const rec of f.records) {
         const s = worldToScreen(rec, f.camera);
@@ -595,6 +597,17 @@ test('no thought cloud is over a name, a role chip, a wait badge or a crew chip'
         assert.equal(over, undefined, `${name} ${w}x${h}: ${rec.id}'s cloud is over ${over?.id}`);
         // On its own side wherever that side is clear: nothing moves for nothing.
         if (!taken.some((t) => hits(natural, t))) assert.equal(side, 1);
+      }
+      // Nor over the cloud of anybody else who may be thinking.
+      const open = f.records.flatMap((rec) => {
+        const s = worldToScreen(rec, f.camera);
+        const side = f.labels.clouds.get(rec.id);
+        if (!side || !turnIsOpen(rec.agent)) return [];
+        return [{ id: rec.id, ...cloudBox(s.x, s.y, f.uOf(rec), side) }];
+      });
+      for (const [i, a] of open.entries()) {
+        const b = open.slice(i + 1).find((c) => hits(a, c));
+        assert.equal(b, undefined, `${name} ${w}x${h}: the clouds of ${a.id} and ${b?.id}`);
       }
     }
   }

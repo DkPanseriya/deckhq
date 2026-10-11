@@ -29,8 +29,14 @@
  * tried at every near spot. Each size is tried by EVERY name before any name
  * tries the next, so one crowded corner does not shrink a whole sofa. Only a
  * live agent's name (`keep`) may then move further, through `LABEL_SPOTS`, and
- * a name that does is drawn with a 1 px leader to its feet (`leader: true`). A
+ * a name that does is drawn with a 1 px leader to its figure (`leader: true`). A
  * resting figure's name in the lounge that has no near spot is not drawn.
+ *
+ * A LEADER CROSSES NOBODY (`line`, `leader-line.js`). It ends at the edge of
+ * the figure it belongs to and runs over no other figure, no badge, chip or
+ * plate and nobody else's name; a place whose line would is passed over for the
+ * next one, and no name is set across a line already drawn. Only a name with no
+ * other place at all has its line bent round whoever is in the way, or cut short.
  *
  * A NAME UNDER A WAIT BADGE IS HALF OF A UNIT (`unit`). It is never set over
  * the head, where the badge already is, and under the feet it takes the floor
@@ -44,6 +50,8 @@
  * An item with no `feet` is placed by the old rule exactly, which is what the
  * pure tests of this function in `scene-math.test.mjs` hold.
  */
+
+import { leaderFor, leaderStraight, lineEnters } from './leader-line.js';
 
 // Name-label collision resolution (tech-lead review finding 1,
 // docs/DEVIATIONS.md "Findings from review"): how many extra candidate
@@ -65,6 +73,17 @@ export const NEAR_REACH = 1.2;
 export const LOWER_REACH = 1.6;
 
 /**
+ * THE AIR A TWO-ROW TAG KEEPS over and under itself, in screen px (`gap`). A
+ * name's box has a little room round its letters; a tag's first row is a chip,
+ * flush with the top of its box. Two tags set one directly under the other —
+ * `Junior / Explore ×2` over `Junior / general-purpose` — were four rows with
+ * nothing between the second and the third, and read as one block. With this
+ * much floor between them the gap between two tags is about twice the gap
+ * between a tag's own two rows.
+ */
+export const TAG_GAP_PX = 4;
+
+/**
  * Resolve overlapping name labels for one frame. `items` should already be in
  * the caller's priority/paint order — earlier items get first claim on space.
  *
@@ -84,6 +103,9 @@ export const LOWER_REACH = 1.6;
  *   feet?:{x:number, y:number},
  *   room?:{x:number, y:number, w:number, h:number}, over?:number,
  *   bh?:number, side?:number, lift?:number,
+ *   figure?:{x:number, y:number, w:number, h:number}, gap?:number,
+ *   desk?:{x:number, y:number},
+ *   body?:{x:number, y:number, w:number, h:number}, of?:string,
  *   variants?:{x:number, y:number, w:number, h:number, text:string, px:number}[]}[]} items
  *   `x,y,w,h`: the label's un-offset screen box; `room`: the floor of the
  *   figure's own room, inside its walls, which the whole name stays in; `over`:
@@ -91,11 +113,18 @@ export const LOWER_REACH = 1.6;
  *   over its figure's head; `feet`, `bh`, `side`: the feet point, the body's
  *   height and half-width, all in screen px; `lift`: half the depth of a
  *   two-row tag's second row (`rowCentre`); `variants`: the same label smaller,
- *   in the order it may shrink (each box at its own un-offset position)
+ *   in the order it may shrink (each box at its own un-offset position);
+ *   `figure`: the body the name belongs to, where its leader ends; and on an
+ *   obstacle, `body`: the figure drawn inside it, which no leader crosses, and
+ *   `of`: the id of the figure a badge or a raised hand belongs to; `gap`: the
+ *   air a two-row tag keeps over and under itself (`TAG_GAP_PX`); `desk`: for a
+ *   member of a crew, the desk it is cabled to, whose side of it a name that
+ *   leaves it does not go to (`deskSide`)
  * @param {{x:number, y:number, w:number, h:number}} [bounds] the building's
  *   screen rect, which no name may leave sideways or upwards
  * @returns {Map<string, {offsetY:number, offsetX?:number, text?:string,
- *   px?:number, leader?:boolean}|null>} per id; `null` means "not this frame"
+ *   px?:number, leader?:boolean, line?:number[]}|null>} per id; `null` means "not
+ *   this frame"; `line`: the leader as `[x0, y0, x1, y1, …]`, offsets from the feet
  */
 export function resolveLabelCollisions(items, bounds) {
   /** @type {{x:number,y:number,w:number,h:number}[]} */
@@ -116,10 +145,16 @@ export function resolveLabelCollisions(items, bounds) {
   // lets a live name that has no place at all clear of one be set anyway.
   const within = (a, b) =>
     a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
-  const free = (rect, it = null, through = false) =>
+  // `who`: the name the place is for, where it is not also the owner of the
+  // room asked about. A two-row tag keeps its air (`aired`). The room is asked
+  // first: it is one comparison, and everything else is one per thing placed.
+  const free = (rect, it = null, through = false, who = it) =>
     !(bounds && !inside(rect, bounds)) &&
+    !(it && it.room && !within(rect, it.room)) &&
     !placed.some((p) => overlaps(rect, p)) &&
-    (it && it.room ? within(rect, it.room) : through || !walls.some((w) => overlaps(rect, w)));
+    !lines.some((line) => lineEnters(line, rect)) &&
+    (!who || aired(rect, who)) &&
+    ((it && it.room) || through || !walls.some((w) => overlaps(rect, w)));
 
   // `pin` is an exemption and `keep` is only a priority. Making needs-you
   // labels exempt collapsed in the case that matters most: every agent in the
@@ -138,13 +173,69 @@ export function resolveLabelCollisions(items, bounds) {
     result.set(it.id, { offsetY: 0 });
   }
 
-  /** The placement record for `it` drawn as `form` at offset (dx, dy). */
-  const spotOf = (it, form, dx, dy, leader) => {
-    /** @type {{offsetY:number, offsetX?:number, text?:string, px?:number, leader?:boolean}} */
+  // Every figure on the floor as the body that is drawn (`body`, on its
+  // obstacle): what a leader may not cross (`leader-line.js`).
+  const figures = pinned.flatMap((it) => (it.body ? [it.body] : []));
+  // Nor a badge, a chip or a plate that is not its own figure's (`of`), nor a
+  // name already set; and no name is set across a leader already drawn.
+  const chrome = pinned.filter((it) => !it.body && it.wall !== true);
+  /** @type {{x:number,y:number,w:number,h:number,gap?:number}[]} */
+  const names = [];
+  // The selected name is set where it hangs whatever is there; a tag keeps its air.
+  for (const it of pinned) {
+    if (it.gap) names.push({ x: it.x, y: it.y, w: it.w, h: it.h, gap: it.gap });
+  }
+  const tagged = items.some((it) => it.gap > 0);
+  /** @type {number[][]} */
+  const lines = [];
+  const scene = { figures, chrome, names };
+  /**
+   * The leader a name set at `rect` is on (`tieFor`); null where it needs none.
+   * `bend`: with no straight line clear, the one bent round or cut short.
+   * @param {any} it @param {any} rect @param {boolean} [always] @param {boolean} [bend]
+   */
+  const tieOf = (it, rect, always = false, bend = false) => tieFor(it, rect, scene, always, bend);
+  /**
+   * `TAG_GAP_PX`: is a place clear, over and under, of every name it or the
+   * other owes that air to? Only up and down — side by side, two tags are
+   * two columns and read as two.
+   * @param {any} rect @param {any} it
+   */
+  const aired = (rect, it) => {
+    // A floor with no tag on it owes none, and asks nothing.
+    if (!tagged) return true;
+    for (const n of names) {
+      const air = Math.max(it.gap || 0, n.gap || 0);
+      if (!(air > 0) || rect.x >= n.x + n.w || rect.x + rect.w <= n.x) continue;
+      if (rect.y - air < n.y + n.h && rect.y + rect.h + air > n.y) return false;
+    }
+    return true;
+  };
+  /**
+   * Take a place for a name: nothing set after it may be on it, or on its
+   * leader, or — a tag — right over or under it.
+   * @param {any} it @param {any} rect @param {any} [tie]
+   */
+  const take = (it, rect, tie = null) => {
+    placed.push(rect);
+    names.push(it.gap ? { ...rect, gap: it.gap } : rect);
+    if (tie && tie.line) lines.push(tie.line);
+  };
+
+  /**
+   * The placement record for `it` drawn as `form` at offset (dx, dy), on the
+   * leader `tie` where it has one: its line as offsets from the feet.
+   * @param {any} it @param {any} form @param {number} dx @param {number} dy
+   * @param {{line?:number[]}|null|false} tie
+   */
+  const spotOf = (it, form, dx, dy, tie) => {
+    /** @type {{offsetY:number, offsetX?:number, text?:string, px?:number, leader?:boolean,
+     *   line?:number[]}} */
     const spot = { offsetY: dy };
     if (dx !== 0) spot.offsetX = dx;
     if (form !== it) Object.assign(spot, { text: form.text, px: form.px });
-    if (leader) spot.leader = true;
+    if (tie) spot.leader = true;
+    if (tie && tie.line) spot.line = tie.line.map((v, i) => v - (i % 2 ? it.feet.y : it.feet.x));
     return spot;
   };
 
@@ -164,10 +255,12 @@ export function resolveLabelCollisions(items, bounds) {
           const rect = { x: form.x, y: form.y + form.h, w: form.w, h: form.h };
           const line = { x: it.feet.x - 0.5, y: it.feet.y, w: 1, h: rect.y - it.feet.y };
           const reach = (rowCentre(it, rect) - it.feet.y) / it.bh;
-          if (reach <= LOWER_REACH + 1e-6 && free(rect, it) && (line.h <= 0 || free(line))) {
-            placed.push(rect);
+          const tie = tieOf(it, rect, true) || { clear: true };
+          const clear = tie.clear && free(rect, it) && (line.h <= 0 || free(line));
+          if (reach <= LOWER_REACH + 1e-6 && clear) {
+            take(it, rect);
             if (line.h > 0) placed.push(line);
-            result.set(it.id, spotOf(it, form, 0, form.h, true));
+            result.set(it.id, spotOf(it, form, 0, form.h, tie));
             continue;
           }
         }
@@ -183,8 +276,12 @@ export function resolveLabelCollisions(items, bounds) {
           const gap = it.unit && below ? Math.max(0, rect.y - it.feet.y) : 0;
           const claim = gap > 0 ? { ...rect, y: it.feet.y, h: rect.h + gap } : rect;
           if (!free(claim, it)) continue;
-          placed.push(claim);
-          result.set(it.id, spotOf(it, form, dx, dy, detached(it, rect)));
+          // A name that has slid clear of its figure is tied back to it, and
+          // only where that line crosses nobody: the next place is tried first.
+          const tie = tieOf(it, rect);
+          if (tie && !tie.clear) continue;
+          take(it, claim, tie);
+          result.set(it.id, spotOf(it, form, dx, dy, tie));
           break;
         }
       }
@@ -213,7 +310,7 @@ export function resolveLabelCollisions(items, bounds) {
           )
         : undefined;
       if (last) {
-        placed.push({ x: form.x + last[0], y: form.y + last[1], w: form.w, h: form.h });
+        take(it, { x: form.x + last[0], y: form.y + last[1], w: form.w, h: form.h });
         result.set(it.id, spotOf(it, form, last[0], last[1], false));
         continue;
       }
@@ -225,30 +322,42 @@ export function resolveLabelCollisions(items, bounds) {
       // if no wall were there. A live name is never dropped.
       const outside = it.keep && walls.length ? ['walls', 'any'] : ['walls'];
       const passes = it.room ? (it.keep ? ['room', 'scan', ...outside] : ['room']) : outside;
-      for (const pass of passes) {
-        if (pass === 'scan') {
-          const at = roomScan(it, form).find(([dx, dy]) =>
-            free({ x: form.x + dx, y: form.y + dy, w: form.w, h: form.h }, it),
-          );
-          if (!at) continue;
-          placed.push({ x: form.x + at[0], y: form.y + at[1], w: form.w, h: form.h });
-          chosen = spotOf(it, form, at[0], at[1], true);
-          break;
-        }
-        const owner = pass === 'room' ? it : null;
-        for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
-          for (const [fx, fy] of spots) {
-            if (fy === LABEL_UP && (it.unit || typeof it.up !== 'number')) continue;
-            const offsetX = bx + fx * form.w;
-            const offsetY = by + (fy === LABEL_UP ? upFor(it, form) : fy * form.h);
-            const rect = { x: form.x + offsetX, y: form.y + offsetY, w: form.w, h: form.h };
-            if (!free(rect, owner, pass === 'any')) continue;
-            // On a leader wherever it is far from its feet — or within reach
-            // of them and under no part of its own figure (`detached`).
-            const loose = !!it.feet && (!isNear(it, rect) || detached(it, rect));
-            chosen = spotOf(it, form, offsetX, offsetY, loose);
-            placed.push(rect);
-            break;
+      // A LEADER CROSSES NOBODY (`leader-line.js`). Every place is asked first
+      // for one whose line to its figure is straight and clear (`strict`); only
+      // a name with no such place anywhere takes one whose line has to be bent
+      // round somebody, or cut short of them.
+      for (const strict of [true, false]) {
+        for (const pass of passes) {
+          if (pass === 'scan') {
+            for (const [dx, dy] of roomScan(it, form)) {
+              const rect = { x: form.x + dx, y: form.y + dy, w: form.w, h: form.h };
+              if (!free(rect, it)) continue;
+              const tie = tieOf(it, rect, true, !strict) || { clear: true };
+              if (strict && !tie.clear) continue;
+              take(it, rect, tie);
+              chosen = spotOf(it, form, dx, dy, tie);
+              break;
+            }
+            if (chosen) break;
+            continue;
+          }
+          const owner = pass === 'room' ? it : null;
+          for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
+            for (const [fx, fy] of spots) {
+              if (fy === LABEL_UP && (it.unit || typeof it.up !== 'number')) continue;
+              const offsetX = bx + fx * form.w;
+              const offsetY = by + (fy === LABEL_UP ? upFor(it, form) : fy * form.h);
+              const rect = { x: form.x + offsetX, y: form.y + offsetY, w: form.w, h: form.h };
+              if (!free(rect, owner, pass === 'any', it)) continue;
+              // On a leader wherever it is far from its feet — or within reach
+              // of them and under no part of its own figure (`tieFor`).
+              const tie = tieOf(it, rect, false, !strict);
+              if (strict && tie && !tie.clear) continue;
+              chosen = spotOf(it, form, offsetX, offsetY, tie);
+              take(it, rect, tie);
+              break;
+            }
+            if (chosen) break;
           }
           if (chosen) break;
         }
@@ -279,6 +388,100 @@ function detached(it, rect) {
   const under = rect.x < it.feet.x + side && rect.x + rect.w > it.feet.x - side;
   const level = rect.y < it.feet.y && rect.y + rect.h > it.feet.y - it.bh;
   return !under && !level;
+}
+
+/**
+ * THE LEADER A NAME SET AT `rect` IS ON, or null where it needs none: it is
+ * within reach of its feet and under, over or beside its own figure. A type a
+ * crew says once (`alts`) is asked of every figure of that type — under any of
+ * them it is that figure's, and its line goes to the nearest one it can reach
+ * without crossing anybody (`leaderFor`).
+ * @param {any} it
+ * @param {{x:number, y:number, w:number, h:number}} rect where it is set
+ * @param {{figures:any[], chrome:any[], names:any[]}} scene what its line may
+ *   not cross: every body drawn but its own; the badges, chips and plates that
+ *   are not its own figure's (`of`); and the names already set
+ * @param {boolean} always on a leader wherever it is: the second level, and a
+ *   place found by scanning the room
+ * @param {boolean} bend with no straight line clear, give the one that is bent
+ *   round whoever is in the way, or cut short of them
+ * @returns {{line?:number[], clear:boolean}|null} `line` in screen px, for an
+ *   item that says where its figure is (`figure`); `clear`: straight, over nobody
+ */
+function tieFor(it, rect, scene, always, bend) {
+  if (!it.feet) return null;
+  /** @type {{line?:number[], clear:boolean}|null} */
+  let best = null;
+  let rank = Infinity;
+  for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
+    const who =
+      bx === 0 && by === 0 ? it : { ...it, feet: { x: it.feet.x + bx, y: it.feet.y + by } };
+    if (!always && isNear(who, rect) && !detached(who, rect)) return null;
+    if (!it.figure) continue;
+    const own = { ...it.figure, x: it.figure.x + bx, y: it.figure.y + by };
+    const other = (/** @type {any} */ f) =>
+      Math.abs(f.x - own.x) > 0.01 || Math.abs(f.y - own.y) > 0.01;
+    const foreign = (/** @type {any} */ c) => c.of !== it.id;
+    let line = leaderStraight(rect, own);
+    // On its own side of its crew's arc first (`deskSide`), as clear comes first.
+    const clear =
+      !(it.desk && deskSide(rect, who.feet, own, it.desk)) &&
+      !scene.figures.some((f) => other(f) && lineEnters(line, f)) &&
+      !scene.chrome.some((c) => foreign(c) && lineEnters(line, c)) &&
+      !scene.names.some((n) => lineEnters(line, n));
+    if (!clear && !bend) {
+      best = best || { clear: false };
+      continue;
+    }
+    let worse = 0;
+    if (!clear) {
+      const solid = [...scene.chrome.filter(foreign), ...scene.names];
+      const tie = leaderFor(rect, own, [...scene.figures.filter(other), ...solid]);
+      line = tie.line;
+      worse = tie.clear ? 5e5 : line.length > 4 ? 1e6 : 2e6;
+    }
+    let length = 0;
+    for (let i = 0; i + 3 < line.length; i += 2)
+      length += Math.hypot(line[i + 2] - line[i], line[i + 3] - line[i + 1]);
+    // Straight and on its own side, before straight, before bent, before cut
+    // short; the shortest of each.
+    const score = worse + length;
+    if (score < rank) [best, rank] = [{ line, clear }, score];
+  }
+  return best || { clear: true };
+}
+
+/**
+ * From this share of the way between a desk and a figure, the figure is "above"
+ * the desk, or "to one side" of it: a little over twenty degrees off the axis.
+ */
+export const AWAY_SHARE = 0.38;
+
+/**
+ * IS A PLACE ON THE DESK'S SIDE OF A CREW MEMBER? Round an arc every junior
+ * faces the desk it is cabled to, and the floor between a junior and that desk
+ * is where the cables, the lead and the other juniors are. A tag that has to
+ * leave its junior goes to the junior's OWN side of the arc: over the head of
+ * one that sits above the desk, not under its feet; to the right of one on the
+ * right, not back across it. `Junior / general-purpose` was set under the
+ * junior beside its own, directly under that one's tag.
+ *
+ * A preference, like a clear leader: asked of every place first, and given up
+ * only by a name with no other place at all.
+ * @param {{x:number, y:number, w:number, h:number}} rect where the name is set
+ * @param {{x:number, y:number}} feet the member's feet
+ * @param {{h:number}} own its figure
+ * @param {{x:number, y:number}} desk the desk its crew is cabled to, on screen
+ */
+function deskSide(rect, feet, own, desk) {
+  const ax = feet.x - desk.x;
+  const ay = feet.y - desk.y;
+  const far = Math.hypot(ax, ay) || 1;
+  const mx = rect.x + rect.w / 2 - feet.x;
+  const my = rect.y + rect.h / 2 - feet.y;
+  if (ay < -AWAY_SHARE * far && my >= 0) return true;
+  if (ay > AWAY_SHARE * far && my <= -own.h) return true;
+  return Math.abs(ax) > AWAY_SHARE * far && mx * Math.sign(ax) <= -1;
 }
 
 /** How far inside a wall's face a name is set, in screen px: clear of it, not against it. */
@@ -345,14 +548,18 @@ function lastInside(it, form) {
  * @returns {number[][]} offsets from the form's un-offset box
  */
 function roomScan(it, form) {
-  /** @type {number[][]} */
+  /** @type {number[][]} each with how far it is, measured once and not per comparison */
   const out = [];
+  const cx = form.x + form.w / 2 - it.feet.x;
+  const cy = form.y + form.h / 2 - it.feet.y;
   for (let j = -12; j <= 6; j++) {
-    for (let i = -8; i <= 8; i++) out.push([(i * form.w) / 4, (j * form.h) / 2]);
+    for (let i = -8; i <= 8; i++) {
+      const dx = (i * form.w) / 4;
+      const dy = (j * form.h) / 2;
+      out.push([dx, dy, Math.hypot(cx + dx, cy + dy)]);
+    }
   }
-  const far = (/** @type {number[]} */ [dx, dy]) =>
-    Math.hypot(form.x + dx + form.w / 2 - it.feet.x, form.y + dy + form.h / 2 - it.feet.y);
-  return out.sort((a, b) => far(a) - far(b) || a[1] - b[1] || a[0] - b[0]);
+  return out.sort((a, b) => a[2] - b[2] || a[1] - b[1] || a[0] - b[0]);
 }
 
 /** `up` for a smaller form of the same label: the same bottom line over the head. */

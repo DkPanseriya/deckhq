@@ -6,6 +6,44 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The line that ties a name to its robot no longer runs across a robot.** A name that has had to
+  move away from its robot is tied back to it by a thin line, and that line went to the robot's
+  feet through whatever was in between: over a junior's own head and body when its tag was set
+  above it, and across the junior beside it on a crew's arc. The line now ends at the edge of the
+  robot it belongs to and passes over no other robot, badge, count or name. A place whose line
+  would cross one is passed over for the next free place; only a name with no other place has its
+  line bent round whoever is in the way, or cut short. A type that a crew says once, such as
+  `Explore ×2`, is tied to the nearest robot of that type.
+- **Two juniors' tags no longer read as one block.** `Junior / Explore ×2` and
+  `Junior / general-purpose` sat one directly under the other with nothing between them, both on
+  the far side of somebody else. A tag with a **Junior** chip now keeps four pixels of floor over
+  and under itself, and a tag that has to leave its junior goes to that junior's own side of the
+  crew's arc — over the head of one that sits above the desk, to the right of one on the right —
+  before it goes anywhere on the desk's side.
+- **A tool bubble and a thought cloud are no longer drawn one on the other.** The bubble over one
+  robot reached the cloud beside the next, and two neighbours both in a tool drew two bubbles
+  across each other. The bubbles are now set first, each clear of the ones before it, and where
+  that leaves one with no place the bubble in its way is cut shorter. A cloud then goes to the
+  other side of its head when a neighbour's bubble or cloud, or the line that ties a name to its
+  robot, is on its own side, and is not drawn when one is on both.
+- **A name over a robot's head no longer costs it its tool bubble.** A junior whose tag had been
+  set over its own head was given no bubble and no thought cloud, because its own name was where
+  they open. A name over a head now starts above everything that opens there, and the line that
+  ties it to its robot stops at the bubble while one is open. Under somebody else's name — two
+  rows across one desk, zoomed in — the bubble is set beside the name, shortened if it has to be,
+  for as long as its near edge is still over its own body. It is still never over a name.
+- **No room is kept over a lead's head for a hand it has not raised.** Room was kept over every
+  lead with juniors for the raised hand, whether the lead was waiting on you or at work, and the
+  juniors' tags were kept off that floor for nothing. Room is now kept only while the lead draws
+  something there: a raised hand, or an hourglass.
+- **Nothing is drawn over the name on a desk whose lead is away.** When a lead with three or more
+  juniors is benched or has ended, its crew stays cabled to the desk and the desk carries the
+  lead's name on a small plate. Nothing kept clear of that plate, and a junior's tag could be set
+  across it. It is now kept clear of like any other name: by a tag, a thought cloud and a tool
+  bubble.
+
 ## 1.7.1 — 2026-10-11
 
 ### Highlights

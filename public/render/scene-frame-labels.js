@@ -39,11 +39,18 @@ import {
   SELECTION_RING_R,
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
-import { crewChipBoxes } from './crew-draw.js';
-import { abbreviateName, resolveLabelCollisions, WALL_CLEAR_PX } from './label-spots.js';
+import { crewAwayNameBoxes, crewChipBoxes } from './crew-draw.js';
+import {
+  abbreviateName,
+  resolveLabelCollisions,
+  TAG_GAP_PX,
+  WALL_CLEAR_PX,
+} from './label-spots.js';
+import { figureBox, lineUpTo } from './leader-line.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
-import { placeBubbles } from './bubble-spots.js';
+import { bubbleBoxes, overHeadTop, placeBubbles } from './bubble-spots.js';
 import { toolBubbleText } from './rig-bubble.js';
+import { turnIsOpen } from './life.js';
 import { WALL_PX, wallPieces } from './backdrop-floor.js';
 import { U_DEFAULT } from './backdrop-paint.js';
 import { JUNIOR_MARK, bareName, roleWordFor } from '../names.js';
@@ -202,6 +209,22 @@ export function roomFloor(rooms, rec, camera) {
 }
 
 /**
+ * The desk a crew member is cabled to, on screen: the anchor `assignSeats`
+ * wrote on its seat, or its lead's own seat. Nobody outside a formation has one.
+ * @param {any} rec @param {Map<string, any>} byId every record in the frame
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ * @returns {{x:number, y:number}|undefined}
+ */
+function crewDesk(rec, byId, camera) {
+  const seat = rec.targetSeat;
+  if (!seat || seat.crew !== true) return undefined;
+  const at = seat.crewAnchor || byId.get(String(seat.crewOf))?.targetSeat;
+  return at && Number.isFinite(at.x) && Number.isFinite(at.y)
+    ? worldToScreen(at, camera)
+    : undefined;
+}
+
+/**
  * Every obstacle a name must clear this frame, then every name, through the
  * frame's collision pass.
  *
@@ -229,12 +252,18 @@ export function planFrameLabels(ctx, view) {
   for (const rec of records) {
     const s = worldToScreen(rec, camera);
     // The body as it is DRAWN: a junior's is a ladder step smaller (WP-99).
-    const box = characterBox(s.x, s.y, view.uOf ? view.uOf(rec) : charU);
-    obstacles.push({ id: `body:${rec.id}`, ...box, pin: true });
+    const u = view.uOf ? view.uOf(rec) : charU;
+    const box = characterBox(s.x, s.y, u);
+    // `body`: the figure itself, which no name's leader may cross (`leader-line.js`).
+    obstacles.push({ id: `body:${rec.id}`, ...box, pin: true, body: figureBox(s.x, s.y, u) });
     // WP-89 · a crew parent's raised hand is pinned too: §4, a junior's name
     // is never drawn over it. Measured generously — an obstacle may claim
-    // more than it uses.
-    if (view.crewCounts && view.crewCounts.has(rec.id)) {
+    // more than it uses — but only for a hand that is RAISED: the rig draws
+    // an icon over a head for the states that have one (`iconForAgent`), and
+    // a lead at work has none. The box was kept over every lead with
+    // juniors, the same mistake as the box for a chip nobody draws.
+    const lead = view.agentsById.get(rec.id) || rec.agent;
+    if (view.crewCounts && view.crewCounts.has(rec.id) && lead && iconForAgent(lead)) {
       obstacles.push({
         id: `hand:${rec.id}`,
         x: box.x,
@@ -242,6 +271,7 @@ export function planFrameLabels(ctx, view) {
         w: box.w,
         h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
         pin: true,
+        of: rec.id,
       });
     }
   }
@@ -259,11 +289,15 @@ export function planFrameLabels(ctx, view) {
     seatOf: (/** @type {string} */ id) => screenOf.get(String(id))?.targetSeat ?? null,
   };
   for (const chip of crewChipBoxes(ctx, crewView)) obstacles.push({ ...chip, pin: true });
+  // And the name of a lead who is away from its desk, on a plate on that desk
+  // (`crewAwayNameBoxes`): a name, and nothing was keeping clear of it.
+  for (const name of crewAwayNameBoxes(ctx, crewView)) obstacles.push({ ...name, pin: true });
   /** @type {Map<string, number>} the figures drawn under a wait badge, and its top */
   const badged = new Map();
   for (const box of view.badgeBoxes || []) {
-    obstacles.push({ ...box, pin: true });
     const id = /^badge:/.test(String(box.id)) ? String(box.id).slice(6) : '';
+    // `of`: whose it is. A leader to that figure may cross its own badge's slot.
+    obstacles.push({ ...box, pin: true, of: id || undefined });
     const rec = screenOf.get(id);
     if (!rec) continue;
     badged.set(id, box.y);
@@ -280,6 +314,7 @@ export function planFrameLabels(ctx, view) {
         w: box.w,
         h: head - under,
         pin: true,
+        of: id,
       });
     }
   }
@@ -350,12 +385,15 @@ export function planFrameLabels(ctx, view) {
       // On a cushion between two taken ones: the second level (`label-spots.js`).
       lower: !!(rec.targetSeat && rec.targetSeat.nameRow === 1),
       alts,
-      // Over the head, clear of the icon-and-badge slot: where a name goes when
-      // the floor under its feet is a wall, a plate or somebody else's name.
-      up: s.y - u * CHROME_BADGE_U - box.h - box.y,
+      // Over the head, clear of the whole slot over it — the icon, and the
+      // bubble or the cloud that may open there (`overHeadTop`): where a name
+      // goes when the floor under its feet is a wall, a plate or somebody else's.
+      up: s.y - overHeadTop(u) - box.h - box.y,
       // The near ring is measured from here: the feet, the body's height and
       // its half-width, at the scale this figure is drawn at.
       feet: { x: s.x, y: s.y },
+      // Its own body, where a leader to it ends: at its edge, never across it.
+      figure: figureBox(s.x, s.y, u),
       // NEAR IS ONE DISTANCE FOR THE WHOLE FLOOR (WP-99): a lead's body height,
       // whoever the name belongs to. A junior is drawn a ladder step smaller,
       // and measured in its own height the ring round a 12.8 px junior was
@@ -365,36 +403,31 @@ export function planFrameLabels(ctx, view) {
       side: u * SELECTION_RING_R,
       // A two-row tag is as far from its feet as its near row is.
       lift: box.chip ? (box.chip.h + ROLE_CHIP_GAP) / 2 : 0,
+      // And keeps air over its chip and under its name: two tags are two.
+      gap: box.chip ? TAG_GAP_PX : 0,
+      // On a crew's arc, the desk it is cabled to: a tag that has to leave its
+      // junior goes to the junior's own side of the arc, not the desk's.
+      desk: crewDesk(rec, screenOf, camera),
       variants,
     };
     tiers[live ? (isNeedsYouAgent(agent) ? 0 : 1) : 2].push(item);
   }
   const labels = tiers.flat();
   const plan = resolveLabelCollisions([...obstacles, ...labels], view.bounds);
-  // THE CLOUDS, LAST, AND BELOW EVERYTHING ABOVE: a thought cloud goes beside
-  // its head where no name, role chip, wait badge or crew's chip already is —
-  // the other side if its own is taken, and nowhere if both are
-  // (`cloud-spots.js`). Decided here because it is a function of the same
-  // things the names are, so it is laid out when they are and not per frame.
+  // WHAT HANGS OVER A HEAD, LAST, AND BELOW EVERYTHING ABOVE: a tool bubble
+  // and a thought cloud go where no name, role chip, wait badge or crew's chip
+  // already is. Decided here because it is a function of the same things the
+  // names are, so it is laid out when they are and not per frame.
   const taken = [
     ...placedLabelBoxes(labels, plan),
-    ...obstacles.filter((o) => /^(badge|pill|chip):/.test(String(o.id))),
+    ...obstacles.filter((o) => /^(badge|pill|chip|away):/.test(String(o.id))),
   ];
-  const clouds = placeClouds(
-    records.map((rec) => ({
-      id: rec.id,
-      x: at.get(rec.id).x,
-      y: at.get(rec.id).y,
-      u: view.uOf ? view.uOf(rec) : charU,
-    })),
-    taken,
-  );
-  // AND THE TOOL BUBBLES, BY THE SAME RULE (`bubble-spots.js`): a bubble takes
-  // the cloud's place while a tool runs, and is as wide as its line — wide
-  // enough to reach the name of whoever sits at the next chair. Only where one
-  // is drawn at all: the rig's own gate, asked here so the two cannot disagree.
-  const bubbles = placeBubbles(
-    ctx,
+  // THE TOOL BUBBLES FIRST (`bubble-spots.js`): a bubble takes the cloud's
+  // place while a tool runs, and is as wide as its line — wide enough to reach
+  // the name of whoever sits at the next chair, or the bubble over it. Only
+  // where one is drawn at all: the rig's own gate, asked here so the two
+  // cannot disagree.
+  const inTool =
     view.reduced === true || !(Number(view.lod) >= 1)
       ? []
       : records.flatMap((rec) => {
@@ -403,8 +436,47 @@ export function planFrameLabels(ctx, view) {
           if (!text || iconForAgent(agent) || badged.has(String(rec.id))) return [];
           const s = at.get(rec.id);
           return [{ id: rec.id, x: s.x, y: s.y, u: view.uOf ? view.uOf(rec) : charU, text }];
-        }),
-    taken,
+        });
+  const bubbles = placeBubbles(ctx, inTool, taken);
+  const open = bubbleBoxes(ctx, inTool, bubbles);
+  // A name over a head is tied to it through the slot its own bubble opens
+  // in: while one is open the line stops at the bubble, which the bubble's
+  // own trail ties to the head.
+  for (const b of open) {
+    const spot = plan.get(b.id);
+    const s = at.get(b.id);
+    if (!spot || !spot.line) continue;
+    const cut = lineUpTo(spot.line, { x: b.x - s.x, y: b.y - s.y, w: b.w, h: b.h });
+    if (cut) plan.set(b.id, { ...spot, line: cut });
+  }
+  // Every leader, as the box it runs in: a cloud is not opened across one.
+  const ties = labels.flatMap((it) => {
+    const line = plan.get(it.id)?.line;
+    const out = [];
+    for (let i = 0; line && i + 3 < line.length; i += 2) {
+      const [ax, ay, bx, by] = [line[i], line[i + 1], line[i + 2], line[i + 3]];
+      out.push({
+        x: it.feet.x + Math.min(ax, bx) - 0.5,
+        y: it.feet.y + Math.min(ay, by) - 0.5,
+        w: Math.abs(bx - ax) + 1,
+        h: Math.abs(by - ay) + 1,
+      });
+    }
+    return out;
+  });
+  // THEN THE CLOUDS, which yield to all of it (`cloud-spots.js`): beside the
+  // head, on the other side if a name, a leader or a neighbour's bubble is on
+  // its own, and nowhere if one is on both.
+  const clouds = placeClouds(
+    records.map((rec) => ({
+      id: rec.id,
+      x: at.get(rec.id).x,
+      y: at.get(rec.id).y,
+      u: view.uOf ? view.uOf(rec) : charU,
+      thinks: turnIsOpen(view.agentsById.get(rec.id) || rec.agent),
+    })),
+    [...taken, ...ties],
+    open,
   );
   return { plan, texts, roles, obstacles, labels, clouds, bubbles };
 }

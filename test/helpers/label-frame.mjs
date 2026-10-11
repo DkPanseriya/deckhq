@@ -32,6 +32,7 @@ import {
   plateLimit,
   resolveBadgeCollisions,
 } from '../../public/render/scene-labels.js';
+import { figureBox } from '../../public/render/leader-line.js';
 import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
 
@@ -65,6 +66,55 @@ export function drawnBox(item, spot) {
     w: form.w,
     h: form.h,
   };
+}
+
+/**
+ * The leader the rig draws for a name, as the points of a line in screen px:
+ * the pass's own (`spot.line`, offsets from the feet), or — for a spot that
+ * carries none — from the point of the name's box nearest the feet to the feet,
+ * which is what `drawLabel` does with a bare `leader: true`. `null` for a name
+ * with no leader.
+ * @param {any} item @param {any} spot
+ * @returns {number[]|null}
+ */
+export function leaderOf(item, spot) {
+  if (!spot || spot.leader !== true) return null;
+  const { x, y } = item.feet;
+  if (Array.isArray(spot.line)) return spot.line.map((v, i) => v + (i % 2 ? y : x));
+  const box = drawnBox(item, spot);
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  return [clamp(x, box.x, box.x + box.w), clamp(y, box.y, box.y + box.h), x, y];
+}
+
+/**
+ * Every leader of a frame, as the box each of its segments runs in: what a
+ * thought cloud is not opened across (`planFrameLabels`).
+ * @param {any} f a frame from `frameAt`
+ * @returns {{id:string, x:number, y:number, w:number, h:number}[]}
+ */
+export function tiesOf(f) {
+  const out = [];
+  for (const it of f.labels.labels) {
+    const line = leaderOf(it, f.labels.plan.get(it.id));
+    for (let i = 0; line && i + 3 < line.length; i += 2) {
+      const [ax, ay, bx, by] = line.slice(i, i + 4);
+      const at = { x: Math.min(ax, bx) - 0.5, y: Math.min(ay, by) - 0.5 };
+      out.push({ id: `tie:${it.id}`, ...at, w: Math.abs(bx - ax) + 1, h: Math.abs(by - ay) + 1 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Every figure of a frame as the body that is drawn (`figureBox`), by id.
+ * @param {any} f a frame from `frameAt`
+ * @returns {{id:string, x:number, y:number, w:number, h:number}[]}
+ */
+export function figuresOf(f) {
+  return f.records.map((rec) => {
+    const s = worldToScreen(rec, f.camera);
+    return { id: rec.id, ...figureBox(s.x, s.y, f.uOf(rec)) };
+  });
 }
 
 /** The wait badges of a frame, measured and resolved as the floor does it. */

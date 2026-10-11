@@ -318,10 +318,11 @@ export function labelHaloWidth(fontPx, deviceScale = 1) {
  * @param {string} rawLabel
  * @param {number} [offsetY]
  * @param {number} [offsetX] the collision pass's sideways step, 0 for none
- * @param {{px?:number, leader?:boolean, role?:string|null}} [form] the
+ * @param {{px?:number, leader?:boolean, line?:number[], role?:string|null}} [form] the
  *   collision pass's smaller size, and whether the label left its figure's
  *   near ring: a name that moved further draws a 1 px leader from its own edge
- *   to the feet it names. `role` (WP-99): a sub-agent's role word, drawn as a
+ *   to the figure it names, along `line` (`[x0, y0, x1, y1, …]` as offsets from
+ *   the feet, `leader-line.js`) where the pass gave one. `role` (WP-99): a sub-agent's role word, drawn as a
  *   chip over the name — the two rows of one tag
  */
 export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
@@ -342,8 +343,17 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
     ctx.strokeStyle = PALETTE.inkWarm;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(Math.min(Math.max(ox, bx), bx + box.w), Math.min(Math.max(oy, by), by + box.h));
-    ctx.lineTo(ox, oy);
+    // THE PASS'S OWN LINE (`form.line`, `leader-line.js`): to the edge of the
+    // figure, round anybody in its way. A caller with no label pass gets the
+    // old one, straight to the feet.
+    const line = Array.isArray(form.line) && form.line.length >= 4 ? form.line : null;
+    if (line) {
+      ctx.moveTo(ox + line[0], oy + line[1]);
+      for (let i = 2; i + 1 < line.length; i += 2) ctx.lineTo(ox + line[i], oy + line[i + 1]);
+    } else {
+      ctx.moveTo(Math.min(Math.max(ox, bx), bx + box.w), Math.min(Math.max(oy, by), by + box.h));
+      ctx.lineTo(ox, oy);
+    }
     ctx.stroke();
     ctx.globalAlpha = alpha;
   }
@@ -430,7 +440,7 @@ export const REST_LIFE = Object.freeze({
  * @param {import('./clips.js').Pose} pose
  * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
  *   label?:string, labelOffsetY?:number, labelOffsetX?:number, labelPx?:number, labelLeader?:boolean,
- *   labelRole?:string|null, cloudSide?:1|-1|0,
+ *   labelLine?:number[], labelRole?:string|null, cloudSide?:1|-1|0,
  *   icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
@@ -459,7 +469,8 @@ export const REST_LIFE = Object.freeze({
  *   label pass set that bubble — a step aside and the line it has room for —
  *   or `null` where it found no room; omitted, the bubble is centred and whole.
  *   `labelOffsetY`, `labelOffsetX`: screen-px nudges applied to the label only.
- *   `labelPx`, `labelLeader`: the collision pass's smaller size, and its leader line.
+ *   `labelPx`, `labelLeader`, `labelLine`: the collision pass's smaller size, its
+ *   leader, and the line that leader takes (`leader-line.js`).
  *   `labelRole` (WP-99): a sub-agent's role word, the first row of its tag.
  *   `identity` (CONTRACTS-WP15.md §2): project appearance from
  *   `palette.js`'s `identityFor` — the chest badge, its glyph, and the boots.
@@ -620,7 +631,12 @@ export function drawCharacter(ctx, pose, opts) {
   // A name at EVERY level of detail (audit F1): it is held to 11 px whatever
   // the scale, so L0 has no size reason to drop it.
   if (opts.label) {
-    const form = { px: opts.labelPx, leader: opts.labelLeader, role: opts.labelRole };
+    const form = {
+      px: opts.labelPx,
+      leader: opts.labelLeader,
+      line: opts.labelLine,
+      role: opts.labelRole,
+    };
     drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY, opts.labelOffsetX, form);
   }
 
