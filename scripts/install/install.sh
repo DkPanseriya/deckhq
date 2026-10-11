@@ -91,7 +91,7 @@ linux_node_command() {
 
 main() {
     say ''
-    say '  DeckHQ — every AI coding session on your machine, on one office floor.'
+    say '  DeckHQ — an office for your AI coding agents.'
     say '  Local, private, MIT. This installs one npm package and opens a window.'
 
     major=$(node_major)

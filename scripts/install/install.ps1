@@ -101,7 +101,7 @@ function Update-PathFromRegistry {
 
 function Install-Deckhq {
     Write-Host ''
-    Write-Host '  DeckHQ - every AI coding session on your machine, on one office floor.'
+    Write-Host '  DeckHQ - an office for your AI coding agents.'
     Write-Host '  Local, private, MIT. This installs one npm package and opens a window.'
 
     $major = Get-NodeMajor
