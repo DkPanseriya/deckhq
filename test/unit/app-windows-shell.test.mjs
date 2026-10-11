@@ -163,7 +163,7 @@ test('the window keeps to 127.0.0.1, and its profile is under %LOCALAPPDATA%\\De
   for (const s of switches) assert.ok(readme.includes(s), `README.md does not list ${s}`);
 });
 
-test('the workflow builds on windows-latest, publishes nothing, and downloads nothing itself', () => {
+test('the workflow builds on windows-2022, publishes nothing, and downloads nothing itself', () => {
   const yml = read('.github', 'workflows', 'app-windows.yml');
   assert.ok(!yml.includes('\t'), 'YAML takes no tabs');
   const top = yml
@@ -174,7 +174,9 @@ test('the workflow builds on windows-latest, publishes nothing, and downloads no
   assert.match(yml, /^on:\n {2}workflow_dispatch:\n {2}workflow_call:\n/m);
   assert.match(yml, /^permissions:\n {2}contents: read\n/m);
   assert.ok(!/contents: write|id-token|npm publish|gh release/.test(yml));
-  assert.match(yml, /runs-on: windows-latest/);
+  // Pinned: `windows-latest` became an image without NSIS, and the first
+  // build that got as far as the installer stopped there.
+  assert.match(yml, /runs-on: windows-2022/);
 
   const steps = yml
     .split(/\r?\n/)

@@ -32,7 +32,7 @@ ticked, and one entry under `HKCU\…\Uninstall\DeckHQ`. It installs to
 
 ## Building
 
-Windows only. The toolchain is what Windows and GitHub's `windows-latest` runner already have: Node
+Windows only. The toolchain is what Windows and GitHub's `windows-2022` runner already have (pinned: the newer image has no NSIS): Node
 to run the scripts, and `csc.exe` from `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319`, the C# 5
 compiler that is part of the .NET Framework. No SDK, no project file, no package restore.
 

@@ -9,7 +9,8 @@ name: App (Windows)
 #
 # Everything here is `app/windows/`, and app/windows/README.md is the long form.
 # The runner already has the whole toolchain: Node, the .NET Framework C#
-# compiler that is part of Windows, and NSIS. Nothing is installed.
+# compiler that is part of Windows, and NSIS. Nothing is installed. The image
+# is pinned to windows-2022: the one `windows-latest` now names has no NSIS.
 #
 # This file downloads nothing itself. The two downloads the build makes are
 # made by the scripts it runs, each from its publisher and each refused unless
@@ -31,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 20
     defaults:
       run:
