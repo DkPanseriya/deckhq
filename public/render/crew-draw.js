@@ -223,10 +223,8 @@ function strokeFromPort(ctx, view, route, extent, rec) {
  * — over the whole crew, not the drawn part of it (`crewChipText`).
  */
 function drawChip(ctx, view, parentId, members) {
-  const seat = members[0] && members[0].targetSeat;
-  if (seat && seat.crewAway === true) {
-    drawAwayName(ctx, view, parentId, seat.crewAnchor || view.seatOf(parentId));
-  }
+  const away = awayNameOf(view, parentId, members);
+  if (away) plate(ctx, view, away.at, away.text);
   const chip = chipOf(view, parentId, members, false);
   if (chip) plate(ctx, view, chip.at, chip.text, chip.lead);
 }
@@ -313,13 +311,42 @@ const CHIP_CLEAR_U = 0.85;
  * plate on the desk rather than a body in the chair, because the parent is
  * somewhere else on the floor (usually on the reception sofa, waiting on you).
  * Only a name the snapshot carries: none, and nothing is drawn.
+ *
+ * Asked by the painter and by the frame's label pass (`crewAwayNameBoxes`),
+ * like a chip: the plate is a name, and what is kept clear for it is the
+ * plate that is drawn.
+ * @param {any} view @param {string} parentId @param {any[]} members
+ * @returns {{text:string, at:{x:number, y:number}}|null}
  */
-function drawAwayName(ctx, view, parentId, anchor) {
-  if (!anchor) return;
+function awayNameOf(view, parentId, members) {
+  const seat = members[0] && members[0].targetSeat;
+  if (!seat || seat.crewAway !== true) return null;
+  const anchor = seat.crewAnchor || view.seatOf(parentId);
   const parent = view.agentsById.get(parentId);
   const name = parent && (parent.label ?? parent.displayName);
-  if (!name) return;
-  plate(ctx, view, worldToScreen(crewNameAt(anchor), view.camera), String(name));
+  if (!anchor || !name) return null;
+  return { text: String(name), at: worldToScreen(crewNameAt(anchor), view.camera) };
+}
+
+/**
+ * THE BOX OF EVERY AWAY LEAD'S NAME THIS FRAME DRAWS, for the frame's label
+ * pass. It is a name like any other on the floor, and it was the one name
+ * nothing kept clear of: a junior's tag, a thought cloud or a tool bubble
+ * could be set across it.
+ * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
+ * @param {{records:Iterable<any>, agentsById:Map<string,any>, camera:any, charU:number,
+ *   seatOf:(id:string)=>any}} view
+ * @returns {{id:string, x:number, y:number, w:number, h:number}[]} `away:<parent id>`
+ */
+export function crewAwayNameBoxes(ctx, view) {
+  const out = [];
+  for (const [parentId, members] of crewRecords(view.records)) {
+    const away = awayNameOf(view, parentId, members);
+    if (!away) continue;
+    const box = plateBox(ctx, view, away.at, away.text);
+    out.push({ id: `away:${parentId}`, x: box.x, y: box.y, w: box.w, h: box.h });
+  }
+  return out;
 }
 
 /**

@@ -38,6 +38,11 @@
   lead with juniors for the raised hand, whether the lead was waiting on you or at work, and the
   juniors' tags were kept off that floor for nothing. Room is now kept only while the lead draws
   something there: a raised hand, or an hourglass.
+- **Nothing is drawn over the name on a desk whose lead is away.** When a lead with three or more
+  juniors is benched or has ended, its crew stays cabled to the desk and the desk carries the
+  lead's name on a small plate. Nothing kept clear of that plate, and a junior's tag could be set
+  across it. It is now kept clear of like any other name: by a tag, a thought cloud and a tool
+  bubble.
 
 ## 1.7.1 — 2026-10-11
 

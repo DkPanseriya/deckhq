@@ -39,7 +39,7 @@ import {
   SELECTION_RING_R,
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
-import { crewChipBoxes } from './crew-draw.js';
+import { crewAwayNameBoxes, crewChipBoxes } from './crew-draw.js';
 import {
   abbreviateName,
   resolveLabelCollisions,
@@ -289,6 +289,9 @@ export function planFrameLabels(ctx, view) {
     seatOf: (/** @type {string} */ id) => screenOf.get(String(id))?.targetSeat ?? null,
   };
   for (const chip of crewChipBoxes(ctx, crewView)) obstacles.push({ ...chip, pin: true });
+  // And the name of a lead who is away from its desk, on a plate on that desk
+  // (`crewAwayNameBoxes`): a name, and nothing was keeping clear of it.
+  for (const name of crewAwayNameBoxes(ctx, crewView)) obstacles.push({ ...name, pin: true });
   /** @type {Map<string, number>} the figures drawn under a wait badge, and its top */
   const badged = new Map();
   for (const box of view.badgeBoxes || []) {
@@ -417,7 +420,7 @@ export function planFrameLabels(ctx, view) {
   // names are, so it is laid out when they are and not per frame.
   const taken = [
     ...placedLabelBoxes(labels, plan),
-    ...obstacles.filter((o) => /^(badge|pill|chip):/.test(String(o.id))),
+    ...obstacles.filter((o) => /^(badge|pill|chip|away):/.test(String(o.id))),
   ];
   // THE TOOL BUBBLES FIRST (`bubble-spots.js`): a bubble takes the cloud's
   // place while a tool runs, and is as wide as its line — wide enough to reach

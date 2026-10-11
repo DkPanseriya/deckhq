@@ -634,14 +634,18 @@ test('under somebody else’s name a bubble is set beside it, as far as the edge
 
 // ------------------------------------- 6 · a box is kept for a hand that is raised
 
-/** A demo floor whose crew lead is in `state`: `needs_input` raises its hand. */
-function leadIn(name, state) {
+/**
+ * A demo floor whose crew lead is in `state`: `needs_input` raises its hand.
+ * `ack`: `benched` sends it to the Lounge, away from its desk.
+ */
+function leadIn(name, state, ack = 'active') {
   const floor = populationFloor(name);
   const leads = new Set(floor.agents.filter((a) => a.parentId).map((a) => a.parentId));
   for (const a of floor.agents) {
     if (!leads.has(a.id)) continue;
-    Object.assign(a, { ackState: 'active', activityState: state });
+    Object.assign(a, { ackState: ack, activityState: state });
     if (state === 'needs_input') a.needsInputSince = LARGE_NOW - 60_000;
+    if (state === 'for_review') a.reviewSince = LARGE_NOW - 60_000;
   }
   return floor;
 }
@@ -676,4 +680,62 @@ test('a box is kept over a crew lead for the hand it raises, and for no hand tha
     }
   }
   assert.ok(seen.raised >= 4 && seen.down >= 4, JSON.stringify(seen));
+});
+
+// ------------------------------ 7 · the name of a lead who is away is not drawn over
+
+test('the plate that names a lead away from its desk is kept clear: no name, cloud or bubble is on it', () => {
+  let plates = 0;
+  // No demo floor has one as it stands: a lead waiting on its crew sits at its
+  // desk (WP-99). So the lead is benched — it is in the Lounge — and its crew
+  // stays cabled to the desk, which carries its name.
+  for (const name of ['crew', 'lead', 'crew-waiting']) {
+    for (const [w, h, zoom] of [
+      [1420, 690, 1],
+      [1600, 869, 1],
+      [2000, 1024, 1],
+      [1600, 869, 2.5],
+    ]) {
+      for (const busy of [false, true]) {
+        const floor = () => {
+          const made = leadIn(name, 'for_review', 'benched');
+          for (const a of made.agents) {
+            if (busy && a.activityState === 'working')
+              a.currentTool = { name: 'Bash', summary: 'Bash npm test' };
+          }
+          return made;
+        };
+        const f = frameAt(w, h, floor, { badges: true, zoom });
+        const where = `${name} ${w}x${h} x${zoom}${busy ? ', in a tool' : ''}`;
+        // What the painter draws that is not a chip: the lead's name, on its crew's desk.
+        const drawn = platesDrawn(f, false).filter((p) => !/^\+\d+|working$/.test(p.text));
+        const boxes = f.labels.obstacles.filter((o) => /^away:/.test(o.id));
+        assert.equal(boxes.length, drawn.length, `${where}: plates drawn and boxes kept`);
+        for (const p of drawn) {
+          plates++;
+          const box = boxes.find(
+            (b) =>
+              Math.abs(b.x - p.x) < 0.01 &&
+              Math.abs(b.y - p.y) < 0.01 &&
+              Math.abs(b.w - p.w) < 0.01 &&
+              Math.abs(b.h - p.h) < 0.01,
+          );
+          assert.ok(box, `${where}: no box is kept where "${p.text}" is drawn`);
+          const names = f.labels.labels
+            .filter((it) => f.labels.plan.get(it.id))
+            .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
+          const on = names.find((n) => hits(n, p));
+          assert.equal(on, undefined, `${where}: ${f.labels.texts.get(on?.id)} is on "${p.text}"`);
+          for (const rec of f.records) {
+            const s = worldToScreen(rec, f.camera);
+            const side = f.labels.clouds.get(rec.id);
+            if (side)
+              assert.ok(!hits(cloudBox(s.x, s.y, f.uOf(rec), side), p), `${where}: a cloud`);
+          }
+          for (const b of bubblesOf(f)) assert.ok(!hits(b, p), `${where}: a bubble is on it`);
+        }
+      }
+    }
+  }
+  assert.ok(plates >= 8, `these floors name a lead on its desk: ${plates}`);
 });
