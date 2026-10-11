@@ -614,16 +614,33 @@ test('a band whose picture is absent is left out of the build', async () => {
   assert.equal(resolveOptional(kept), 'a\n<p>kept</p>\nb\n');
 });
 
-test('no picture the site serves is wider than the hero at twice its size', async () => {
+test('no picture is wider than it is for: 2400 px, and 3840 for the largest file of a still', async () => {
   // 2400 px: the widest column on the site is 1200 CSS pixels, doubled for a
-  // dense screen, and never more. The size is read from the file's own header.
+  // dense screen. That was the ceiling on every file until 11 October 2026;
+  // it still is on the pair and on every video. The third file of a still,
+  // `@3x`, is for a screen with more than two device pixels to one, and goes
+  // to 3840: the width of a 4K screen. The size is read from the file itself.
   const { imageSize } = await import('../../site/build.mjs');
   let checked = 0;
+  let large = 0;
+  let widest = 0;
   for (const image of walk(path.join(out, 'media'), PICTURES)) {
     const size = imageSize(image);
     const where = `media/${path.basename(image)}`;
     assert.ok(size, `${where} is not a picture this build can measure`);
     checked++;
+    if (image.endsWith('@3x.png')) {
+      large++;
+      widest = Math.max(widest, size.width);
+      assert.ok(size.width <= 3840, `${where} is ${size.width} px wide`);
+      // It is worth a file of its own, and is the same picture as the pair.
+      const dense = imageSize(image.replace('@3x.png', '@2x.png'));
+      assert.ok(dense, `${where} has no @2x file beside it`);
+      assert.ok(size.width >= dense.width * 1.25, `${where} is barely larger than its @2x file`);
+      const shape = (s) => s.width / s.height;
+      assert.ok(Math.abs(shape(size) / shape(dense) - 1) < 0.005, `${where} is another shape`);
+      continue;
+    }
     assert.ok(size.width <= 2400, `${where} is ${size.width} px wide`);
     // A plain file beside a dense one is exactly half of it.
     if (image.endsWith('@2x.png')) {
@@ -633,6 +650,44 @@ test('no picture the site serves is wider than the hero at twice its size', asyn
     }
   }
   assert.ok(checked > 30, 'expected the site to carry pictures');
+  assert.ok(large >= 15, `expected most stills to have a largest file; found ${large}`);
+  assert.equal(widest, 3840, 'no still reaches 3840 px');
+});
+
+test('SHARP: the largest file is offered by width, and never to a phone', async () => {
+  const { imageSize } = await import('../../site/build.mjs');
+  let offered = 0;
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    // Every mention of a largest file is in one place: a `<source>` that
+    // applies from 40rem up, straight before the `<img>` it is the same
+    // picture as. The `<img>` keeps the pair, so under 40rem nothing changes.
+    const mentions = (html.match(/@3x\.png/g) ?? []).length;
+    const sources = [
+      ...html.matchAll(
+        /<picture>(?:<source media="\(max-width: 39\.99rem\)"[^>]*>)?<source media="\(min-width: 40rem\)" srcset="([^"]+)" sizes="([^"]+)" width="(\d+)" height="(\d+)" \/><img\b[^>]*\ssrc="(media\/[\w-]+)\.png"[^>]*><\/picture>/g,
+      ),
+    ];
+    assert.equal(sources.length, mentions, `${where} names a largest file somewhere else`);
+    for (const [, srcset, sizes, width, height, src] of sources) {
+      offered++;
+      const plain = imageSize(path.join(out, `${src}.png`));
+      const big = imageSize(path.join(out, `${src}@3x.png`));
+      assert.ok(plain && big, `${where}: ${src} is missing a file`);
+      // Each file is named with the width it really is, smallest first, so a
+      // browser takes the smallest that fills the room the picture has.
+      assert.equal(
+        srcset,
+        `${src}.png ${plain.width}w, ${src}@2x.png ${plain.width * 2}w, ${src}@3x.png ${big.width}w`,
+      );
+      // And the room it has is never claimed to be more than the plain file's
+      // width in CSS pixels, so two device pixels to one is still the `@2x`.
+      assert.equal(sizes, `(max-width: ${plain.width}px) 100vw, ${plain.width}px`);
+      assert.equal(`${width}x${height}`, `${plain.width}x${plain.height}`, `${where}: ${src}`);
+    }
+  }
+  assert.ok(offered >= 15, `expected the pages to offer their largest files; found ${offered}`);
 });
 
 /* ------------------------------------------------------------------ WP-94b */
@@ -766,7 +821,7 @@ test('WEIGHT: no page costs more than its budget, read to the bottom', async () 
   const { PAGES, BUDGET, pageWeight } = await import('../../site/build.mjs');
   assert.ok(BUDGET.page.default <= 3 * 1024 * 1024, 'the page budget was raised');
   // The home page was held to 2.5 MB while its two loops were GIFs. As video
-  // at sixty frames a second and twice the width it measures 2977 KB, and it
+  // at sixty frames a second and twice the width it measures 2957 KB, and it
   // is held to what every other page is (11 October 2026).
   assert.ok(BUDGET.page['index.html'] <= 3 * 1024 * 1024, 'the home budget was raised');
   for (const page of PAGES) {
@@ -1330,7 +1385,7 @@ test('what a reader downloads before scrolling the home page', async () => {
   // GIF, 1140 pixels wide at 25 frames a second in 256 colours. The owner
   // asked for sixty frames a second. As H.264 at 2400 pixels the walk is
   // 586 KB, which is the least Chrome's encoder writes it in without
-  // softening it, and the first view measures 797 KB.
+  // softening it, and the first view measures 798 KB.
   const { BUDGET, pageWeight } = await import('../../site/build.mjs');
   assert.ok(BUDGET.firstView <= 850 * 1024, 'the first-view budget was raised');
   const bytes = pageWeight(out, 'index.html', { dpr: 2, all: false });

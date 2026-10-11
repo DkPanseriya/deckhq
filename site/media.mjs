@@ -12,6 +12,9 @@
  *   - a still comes as a pair, `name.png` and `name@2x.png`, and the page gets
  *     a `srcset` naming both, so a dense screen is sharp and an ordinary one
  *     downloads half the pixels;
+ *   - a still that can be drawn larger has a third file, `name@3x.png`, up to
+ *     3840 pixels wide. It is offered by width, to screens wider than a phone,
+ *     so only a screen with more than two device pixels to one is sent it;
  *   - a loop is a video at sixty frames a second, `name.mp4`, played over its
  *     own first frame, which is a still like any other. The still is what the
  *     page lays out, what a screen reader is told about, and all a reader who
@@ -24,6 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { inspectMp4 } from '../scripts/lib/mp4-mux.mjs';
+import { largeWidth } from '../scripts/lib/site-still.mjs';
 import { placeholderFor } from './placeholder.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -44,7 +48,7 @@ export const BUDGET = {
   /**
    * A whole page read to the bottom on a dense screen, loops included. The
    * home page was held to 2.5 MB while its two loops were GIFs at 25 frames a
-   * second; as video at 60, twice as wide, it measures 2977 KB.
+   * second; as video at 60, twice as wide, it measures 2957 KB.
    */
   page: { 'index.html': 3 * 1024 * 1024, default: 3 * 1024 * 1024 },
   /**
@@ -52,9 +56,9 @@ export const BUDGET = {
    * first frame and the whole of the hero's video. It was 600 KB, when the
    * hero was a 385 KB GIF, 1140 pixels wide at 25 frames a second. The video
    * is 586 KB at 2400 pixels and 60 frames a second, which is as light as
-   * Chrome's encoder makes it without softening it, and it measures 797 KB.
+   * Chrome's encoder makes it without softening it, and it measures 798 KB.
    * The picture is on the page sooner than it was: its first frame and
-   * everything before it are 211 KB of that, and the video plays over it as
+   * everything before it are 212 KB of that, and the video plays over it as
    * it arrives.
    */
   firstView: 850 * 1024,
@@ -83,6 +87,7 @@ export function declaredMedia() {
   for (const asset of manifest.assets) {
     names.add(`${asset.name}.png`);
     if (!asset.single) names.add(`${asset.name}@2x.png`);
+    if (largeWidth(asset)) names.add(`${asset.name}@3x.png`);
     if (asset.kind === 'loop') names.add(`${asset.name}.mp4`);
   }
   return names;
@@ -128,6 +133,9 @@ export function imageSize(file) {
 /** The width under which a page shows a picture's closer crop, where it has one. */
 export const NARROW = '(max-width: 39.99rem)';
 
+/** Everything wider than that: where a still's largest file may be offered. */
+export const WIDE = '(min-width: 40rem)';
+
 /** The readers a loop is played for: the ones who did not ask for less motion. */
 export const MOTION = '(prefers-reduced-motion: no-preference)';
 
@@ -136,6 +144,9 @@ const attr = (tag, name) => (tag.match(new RegExp(`\\s${name}="([^"]*)"`)) ?? [n
 
 /** `media/hero.png` -> `media/hero@2x.png` */
 const dense = (src) => src.replace(/\.png$/, '@2x.png');
+
+/** `media/hero.png` -> `media/hero@3x.png`, the largest file a still can have. */
+const large = (src) => src.replace(/\.png$/, '@3x.png');
 
 /**
  * Drop every `<!-- if media/x -->…<!-- endif -->` block whose picture is not
@@ -183,6 +194,7 @@ export function publishMedia(outDir, files) {
   for (const file of files) {
     if (file.endsWith('.gif')) wanted.add(file.replace(/\.gif$/, '.png'));
     else if (declared.has(dense(file))) wanted.add(dense(file));
+    if (declared.has(large(file))) wanted.add(large(file));
     if (loopOf(file, loops)) wanted.add(`${loopOf(file, loops)}.mp4`);
   }
   let bytes = 0;
@@ -248,14 +260,28 @@ export function dressImages(body, outDir, tones = {}) {
     // whole window would be a thumbnail. It becomes a `<source>` with its own
     // size, so the page holds the right room for whichever one is shown.
     const narrow = attr(tag, 'data-narrow');
+    // The third file, for a screen wider than a phone with more than two
+    // device pixels to one. Offered by width, so the browser picks the
+    // smallest file that fills the room the picture has: `sizes` says that
+    // room is the plain file's width, or the window when that is narrower.
+    // Under 40rem this source does not apply and the `<img>` offers the pair
+    // it always has, so a phone is never sent the largest file.
+    const largest = pair ? large(src) : '';
+    const big = largest && imageSize(path.join(outDir, largest));
+    const wide = big
+      ? `<source media="${WIDE}" srcset="${src} ${size.width}w, ${dense(src)} ${size.width * 2}w, ` +
+        `${largest} ${big.width}w" sizes="(max-width: ${size.width}px) 100vw, ${size.width}px" ` +
+        `width="${size.width}" height="${size.height}" />`
+      : '';
     if (narrow) {
       const small = imageSize(path.join(outDir, narrow));
       if (!small) throw new Error(`${narrow} is not a picture this build can measure`);
       return (
         `<picture><source media="${NARROW}" srcset="${narrow} 1x, ${dense(narrow)} 2x" ` +
-        `width="${small.width}" height="${small.height}" />${img}</picture>`
+        `width="${small.width}" height="${small.height}" />${wide}${img}</picture>`
       );
     }
+    if (wide) return `<picture>${wide}${img}</picture>`;
     const loop = loopOf(src, loops);
     if (loop) {
       // The video is laid over its own first frame and takes no room of its

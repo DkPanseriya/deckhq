@@ -7,9 +7,13 @@
     "",
     "A crop rectangle is in CSS pixels of the 1600x1000 stage, measured from the",
     "top left of the page. `width` is the width of the `@2x` file; the plain file",
-    "beside it is half that, and the two are what a page's `srcset` names. A loop",
-    "is one video, `name.mp4`, at `width` (twice the width a page shows it at) and",
-    "sixty frames a second, with its first frame beside it as `name.png`.",
+    "beside it is half that, and the two are what a page's `srcset` names. A still",
+    "that can be drawn larger gets a third file, `@3x`, up to 3840 pixels wide and",
+    "never enlarged: four device pixels to one is the most a capture is taken at.",
+    "`\"large\": false` says a picture has none, because only a phone is shown it.",
+    "",
+    "A loop is one video, `name.mp4`, at `width` (twice the width a page shows it",
+    "at) and sixty frames a second, with its first frame beside it as a still.",
     "",
     "Nothing here is a mockup. An asset a fixture cannot reach is reported by the",
     "run and left out of the site; it is never staged by hand."
@@ -43,6 +47,7 @@
         "h": 560
       },
       "width": 1408,
+      "large": false,
       "note": "the hero for a narrow screen: the header, and Your Office under it"
     },
     {
