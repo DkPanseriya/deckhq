@@ -17,7 +17,8 @@
  *     a formation, anchored to the parent's desk or — the parent away — to the
  *     room's primary desk, with the parent's name on it.
  *   - waiting            -> the office, like anyone else.
- *   - ended / benched    -> the lounge, like anyone else.
+ *   - ended              -> on no part of the floor: fired from its place, never
+ *     rested (`junior-hire-fire.test.mjs`). It read "the lounge, like anyone else".
  *
  * Everything is asked of the REAL plan and the REAL seating pass, because the
  * defect was a rule true in `placement()` (a working junior was `desk`) and false
