@@ -69,6 +69,8 @@ const DIMENSION_LABELS = Object.freeze({
 export const LOUNGE_ROW = 'lounge';
 /** The theme's row: the store names a theme's refusal `theme`. */
 export const THEME_ROW = 'theme';
+/** The font's row, where a build has more than one font. */
+export const FONT_ROW = 'font';
 
 /** The disclosure's element id. `scripts/goldens.mjs` opens it by this. */
 export const ADVANCED_ID = 'settings-look-advanced';
@@ -359,6 +361,32 @@ export function createAdvanced(ctx) {
     drawRefusals(host, THEME_ROW);
   }
 
+  /** Is there a font to choose? Only where the build carries more than one. @param {any} c */
+  const hasFonts = (c) => Boolean(c.FONT_PICKER) && c.FONT_PICKER.options.length > 1;
+
+  /**
+   * THE FONT the floor's text is set in (`render/floor-type.js`), as a row —
+   * drawn ONLY where there is more than one to choose from. Today there is one,
+   * the machine's own, so there is no row: a control with one answer is noise.
+   * @param {any} host @param {any} c @param {any} current
+   */
+  function renderFont(host, c, current) {
+    if (!hasFonts(c)) return;
+    const radios = parts.radioGroup({
+      name: FONT_ROW,
+      label: c.FONT_PICKER.label,
+      className: 'lookbar-seg settings-look-seg',
+      itemClass: 'lookbar-seg-btn',
+      options: c.FONT_PICKER.options.map((/** @type {any} */ o) => ({ id: o.id, label: o.label })),
+      value: String(current.font),
+      onChange: (next) => void store.choosePath(c.FONT_PICKER.path, next, FONT_ROW),
+    });
+    const note = 'The typeface every name, count and timer on the floor is set in.';
+    const row = widgets.row(host, c.FONT_PICKER.label, radios, note);
+    row.className += ' settings-row--stack';
+    drawRefusals(host, FONT_ROW);
+  }
+
   /** @param {any} host @param {any} c @param {any} current */
   function renderLoungeKit(host, c, current) {
     const group = el('div', 'picker settings-choice settings-look-chips settings-look-bays');
@@ -435,6 +463,7 @@ export function createAdvanced(ctx) {
       ...advancedGroups(c).flatMap((g) => g.pickers.map((/** @type {any} */ p) => p.id)),
       LOUNGE_ROW,
       THEME_ROW,
+      ...(hasFonts(c) ? [FONT_ROW] : []),
     ];
   }
 
@@ -503,6 +532,7 @@ export function createAdvanced(ctx) {
       );
       const inner = el('div', 'settings-look-sub-body');
       if (group.id === 'rooms') renderTheme(inner);
+      if (group.id === 'rooms') renderFont(inner, c, current);
       for (const picker of group.pickers) renderPicker(inner, c, current, picker);
       if (group.id === 'furniture') renderLoungeKit(inner, c, current);
       sub.appendChild(inner);

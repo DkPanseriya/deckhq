@@ -383,14 +383,16 @@ test('COLOUR DISCIPLINE: the accent sets no text anywhere', () => {
 });
 
 test('the needs-you numeral is the display element, and calm at zero', () => {
-  // GUI/UX spec §2.4, the one measurement this package is judged on: 44px of
-  // JetBrains Mono in --ink, dropping to --muted and losing its weight at
-  // zero, because a cleared queue should not read like a scoreboard.
+  // GUI/UX spec §2.4, the one measurement this package is judged on: 44px in
+  // --ink, dropping to --muted and losing its weight at zero, because a
+  // cleared queue should not read like a scoreboard. Its face is the NUMERIC
+  // role — a family whose figures are tabular — where it was a monospace the
+  // product never shipped (`render/floor-type.js`, the same three roles).
   const rules = readRules();
   const numeral = rules.find((r) => r.selector === '.numeral-v');
   assert.ok(numeral, '.numeral-v is gone; the display numeral is the product');
   assert.equal(fontSizePx(numeral.body), 44);
-  assert.match(numeral.body, /font-family:\s*var\(--font-mono\)/);
+  assert.match(numeral.body, /font-family:\s*var\(--font-num\)/);
   assert.match(numeral.body, /font-variant-numeric:\s*tabular-nums/);
   assert.match(numeral.body, /color:\s*var\(--ink\)/);
 

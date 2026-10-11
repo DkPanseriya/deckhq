@@ -90,11 +90,33 @@ import {
   ZONE_HUES,
 } from './look-ambience.js';
 import { PRESET_DEFS } from './look-presets.js';
+import { DEFAULT_FONT, FONT_FAMILIES, FONT_IDS } from './floor-type.js';
 
 // G6a's three tables — the light, the partitions, the room tint — are
 // `look-ambience.js`, for the reason below and re-exported for the same one.
 export { LIGHT_MOODS, LIGHT_MOOD_IDS, PARTITION_STYLES, PARTITION_STYLE_IDS };
 export { ROOM_TINTS, ROOM_TINT_IDS, ZONE_HUES };
+export { DEFAULT_FONT, FONT_IDS };
+
+/**
+ * THE FONT the floor's text is set in (`floor-type.js`): one value today,
+ * `system`, the machine's own UI face. The key exists so that a bundled
+ * family is one more entry in `FONT_FAMILIES` and a look can name it.
+ *
+ * NOT ONE OF `ALL_LOOK_PICKERS`: that table is the floor's MATERIALS and its
+ * count is published. A surface draws this row only where there is more than
+ * one font to choose from — so today no surface draws it.
+ * @type {Readonly<{id:string, label:string, path:string,
+ *   options:ReadonlyArray<{id:string, label:string}>}>}
+ */
+export const FONT_PICKER = Object.freeze({
+  id: 'font',
+  label: 'Font',
+  path: 'font',
+  options: Object.freeze(
+    FONT_IDS.map((id) => Object.freeze({ id, label: FONT_FAMILIES[id].label })),
+  ),
+});
 
 // §1.a's nine materials and four zones live in `look-materials.js` — the table
 // alone is a third of the catalogue and put this file over WP-22's ceiling.
@@ -620,6 +642,7 @@ export const LOOK_OFFERED_OPTION_COUNT = optionsIn(LOOK_PICKERS) + LOUNGE_KIT_BA
  * @property {string} light       a key of `LIGHT_MOODS`
  * @property {string} partitions  a key of `PARTITION_STYLES`
  * @property {string} roomTint    a key of `ROOM_TINTS`
+ * @property {string} font        a key of `FONT_FAMILIES` (`floor-type.js`)
  */
 
 /**
@@ -662,6 +685,7 @@ export const DEFAULT_LOOK = Object.freeze({
   light: DEFAULT_LIGHT,
   partitions: DEFAULT_PARTITIONS,
   roomTint: DEFAULT_ROOM_TINT,
+  font: DEFAULT_FONT,
 });
 
 /**
@@ -820,6 +844,9 @@ export function normalizeLook(look) {
     light: one(raw.light, LIGHT_MOOD_IDS, DEFAULT_LOOK.light),
     partitions: one(raw.partitions, PARTITION_STYLE_IDS, DEFAULT_LOOK.partitions),
     roomTint: one(raw.roomTint, ROOM_TINT_IDS, DEFAULT_LOOK.roomTint),
+    // Absent is `system`, for the same reason: a look saved before the floor's
+    // type was a choice is set in the face it always was.
+    font: one(raw.font, FONT_IDS, DEFAULT_LOOK.font),
   };
 }
 

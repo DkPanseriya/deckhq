@@ -97,8 +97,26 @@
   --t-fast: 120ms ease;
   --t-med: 200ms ease;
 
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* TYPE. Three family roles, the same three the floor's text is set in
+     (`render/floor-type.js`, whose `system` font these lists repeat): the
+     SANS for names and sentences, the NUMERIC for anything that is mostly
+     figures and changes while you watch — a family whose own figures are
+     tabular — and the MONO only where the text is code: a command, a path, a
+     key. No face here needs a file: the two this sheet used to name first
+     were never shipped, so most machines were already drawing what came next.
+     A bundled family is one change here and one in `FONT_FAMILIES`. */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-num: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Mono', SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+  /* …and the weights a role may take, so a heading in the header, the strip
+     and the panel is the same heading. */
+  --weight-body: 400;
+  --weight-label: 600;
+  --weight-strong: 700;
+  /* A small capital label over a figure: a word, so it is the sans, tracked. */
+  --track-label: 0.08em;
+  --track-tight: -0.012em;
 }
 
 * {
@@ -342,16 +360,17 @@ button {
   min-width: 3.4rem;
 }
 .numeral-v {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 44px;
-  font-weight: 700;
+  font-weight: var(--weight-strong);
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 .numeral-k {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-label);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -387,16 +406,17 @@ button {
   gap: 0.4rem;
 }
 .breakdown-v {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   color: var(--ink);
   min-width: 1.4ch;
   text-align: right;
 }
 .breakdown-k {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: var(--weight-label);
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -670,7 +690,7 @@ button {
 }
 .lookbar-label {
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
   color: var(--ink);
 }
 .lookbar-note {
@@ -678,7 +698,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-size: 0.66rem;
   color: var(--muted);
@@ -1301,7 +1321,8 @@ button {
 .panel-title {
   margin: 0;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
+  letter-spacing: var(--track-tight);
   line-height: 1.3;
   flex: 1 1 auto;
   overflow-wrap: anywhere;
@@ -3452,7 +3473,8 @@ button {
 }
 
 .strip-when {
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
+  font-weight: var(--weight-label);
   font-variant-numeric: tabular-nums;
   font-size: 0.72rem;
   color: var(--ink);
@@ -3468,7 +3490,7 @@ button {
 }
 .strip-who {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--weight-label);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -3576,9 +3598,9 @@ button {
   flex: 1 1 auto;
   margin: 0;
   font-size: 0.86rem;
-  font-weight: 600;
+  font-weight: var(--weight-label);
   color: var(--ink);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--track-tight);
 }
 /* The shortcut is IN the title, not in a tooltip: a way out nobody can see is
    not a way out. */

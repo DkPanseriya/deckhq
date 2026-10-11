@@ -16,6 +16,15 @@
 
 ### Changed
 
+- **Every name on the floor reads, in every light and every style.** On the night shift an agent's
+  name was white inside a white outline. A name's ink and the outline round it are now chosen
+  together from the floor it is on, as are a tool's bubble and the figures on a wait badge, and all
+  of it is measured: four lights by eleven styles, every kind of floor text at 4.5:1 or better
+  against what is behind it.
+- **The floor's type is one system.** Room plates are set in the interface's own sans at a
+  confident weight with no outline, where they were a bold monospace; waits, counts and spend are
+  in a face whose figures line up, on the floor and in the header alike. No font is downloaded
+  and none is bundled: a look now carries a `font`, with one value, `system`.
 - **The Look panel is shorter, and it is in the order you reach for things.** Agent size, Light,
   Style, Density and Room colours — five controls where there were six, in a panel that fits a
   laptop's screen. **Theme and Light are one control, Light**, with four choices: Default, Morning,
