@@ -89,7 +89,8 @@ test('the shell is C# 5, the language of the compiler that ships with Windows', 
   }
   assert.equal(fourPartVersion('1.7.1'), '1.7.1.0');
   assert.equal(fourPartVersion('2.0.0-rc.1'), '2.0.0.0');
-  assert.match(assemblyInfo('1.7.1'), /AssemblyCompany\("Darshak Panseriya"\)/);
+  assert.match(assemblyInfo('1.7.1'), /AssemblyCompany\("DeckHQ"\)/);
+  assert.match(assemblyInfo('1.7.1'), /Copyright \(c\) Darshak Panseriya/);
 });
 
 test('the shell reads the lines the CLI really prints', async () => {

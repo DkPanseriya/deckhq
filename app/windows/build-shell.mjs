@@ -33,7 +33,16 @@ export const ICON_FILE = path.join(BUILD_DIR, 'DeckHQ.ico');
 /** The sizes Windows asks an application icon for, title bar to Start Menu tile. */
 export const ICON_SIZES = [16, 32, 48, 64, 128, 256];
 
-export const PUBLISHER = 'Darshak Panseriya';
+/**
+ * Who Windows names beside the app: in Installed apps, in the file's
+ * properties. The product, because that is what a person installed. It is
+ * free text while the build is unsigned; a signed build shows the name on the
+ * certificate instead, whatever this says.
+ */
+export const PUBLISHER = 'DeckHQ';
+
+/** Whose work it is. A copyright line names a person or a company, never a product. */
+export const COPYRIGHT_HOLDER = 'Darshak Panseriya';
 
 /** The mark as one multi-size ICO, from the PNGs the package already ships. */
 export function makeIcon() {
@@ -68,7 +77,7 @@ export function assemblyInfo(version) {
     '[assembly: AssemblyProduct("DeckHQ")]',
     '[assembly: AssemblyDescription("An office for your AI coding agents")]',
     `[assembly: AssemblyCompany("${PUBLISHER}")]`,
-    `[assembly: AssemblyCopyright("MIT License. Copyright (c) ${PUBLISHER}")]`,
+    `[assembly: AssemblyCopyright("MIT License. Copyright (c) ${COPYRIGHT_HOLDER}")]`,
     `[assembly: AssemblyVersion("${four}")]`,
     `[assembly: AssemblyFileVersion("${four}")]`,
     `[assembly: AssemblyInformationalVersion("${version}")]`,

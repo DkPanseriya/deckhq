@@ -33,7 +33,8 @@ SetCompressor /SOLID lzma
 !endif
 
 !define APP_NAME "DeckHQ"
-!define PUBLISHER "Darshak Panseriya"
+!define PUBLISHER "DeckHQ"
+!define COPYRIGHT_HOLDER "Darshak Panseriya"
 !define HOMEPAGE "https://deckhq.dev"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\DeckHQ"
 ; The name DeckHQ.exe holds while it is open (shell\Paths.cs, InstanceName).
@@ -53,7 +54,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "FileDescription" "DeckHQ Setup"
 VIAddVersionKey "CompanyName" "${PUBLISHER}"
-VIAddVersionKey "LegalCopyright" "MIT License. Copyright (c) ${PUBLISHER}"
+VIAddVersionKey "LegalCopyright" "MIT License. Copyright (c) ${COPYRIGHT_HOLDER}"
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"

@@ -19,7 +19,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const read = (...parts) => fs.readFileSync(path.join(REPO, ...parts), 'utf8');
 
 const { nsisFileLists } = await import('../../app/windows/lib/nsis-lists.mjs');
-const { PUBLISHER } = await import('../../app/windows/build-shell.mjs');
+const { PUBLISHER, COPYRIGHT_HOLDER } = await import('../../app/windows/build-shell.mjs');
 
 const nsi = read('app', 'windows', 'installer.nsi');
 /** The script without its `;` comments, so a rule in prose is not mistaken for code. */
@@ -97,7 +97,11 @@ test('the installer writes the Start Menu entry, the asked-for Desktop one, and 
     /!define UNINSTALL_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DeckHQ"/,
   );
   assert.ok(code.includes(`!define PUBLISHER "${PUBLISHER}"`));
-  assert.equal(PUBLISHER, 'Darshak Panseriya');
+  // The publisher is the product; the copyright line still names the person.
+  assert.equal(PUBLISHER, 'DeckHQ');
+  assert.equal(COPYRIGHT_HOLDER, 'Darshak Panseriya');
+  assert.ok(code.includes(`!define COPYRIGHT_HOLDER "${COPYRIGHT_HOLDER}"`));
+  assert.ok(code.includes('Copyright (c) ${COPYRIGHT_HOLDER}'));
   for (const value of [
     'DisplayName',
     'DisplayVersion',
