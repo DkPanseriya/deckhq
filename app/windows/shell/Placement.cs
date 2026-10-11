@@ -13,12 +13,17 @@ namespace DeckHQ.Shell
         private static string StoreFile { get { return Path.Combine(Paths.DataDir, "window.txt"); } }
 
         // First run: 1600x1000, the size `deckhq app` opens at, or as much of
-        // that as the screen has. Later runs: where it was, if that is still
-        // on a screen that exists.
+        // that as the screen has. Those are the page's pixels, so on a display
+        // scaled to 200% the window is twice as many of the screen's. Later
+        // runs: where it was, if that is still on a screen that exists.
         public static void Restore(Form form)
         {
             Rectangle area = Screen.PrimaryScreen.WorkingArea;
-            form.Size = new Size(Math.Min(1600, area.Width), Math.Min(1000, area.Height));
+            float scale = 1f;
+            using (Graphics screen = Graphics.FromHwnd(IntPtr.Zero)) scale = screen.DpiX / 96f;
+            form.MinimumSize = new Size((int)(480 * scale), (int)(360 * scale));
+            form.Size = new Size(
+                Math.Min((int)(1600 * scale), area.Width), Math.Min((int)(1000 * scale), area.Height));
             form.StartPosition = FormStartPosition.CenterScreen;
             try
             {

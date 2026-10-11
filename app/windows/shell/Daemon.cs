@@ -131,6 +131,10 @@ namespace DeckHQ.Shell
                 }
             };
             process.Exited += delegate { settled.Set(); };
+            // "Ignore Ctrl-C" is a per-process switch that children inherit,
+            // and a launcher can leave it on. Stop() below asks the daemon to
+            // close with a Ctrl-C, so it must not be born deaf to one.
+            Native.SetConsoleCtrlHandler(IntPtr.Zero, false);
             process.Start();
             job = Native.CreateKillOnCloseJob();
             if (job != IntPtr.Zero) Native.AssignProcessToJobObject(job, process.Handle);
@@ -164,14 +168,16 @@ namespace DeckHQ.Shell
                 if (!process.HasExited)
                 {
                     bool asked = false;
-                    if (Native.AttachConsole((uint)process.Id))
+                    bool attached = Native.AttachConsole((uint)process.Id);
+                    if (attached)
                     {
                         Native.SetConsoleCtrlHandler(IntPtr.Zero, true);
-                        asked = Native.GenerateConsoleCtrlEvent(Native.CtrlCEvent, 0);
-                        if (asked) asked = process.WaitForExit(StopGraceMs);
+                        bool sent = Native.GenerateConsoleCtrlEvent(Native.CtrlCEvent, 0);
+                        asked = sent && process.WaitForExit(StopGraceMs);
                         Native.FreeConsole();
                         Native.SetConsoleCtrlHandler(IntPtr.Zero, false);
                     }
+                    if (!asked) Log.Write("Ctrl-C did not close the daemon (console attached: " + attached + ")");
                     if (!asked && !process.HasExited)
                     {
                         process.Kill();

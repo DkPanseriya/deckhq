@@ -33,7 +33,6 @@ namespace DeckHQ.Shell
             // The floor's own ground colour (public/index.html, theme-color),
             // so the window does not flash white before the page paints.
             BackColor = Color.FromArgb(0x13, 0x14, 0x19);
-            MinimumSize = new Size(480, 360);
             using (Stream icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("DeckHQ.ico"))
             {
                 if (icon != null) Icon = new Icon(icon);
