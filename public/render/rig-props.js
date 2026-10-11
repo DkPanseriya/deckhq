@@ -10,6 +10,7 @@
  */
 
 import { PALETTE } from './palette.js';
+import { textPaint } from './floor-type.js';
 import {
   TAU,
   OUTLINE,
@@ -17,9 +18,6 @@ import {
   ICON_MIN_PX,
   CHROME_TOP_U,
   CHROME_BUBBLE_U,
-  CLOUD_FILL,
-  CLOUD_EDGE,
-  DOT_COLOR,
 } from './rig-metrics.js';
 import { roundRectFill, _rHx, _rHy, _lHx, _lHy } from './rig-pose.js';
 import { CLOUD_ASIDE_U } from './cloud-spots.js';
@@ -231,7 +229,7 @@ export function drawStallDots(ctx, ox, oy, u, opacity) {
   if (!(opacity > 0.02)) return;
   const prevAlpha = ctx.globalAlpha;
   const cy = oy - u * CHROME_BUBBLE_U;
-  ctx.fillStyle = DOT_COLOR;
+  ctx.fillStyle = textPaint('bubble').ink;
   for (let i = 0; i < 2; i++) {
     ctx.globalAlpha = opacity * (i === 0 ? 0.9 : 0.6);
     ctx.beginPath();
@@ -277,8 +275,8 @@ export function drawDots(ctx, ox, oy, u, opacity, lobes, sway, side = 1) {
   const cy = oy - u * CHROME_BUBBLE_U;
 
   // The trail, rising from beside the head toward the cloud.
-  ctx.fillStyle = CLOUD_FILL;
-  ctx.strokeStyle = CLOUD_EDGE;
+  ctx.fillStyle = /** @type {string} */ (textPaint('bubble').backing);
+  ctx.strokeStyle = PALETTE.plateInkTertiary;
   ctx.lineWidth = Math.max(0.6, u * 0.045);
   const trail = [
     [ox + side * u * 0.5, oy - u * (CHROME_BUBBLE_U - 0.95), u * 0.1],
@@ -307,7 +305,7 @@ export function drawDots(ctx, ox, oy, u, opacity, lobes, sway, side = 1) {
   ctx.stroke();
 
   // Three beats inside the cloud, so it still reads as active thought.
-  ctx.fillStyle = DOT_COLOR;
+  ctx.fillStyle = textPaint('bubble').ink;
   for (let i = -1; i <= 1; i++) {
     ctx.globalAlpha = opacity * (i === 0 ? 0.9 : 0.55);
     ctx.beginPath();

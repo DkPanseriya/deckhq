@@ -13,7 +13,7 @@
 
 import { PALETTE } from './palette.js';
 import { worldToScreen } from './agents.js';
-import { sansFont } from './rig-metrics.js';
+import { typeFont } from './floor-type.js';
 
 /** The smallest and largest the name is set at, in pixels. */
 const LABEL_MIN_PX = 9;
@@ -41,7 +41,7 @@ export function drawWorktreeLabels(ctx, view) {
   if (!benches.length) return;
   const fontPx = Math.max(LABEL_MIN_PX, Math.min(LABEL_MAX_PX, view.charU * 0.36));
   ctx.save();
-  ctx.font = sansFont(fontPx);
+  ctx.font = typeFont('chip', fontPx);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.globalAlpha = 1;

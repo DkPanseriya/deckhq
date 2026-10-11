@@ -43,7 +43,7 @@ import {
 } from './crew.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { worldToScreen } from './agents.js';
-import { sansFont } from './rig-metrics.js';
+import { typeFont } from './floor-type.js';
 import { textWidth } from './text-metrics.js';
 import { laptopBox } from './rig-laptop.js';
 
@@ -360,7 +360,7 @@ export function crewAwayNameBoxes(ctx, view) {
  */
 function plate(ctx, view, at, text, clear) {
   const box = plateBox(ctx, view, at, text, clear);
-  ctx.font = sansFont(box.fontPx);
+  ctx.font = typeFont('chip', box.fontPx);
   ctx.globalAlpha = 1;
   ctx.fillStyle = PALETTE.plateHalo;
   ctx.fillRect(box.x, box.y, box.w, box.h);
@@ -379,7 +379,7 @@ function plate(ctx, view, at, text, clear) {
  */
 function plateBox(ctx, view, at, text, clear) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
-  const w = textWidth(ctx, sansFont(fontPx), text) + fontPx * 0.9;
+  const w = textWidth(ctx, typeFont('chip', fontPx), text) + fontPx * 0.9;
   const h = fontPx * 1.5;
   let x = at.x;
   if (clear) {
