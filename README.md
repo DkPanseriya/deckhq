@@ -157,9 +157,9 @@ A machine with neither Chrome nor Edge gets its default browser, and is told so.
 
 ## Change the look
 
-**Look** in the header, or `L`, opens the six you reach for most: **agent size**, **theme**,
-**style** (eleven presets, Studio oak to Walnut executive), **density**, **light** and **room
-colours**. Settings → Look has the rest: **72 options over fourteen pickers**. A combination that
+**Look** in the header, or `L`, opens the five you reach for most: **agent size**, **light**
+(Default, Morning, Evening or Night shift), **style** (eleven presets, Studio oak to Walnut
+executive, in one row that scrolls sideways), **density** and **room colours**. Settings → Look has the rest: **72 options over fourteen pickers**. A combination that
 would leave a rug unreadable on its floor is **refused with the reason and changes nothing**. A
 look is a file you own, and it names no project, no path and no session, so you can post it:
 `deckhq look export > my-floor.json`, then `deckhq look import my-floor.json`.

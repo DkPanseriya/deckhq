@@ -16,6 +16,13 @@
 
 ### Changed
 
+- **The Look panel is shorter, and it is in the order you reach for things.** Agent size, Light,
+  Style, Density and Room colours — five controls where there were six, in a panel that fits a
+  laptop's screen. **Theme and Light are one control, Light**, with four choices: Default, Morning,
+  Evening and Night shift, each a lighting layer over whichever style is chosen. **The styles are
+  one row that scrolls sideways** instead of three rows of cards. Nothing saved changed: the theme
+  and the daylight are the same two settings they were, both still under Advanced, and a floor
+  set to Blueprint stays Blueprint.
 - **The header says "resting", and it is the Lounge's number.** The third floor count read "9
   benched" over a Lounge whose own plate read "15 resting": the header counted only the sessions
   you had benched, the plate everybody resting there, the benched and the ended together. The

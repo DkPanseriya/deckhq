@@ -1027,7 +1027,7 @@ These are real, and listed here rather than discovered later.
 | `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                    |
 | Drag / scroll       | Pan, whenever the floor is bigger than the window                        |
 
-`L` opens what the **Look** button in the header opens: a small panel with the six high-level
+`L` opens what the **Look** button in the header opens: a small panel with the five high-level
 choices — see [Change the look](#change-the-look). `Esc`, `L` again or a click anywhere else closes
 it, and **All look options…** opens the full Look section in Settings. `,` and the gear beside the
 Look button open Settings at the top, where a row of section names — State, Notifications, Resume,
@@ -1157,17 +1157,29 @@ the floor, and this is where each is still a row.
 
 ## Change the look
 
-The **Look** button in the header (`L`) and the top of Settings → Look offer the same six choices,
-and they are the only ones you see until you ask for more:
+The **Look** button in the header (`L`) and the top of Settings → Look offer the same five choices,
+in the same order, and they are the only ones you see until you ask for more:
 
 | Choice           | What it does                                                                        |
 | ---------------- | ----------------------------------------------------------------------------------- |
 | **Agent size**   | Small, Medium, Large, or Auto — Auto picks a size that fits everyone on the floor   |
-| **Theme**        | Default, Night shift or Blueprint. In Settings, pointing at one previews it         |
+| **Light**        | Default, Morning, Evening or Night shift — the time of day the office is lit for    |
 | **Style**        | Eleven presets as pictures: a whole floor — materials, colours, furniture, light    |
 | **Density**      | Calm, Normal or Lively — how many plants and props, moved together                  |
-| **Light**        | Morning, Noon or Evening — where daylight falls from, its colour, how long shadows are |
 | **Room colours** | A switch. Off is Subtle; on is Zoned, a calm colour of its own for every project room |
+
+**Light is a layer over whichever style you chose.** Default is the office at noon; Morning and
+Evening move the sun and the length of the shadows; Night shift is the office after dark, with
+the dark palette that goes with it. What used to be two rows, Theme and Light, are the two
+settings these four are made of, and both are still there under **Advanced** — Theme (Default,
+Night shift, Blueprint, and any a pack adds) and Daylight (Morning, Noon, Evening) — for a pair the
+four do not name. A floor already set to Blueprint stays Blueprint: none of the four is lit, and a
+line beside the control says which theme the floor is in. Nothing you saved, exported or linked
+with `?look=` changed.
+
+In the panel behind the Look button the styles are **one row that scrolls sideways**: the wheel,
+the arrow buttons at its edges or the arrow keys move along it, and it opens with the style you
+are on in view.
 
 A click changes the floor straight away and the choice stays lit. If a choice would leave the floor
 unreadable it is refused: the control stays where it was and the reason is written under it.
@@ -1194,14 +1206,16 @@ the length of shadow its light throws:
 | **Walnut executive** | Fine herringbone and cork in a clay wash, soft seating, evening light          |
 
 A style is a starting point. Change anything after choosing one and the Style row says
-_Daylight studio · edited_; the light, the room colours and the density count as changes too.
+_Daylight studio · edited_; the daylight, the room colours and the density count as changes too.
 
-Under those six, in Settings, is the live preview and then **Advanced**, which is shut until you
+Under those five, in Settings, is the live preview and then **Advanced**, which is shut until you
 open it and stays the way you left it in that browser. It holds everything fine-grained, under
 four headings you can fold away:
 
-- **Walls and room colours** — the **partitions** between rooms: Solid, Glass or Low. The outside
-  wall of the building does not change. And room colours with its third answer, below.
+- **Theme, light and walls** — the **theme** and the **daylight**, which are the two settings the
+  Light control's four choices are made of; the **partitions** between rooms: Solid, Glass or Low
+  (the outside wall of the building does not change); and room colours with its third answer,
+  below.
 - **Floors** — a material for the office, the corridor, the project rooms and the lounge, and the
   colour scheme washed over them.
 - **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each) and
@@ -1250,9 +1264,10 @@ add `?look=night-lab` or `?scale=large` to the address.
 
 The floor comes in three finishes, all free and none of them gated: the default warm office,
 **night shift** — the same office after hours, cooler and dimmer — and **blueprint**, the floor as
-a drawing on a drafting table, in white line work on blue. Pick one from the **Look** button in
-the header (`L`), or in Settings → Look → Theme, where pointing at one repaints the whole window
-so you can see it before you choose it. A theme
+a drawing on a drafting table, in white line work on blue. The **Look** button in the header (`L`) reaches the first two as its Light control —
+Default, Morning and Evening are the warm office at three times of day, Night shift is the second —
+and all three are in Settings → Look → Advanced → Theme, where pointing at one repaints the whole
+window so you can see it before you choose it. A theme
 repaints materials and neutrals and nothing else: **the six state colours never move**, so a
 raised hand is the same amber in every theme and red still means one thing, and every theme is
 measured against the same contrast floors before it can be selected — a theme that failed one

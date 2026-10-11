@@ -45,6 +45,7 @@ import { ADVANCED_GROUPS, advancedGroups, at, withPath } from './look-ui-store.j
  * with no entry here simply has none.
  */
 const PICKER_NOTES = Object.freeze({
+  light: 'Where the daylight falls from, its colour, and how long the shadows are.',
   partitions: 'What stands between two rooms. The outside wall stays as it is.',
   roomTint: 'Zoned gives each project a colour of its own. Off is the bare floor in every room.',
   'floor.office': 'The open floor and reception.',
@@ -66,6 +67,8 @@ const DIMENSION_LABELS = Object.freeze({
 
 /** The lounge kit's row id — it is not a catalogue picker (§1.g). */
 export const LOUNGE_ROW = 'lounge';
+/** The theme's row: the store names a theme's refusal `theme`. */
+export const THEME_ROW = 'theme';
 
 /** The disclosure's element id. `scripts/goldens.mjs` opens it by this. */
 export const ADVANCED_ID = 'settings-look-advanced';
@@ -117,7 +120,18 @@ export function dimensionsFor(picker, cat) {
  * @param {any} picker @param {{label:string}} dimension @param {number} count
  */
 export const groupLabel = (picker, dimension, count) =>
-  count > 1 ? `${picker.label} — ${dimension.label}` : picker.label;
+  count > 1 ? `${rowLabel(picker)} — ${dimension.label}` : rowLabel(picker);
+
+/**
+ * What a picker's row is CALLED in here. The catalogue's own word, with one
+ * exception: the outside of both surfaces has a control called Light — the four
+ * moods, a theme and a light as one choice — so the raw key under it is the
+ * Daylight, which is what it moves: where the sun stands and how long it casts.
+ * @param {{id:string, label:string}} picker
+ */
+export function rowLabel(picker) {
+  return picker.id === 'light' ? 'Daylight' : picker.label;
+}
 
 /**
  * What a chip for this option should be painted with, or `null` for an option no
@@ -308,9 +322,41 @@ export function createAdvanced(ctx) {
       }
     }
     const note = PICKER_NOTES[/** @type {keyof typeof PICKER_NOTES} */ (picker.id)];
-    const row = widgets.row(host, picker.label, group, note);
+    const row = widgets.row(host, rowLabel(picker), group, note);
     row.className += ' settings-row--stack';
     drawRefusals(host, picker.id);
+  }
+
+  /**
+   * THE THEME, in here since the outside's Light control took its place.
+   *
+   * The four moods out there are pairs of this row and the Light row under it;
+   * this is every theme the build has — blueprint, a pack's — for the pair the
+   * four do not name. Drawn only where there is more than one to choose from.
+   * @param {any} host
+   */
+  function renderTheme(host) {
+    const themes = store.themes();
+    if (themes.length < 2) return;
+    const radios = parts.radioGroup({
+      name: THEME_ROW,
+      label: 'Theme',
+      className: 'lookbar-seg settings-look-seg',
+      itemClass: 'lookbar-seg-btn',
+      options: themes.map((/** @type {any} */ theme) => ({
+        id: theme.name,
+        label: theme.name ? `${theme.name[0].toUpperCase()}${theme.name.slice(1)}` : theme.name,
+        title: theme.blurb,
+        parts: [parts.swatchDots(store.swatches(theme))],
+      })),
+      value: store.theme(),
+      onChange: (next) => void store.chooseTheme(next),
+      // Pointing at a theme paints the window in it; only a click stores it.
+      onPreview: (id) => store.previewTheme(id),
+    });
+    const row = widgets.row(host, 'Theme', radios, 'The palette the whole office is painted in.');
+    row.className += ' settings-row--stack';
+    drawRefusals(host, THEME_ROW);
   }
 
   /** @param {any} host @param {any} c @param {any} current */
@@ -388,6 +434,7 @@ export function createAdvanced(ctx) {
     return [
       ...advancedGroups(c).flatMap((g) => g.pickers.map((/** @type {any} */ p) => p.id)),
       LOUNGE_ROW,
+      THEME_ROW,
     ];
   }
 
@@ -413,7 +460,8 @@ export function createAdvanced(ctx) {
     /** @param {{id:string, pickers:any[]}} g */
     const groupRefused = (g) =>
       g.pickers.some((/** @type {any} */ p) => refused(p.id)) ||
-      (g.id === 'furniture' && refused(LOUNGE_ROW));
+      (g.id === 'furniture' && refused(LOUNGE_ROW)) ||
+      (g.id === 'rooms' && refused(THEME_ROW));
 
     const details = disclosure(
       'advanced',
@@ -454,6 +502,7 @@ export function createAdvanced(ctx) {
         groupRefused(group),
       );
       const inner = el('div', 'settings-look-sub-body');
+      if (group.id === 'rooms') renderTheme(inner);
       for (const picker of group.pickers) renderPicker(inner, c, current, picker);
       if (group.id === 'furniture') renderLoungeKit(inner, c, current);
       sub.appendChild(inner);

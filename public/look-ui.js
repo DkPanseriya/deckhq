@@ -216,6 +216,8 @@ export function createLookSection(opts) {
         onPreview: control.id === 'theme' ? (id) => store.previewTheme(id) : undefined,
       });
       widgets.row(host, control.label, seg, control.help);
+      // Said only while the control is somewhere its own options do not name.
+      if (control.hint) host.appendChild(el('p', 'settings-note', control.hint));
     }
     for (const problem of store.refusalsFor(control.id)) {
       host.appendChild(parts.refusalBox(problem, 'settings-look-refusal'));
@@ -288,9 +290,6 @@ export function createLookSection(opts) {
 
   // --------------------------------------------------------------- the whole
 
-  /** The ids of the rows on the outside, as drawn. */
-  const outsideIds = () => outsideControls(store).map((c) => c.id);
-
   /**
    * Draw the section into the sheet, or draw nothing at all.
    * @param {HTMLElement} host
@@ -350,9 +349,10 @@ export function createLookSection(opts) {
   return {
     renderInto,
     store,
-    /** Is the theme one of this section's rows on this build? The sheet's Floor
-     *  section keeps its own Theme row only when it is not. */
-    drawsTheme: () => Boolean(cat()) && outsideIds().includes('theme'),
+    /** Is the theme one of this section's rows on this build? It is under Advanced
+     *  wherever there is more than one; the sheet's Floor section keeps its own
+     *  Theme row only when it is not. */
+    drawsTheme: () => Boolean(cat()) && store.themes().length > 1,
     /** The catalogue pickers on the outside — the rest are under Advanced. */
     outsidePickers: OUTSIDE_PICKER_IDS,
     wire: (/** @type {{render:() => void}} */ o) => {

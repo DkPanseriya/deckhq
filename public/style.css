@@ -745,14 +745,117 @@ button {
    walk. A thumbnail is a picture of four floors, and at six across it is a row
    of colour chips nobody could tell apart — four is as far as it goes. */
 .lookbar-presets {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* ONE ROW THAT SCROLLS SIDEWAYS. Eleven cards wrapped were three rows, and
+     three rows of pictures pushed every control under them off a laptop's
+     screen. The group is the scroller: each card snaps, the scrollbar is
+     hidden because the strip's own fades and arrows say there is more, and
+     the padding keeps a focus ring from being clipped by the scroll box. */
+  display: flex;
   gap: 0.35rem;
+  min-width: 0;
+  padding: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1.6rem;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.lookbar-presets::-webkit-scrollbar {
+  display: none;
+}
+/* The strip: the row, and at whichever edge has more behind it a fade and an
+   arrow. Both are for the eye and the pointer — the keyboard has the group. */
+.lookbar-strip {
+  position: relative;
+  min-width: 0;
+}
+.lookbar-strip::before,
+.lookbar-strip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 2.4rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+.lookbar-strip::before {
+  left: 0;
+  background: linear-gradient(to right, var(--surface), transparent);
+}
+.lookbar-strip::after {
+  right: 0;
+  background: linear-gradient(to left, var(--surface), transparent);
+}
+.lookbar-strip[data-more-before='true']::before,
+.lookbar-strip[data-more-after='true']::after {
+  opacity: 1;
+}
+.lookbar-strip-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0 0.12rem;
+  transform: translateY(-50%);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.lookbar-strip-btn:hover {
+  background: var(--line-2);
+}
+.lookbar-strip-btn--prev {
+  left: 0.15rem;
+}
+.lookbar-strip-btn--next {
+  right: 0.15rem;
+}
+.lookbar-strip[data-more-before='true'] .lookbar-strip-btn--prev,
+.lookbar-strip[data-more-after='true'] .lookbar-strip-btn--next {
+  display: grid;
+}
+/* The two short controls that turn a style, side by side on one line. */
+.lookbar-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+.lookbar-pair .lookbar-row--switch {
+  display: block;
+}
+.lookbar-pair .lookbar-row--switch .lookbar-row-head {
+  margin-bottom: 0.4rem;
+}
+/* Half a popover is not wide enough for a name and its note on one line: the
+   name stays whole, and the switch's own word says what the note would. */
+.lookbar-pair .lookbar-label {
+  white-space: nowrap;
+}
+.lookbar-pair .lookbar-row--switch .lookbar-note {
+  display: none;
+}
+.lookbar-pair .look-switch {
+  min-height: 2.05rem;
 }
 .lookbar-preset {
   display: flex;
+  flex: 0 0 6.1rem;
   flex-direction: column;
   gap: 0.28rem;
+  scroll-snap-align: start;
   min-width: 0;
   padding: 0.22rem 0.22rem 0.28rem;
   background: none;
@@ -1020,13 +1123,6 @@ button {
   }
   .look-hint::before {
     display: none;
-  }
-}
-/* On a phone-width window four cards across are each too narrow for a name;
-   three across is four rows, and the popover scrolls as it already may. */
-@media (max-width: 440px) {
-  .lookbar-presets {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
