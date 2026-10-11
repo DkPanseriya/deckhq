@@ -238,11 +238,12 @@ function head(page) {
   // each the file for the density the screen has. One of the four is fetched.
   const hint = (name, media) =>
     `\n    <link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`;
-  // A page that opens on a loop asks for the loop, or for its first frame when
-  // the reader asked for less motion. One of the two is fetched, never both.
+  // A page that opens on a loop asks for the loop's first frame, at the
+  // density the screen has: it is what the page lays out and what is seen
+  // until the video has a frame of its own, and all there is under reduced
+  // motion. The video is not hinted; the element asks for it.
   const moving = (name) =>
-    `\n    <link rel="preload" as="image" href="media/${name}.gif" media="(prefers-reduced-motion: no-preference)" fetchpriority="high" />` +
-    `\n    <link rel="preload" as="image" href="media/${name}.png" media="(prefers-reduced-motion: reduce)" fetchpriority="high" />`;
+    `\n    <link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, media/${name}@2x.png 2x" fetchpriority="high" />`;
   const preload = page.loop
     ? moving(page.loop)
     : page.preload
@@ -545,6 +546,7 @@ async function serve() {
     '.xml': 'application/atom+xml; charset=utf-8',
     '.png': 'image/png',
     '.gif': 'image/gif',
+    '.mp4': 'video/mp4',
     '.svg': 'image/svg+xml',
   };
   createServer((req, res) => {

@@ -9,8 +9,16 @@
  * machine the goldens photograph), opens it in headless Chrome at a real device
  * pixel ratio of two or more, and writes its file into `--out`. Nothing is
  * drawn by this script: a still is a screenshot of the product, cropped and
- * halved; a recording is the product's own frames, one per step of the clock
- * (`lib/capture-kit.mjs`).
+ * made smaller; a recording is the product's own frames, one per step of the
+ * clock (`lib/capture-kit.mjs`).
+ *
+ * WHAT COMES OUT. A still is written twice: `<name>.png`, 1600 wide, and
+ * `<name>.3840.png` from the same capture. A recording is taken at sixty
+ * frames a second and written as `<name>.mp4`, H.264 at 1920 x 1080, measured
+ * in Chrome after it is written, and as `<name>.gif`, 1600 wide at twenty
+ * frames a second, for the places that play no video. The avatar, the profile
+ * header, the link preview and `see.rare` have a size of their own and are
+ * written at that size only.
  *
  * `--tmp` is where the demo builds its fixture. Without it that is the system
  * temp directory, exactly as `npm run demo` does.
@@ -28,6 +36,7 @@ import { DEMO_EPOCH } from './demo-args.mjs';
 import { fakeId } from './demo-write.mjs';
 import {
   cropImage,
+  describeVideo,
   layout,
   postHook,
   record,
@@ -36,6 +45,7 @@ import {
   withStage,
   writeGif,
   writePng,
+  writeVideo,
 } from './lib/capture-kit.mjs';
 
 const argv = process.argv.slice(2);
@@ -55,6 +65,23 @@ const SETTLE_MS = Number(opt('--settle', 9000));
 const FPS = Number(opt('--fps', 0));
 /** Override a recording's length, for finding out how long something takes. */
 const SECONDS = Number(opt('--seconds', 0));
+/**
+ * A recording is taken at sixty frames a second and written as a video,
+ * 1920 x 1080. No recipe here has a square frame; one that did would be
+ * 1080 x 1080 by the same road.
+ */
+const LOOP_FPS = FPS || 60;
+const LOOP_WIDTH = 1920;
+/**
+ * A still is taken once and written twice: 1600 wide for the post, and 3840
+ * wide beside it, `<name>.3840.png`, for a screen that can show it. So every
+ * capture is 2.4 device pixels to a post's one, where it was two, and a page
+ * that lays captures out is photographed at 2.4 as well.
+ */
+const STILL = 3840;
+const DENSE = STILL / 1600;
+/** A length of a laid-out page, moved to the nearest whole device pixel. */
+const onPixel = (css) => Math.round(css * DENSE) / DENSE;
 
 const say = (line) => process.stdout.write(`${line}\n`);
 
@@ -69,6 +96,21 @@ async function onFloor(opts, fn) {
   } finally {
     await demo.stop();
   }
+}
+
+/**
+ * Write one still at both widths and say so. A capture that came out under
+ * 3840 wide is written at 1600 only and is never enlarged to make the other.
+ */
+function writeStill(name, img, note = '') {
+  const post = writePng(path.join(OUT, `${name}.png`), img, 1600);
+  const wide =
+    img.width >= STILL ? writePng(path.join(OUT, `${name}.${STILL}.png`), img, STILL) : null;
+  say(
+    `${name}.png  ${post.width}x${post.height}` +
+      (wide ? `  + ${name}.${STILL}.png ${wide.width}x${wide.height}` : '  (no 3840 copy)') +
+      note,
+  );
 }
 
 /** The studio ground and the line a capture in a layout is held by (`public/style.css`). */
@@ -107,13 +149,12 @@ const RECIPES = {
     onFloor({ population: 'demo' }, (demo) =>
       // A 1760 x 990 window, not 1600 x 900: below 14 px to the unit the floor
       // folds every wait badge into the office plate, and at 1600 x 900 this
-      // floor fits at 13.2. The ratio is the one that makes 1760 into 3200.
-      withStage({ width: 1760, height: 990, dpr: 3200 / 1760 }, async (stage) => {
+      // floor fits at 13.2. The ratio is the one that makes 1760 into 3840.
+      withStage({ width: 1760, height: 990, dpr: STILL / 1760 }, async (stage) => {
         const g = await stage.open(demo.url);
         refuseBanner(g);
         if (g.unit < 14) throw new Error(`the floor fits at ${g.unit} px a unit: no wait badges`);
-        const img = writePng(path.join(OUT, 'see.every-session.png'), await stage.still(), 1600);
-        say(`see.every-session.png  ${img.width}x${img.height}`);
+        writeStill('see.every-session', await stage.still());
       }),
     ),
 
@@ -124,7 +165,7 @@ const RECIPES = {
    */
   'need.one-rule': () =>
     onFloor({ population: 'demo' }, (demo) =>
-      withStage({ width: 1600, height: 900, dpr: 2.3 }, async (stage) => {
+      withStage({ width: 1600, height: 900, dpr: 1.15 * DENSE }, async (stage) => {
         let g = await stage.open(demo.url);
         refuseBanner(g);
         // Twice the fit, about the stage's own corner, so the office stays put.
@@ -136,16 +177,14 @@ const RECIPES = {
           name: 'need.one-rule',
           width: 1600,
           height: 900,
+          scale: DENSE,
           parts: { office: shot },
           html: `<!doctype html><meta charset="utf-8"><body style="margin:0;width:1600px;height:900px;
             background:${STUDIO};display:grid;place-items:center"><img src="{{office}}"
             style="width:{{office.w}}px;height:{{office.h}}px;border-radius:12px;
             box-shadow:0 0 0 1px ${LINE}">`,
         });
-        const img = writePng(path.join(OUT, 'need.one-rule.png'), page, 1600);
-        say(
-          `need.one-rule.png  ${img.width}x${img.height}  office ${shot.width}x${shot.height} at 2x`,
-        );
+        writeStill('need.one-rule', page, `  office ${shot.width}x${shot.height}`);
       }),
     ),
 
@@ -156,14 +195,18 @@ const RECIPES = {
    */
   'need.two-signals': () =>
     onFloor({ population: 'demo' }, async (demo) => {
-      const counts = await withStage({ width: 1600, height: 400, dpr: 7 }, async (stage) => {
-        refuseBanner(await stage.open(demo.url));
-        const r = await stage.rect('#needs-you');
-        const bar = await stage.rect('#topbar');
-        const clip = { x: Math.floor(r.x) - 8, y: 4, w: Math.ceil(r.w) + 16, h: 76 };
-        return { img: even(await stage.still(clip)), ground: bar.ground };
-      });
-      const row = await withStage({ width: 1600, height: 1000, dpr: 3.75 }, async (stage) => {
+      const counts = await withStage(
+        { width: 1600, height: 400, dpr: 3.5 * DENSE },
+        async (stage) => {
+          refuseBanner(await stage.open(demo.url));
+          const r = await stage.rect('#needs-you');
+          const bar = await stage.rect('#topbar');
+          const clip = { x: Math.floor(r.x) - 8, y: 4, w: Math.ceil(r.w) + 16, h: 76 };
+          return { img: even(await stage.still(clip)), ground: bar.ground };
+        },
+      );
+      const rowDpr = 1.875 * DENSE;
+      const row = await withStage({ width: 1600, height: 1000, dpr: rowDpr }, async (stage) => {
         let g = await stage.open(demo.url);
         refuseBanner(g);
         const office = g.rooms.find((room) => room.kind === 'office');
@@ -186,17 +229,17 @@ const RECIPES = {
         name: 'need.two-signals',
         width: 1600,
         height: 900,
+        scale: DENSE,
         parts: { counts: counts.img, row },
         html: `<!doctype html><meta charset="utf-8"><body style="margin:0;width:1600px;height:900px;
           background:${STUDIO};position:relative">
           <div style="position:absolute;left:0;top:0;width:1600px;height:330px;background:${counts.ground};
             border-bottom:1px solid ${LINE}"></div>
-          <img src="{{counts}}" style="position:absolute;left:80px;top:32px;width:{{counts.w}}px;height:{{counts.h}}px">
-          <img src="{{row}}" style="position:absolute;left:80px;top:372px;width:{{row.w}}px;height:{{row.h}}px;
+          <img src="{{counts}}" style="position:absolute;left:80px;top:${onPixel(32)}px;width:{{counts.w}}px;height:{{counts.h}}px">
+          <img src="{{row}}" style="position:absolute;left:80px;top:${onPixel(372)}px;width:{{row.w}}px;height:{{row.h}}px;
             border-radius:12px;box-shadow:0 0 0 1px ${LINE}">`,
       });
-      const img = writePng(path.join(OUT, 'need.two-signals.png'), page, 1600);
-      say(`need.two-signals.png  ${img.width}x${img.height}`);
+      writeStill('need.two-signals', page);
     }),
 
   /**
@@ -217,10 +260,10 @@ const RECIPES = {
           const who = g.agents.find((a) => a.title === 'Rate limiter for the public API');
           const clip = { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 };
           const frames = await record(stage, demo, {
-            fps: FPS || 25,
+            fps: LOOP_FPS,
             seconds: SECONDS || 6,
             clip,
-            width: 1600,
+            width: LOOP_WIDTH,
             dir: path.join(WORK, 'need.office.frames'),
             events: [
               {
@@ -243,7 +286,7 @@ const RECIPES = {
               );
             },
           });
-          reportGif('need.office', frames, FPS || 25);
+          await reportLoop('need.office', frames);
         },
       ),
     ),
@@ -410,13 +453,13 @@ async function framed(name, shot) {
     name,
     width: 1600,
     height: 900,
+    scale: DENSE,
     parts: { shot },
     html: `<!doctype html><meta charset="utf-8"><body style="margin:0;width:1600px;height:900px;
       background:${STUDIO};display:grid;place-items:center"><img src="{{shot}}"
       style="width:{{shot.w}}px;height:{{shot.h}}px;border-radius:12px;box-shadow:0 0 0 1px ${LINE}">`,
   });
-  const img = writePng(path.join(OUT, `${name}.png`), page, 1600);
-  say(`${name}.png  ${img.width}x${img.height}  capture ${shot.width}x${shot.height} at 2x`);
+  writeStill(name, page, `  capture ${shot.width}x${shot.height}`);
 }
 
 /** The eleven styles, in the order the Look panel lists them. */
@@ -439,13 +482,13 @@ Object.assign(RECIPES, {
           const g = await closeIn(stage, 800 / 22 / (await stage.geometry()).unit, crew);
           const c = centreOf(boxOf(crew(g)));
           const frames = await record(stage, demo, {
-            fps: FPS || 25,
+            fps: LOOP_FPS,
             seconds: SECONDS || 6,
             clip: clipAbout(g, { x: c.x, y: c.y + 0.3 * g.unit }, 800, 450),
-            width: 1600,
+            width: LOOP_WIDTH,
             dir: path.join(WORK, 'crew.formation.frames'),
           });
-          reportGif('crew.formation', frames, FPS || 25);
+          await reportLoop('crew.formation', frames);
         },
       ),
     ),
@@ -456,19 +499,16 @@ Object.assign(RECIPES, {
    */
   'crew.juniors-laptops': () =>
     onFloor({ population: 'juniors' }, async (demo) => {
-      const dpr = 3200 / (20 * 2.5 * (await fitUnit(demo, 1600, 1000)));
+      const dpr = STILL / (20 * 2.5 * (await fitUnit(demo, 1600, 1000)));
       return withStage({ width: 1600, height: 1000, dpr }, async (stage) => {
         refuseBanner(await stage.open(demo.url));
         const crew = (g) => g.agents.filter((a) => a.project === 'design-system');
         const g = await closeIn(stage, 2.5, crew);
         const c = centreOf(boxOf(crew(g)));
         const shot = await stage.still(
-          clipAbout(g, { x: c.x, y: c.y - 1.3 * g.unit }, 3200 / dpr, 1800 / dpr),
+          clipAbout(g, { x: c.x, y: c.y - 1.3 * g.unit }, STILL / dpr, (STILL * 9) / 16 / dpr),
         );
-        const img = writePng(path.join(OUT, 'crew.juniors-laptops.png'), even(shot), 1600);
-        say(
-          `crew.juniors-laptops.png  ${img.width}x${img.height}  from ${shot.width}x${shot.height}`,
-        );
+        writeStill('crew.juniors-laptops', even(shot));
       });
     }),
 
@@ -544,10 +584,10 @@ Object.assign(RECIPES, {
               ...body,
             });
           const frames = await record(stage, demo, {
-            fps: FPS || 25,
+            fps: LOOP_FPS,
             seconds: SECONDS || 8,
             clip: { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 },
-            width: 1600,
+            width: LOOP_WIDTH,
             dir: path.join(WORK, 'crew.lead-supervises.frames'),
             events: [
               { at: 0.6, run: () => hook({ hook_event_name: 'Stop' }) },
@@ -577,7 +617,7 @@ Object.assign(RECIPES, {
               );
             },
           });
-          reportGif('crew.lead-supervises', frames, FPS || 25);
+          await reportLoop('crew.lead-supervises', frames);
         },
       ),
     ),
@@ -589,7 +629,8 @@ Object.assign(RECIPES, {
   'wt.benches': () =>
     onFloor({ population: 'worktrees' }, async (demo) => {
       // Asked first: how large the room can be magnified and still stand whole
-      // on the stage, and the ratio at which that is 1640 px high or 2880 wide.
+      // on the stage, and the ratio at which that is 1640 px high or 2880 wide
+      // on a page at two device pixels to one, scaled to the page's 2.4.
       const { room: probe, canvas } = await withStage(
         { width: 1600, height: 1000, dpr: 1 },
         async (stage) => {
@@ -601,7 +642,7 @@ Object.assign(RECIPES, {
         1,
         Math.min(2.5, (0.96 * canvas.w) / probe.w, (0.96 * canvas.h) / probe.h),
       );
-      const dpr = Math.min(1640 / (probe.h * zoom), 2880 / (probe.w * zoom));
+      const dpr = (DENSE / 2) * Math.min(1640 / (probe.h * zoom), 2880 / (probe.w * zoom));
       return withStage({ width: 1600, height: 1000, dpr }, async (stage) => {
         let g = await stage.open(demo.url);
         refuseBanner(g);
@@ -624,15 +665,12 @@ Object.assign(RECIPES, {
    */
   'look.room-colours': () =>
     onFloor({ population: 'colours' }, (demo) =>
-      withStage({ width: 1760, height: 1120, dpr: 3200 / 1760 }, async (stage) => {
+      withStage({ width: 1760, height: 1120, dpr: STILL / 1760 }, async (stage) => {
         const g = await stage.open(`${demo.url}?look=colour-plan`);
         refuseBanner(g);
         const shot = await stage.still({ x: 0, y: g.canvas.y, w: 1760, h: 990 });
-        const img = writePng(path.join(OUT, 'look.room-colours.png'), even(shot), 1600);
         const lit = g.rooms.filter((r) => r.kind === 'project').length;
-        say(
-          `look.room-colours.png  ${img.width}x${img.height}  ${lit} rooms, unit ${g.unit.toFixed(2)}`,
-        );
+        writeStill('look.room-colours', even(shot), `  ${lit} rooms, unit ${g.unit.toFixed(2)}`);
       }),
     ),
 
@@ -652,14 +690,46 @@ Object.assign(RECIPES, {
           refuseBanner(g);
           const shot = await stage.still({ x: 0, y: g.canvas.y, w: 1760, h: 990 });
           const file = path.join(dir, `${String(i).padStart(2, '0')}-${style}.png`);
-          writePng(file, even(shot), 1600);
+          writePng(file, even(shot), LOOP_WIDTH);
           frames.push(file);
           say(`  ${style}`);
         }
-        reportGif('look.styles', frames, 0, { delays: frames.map(() => 80), ownPalettes: true });
+        reportGif('look.styles', frames, 0, {
+          delays: frames.map(() => 80),
+          ownPalettes: true,
+          width: 1600,
+        });
+        // The same eleven pictures as a video: each held for the same eight
+        // tenths of a second, which at sixty frames a second is 48 frames.
+        const held = frames.flatMap((file) => Array(48).fill(file));
+        const video = await writeVideo(path.join(OUT, 'look.styles.mp4'), held, 60);
+        say(describeVideo(video));
       }),
     ),
 });
+
+/**
+ * Write a recording as a video, and as the GIF that goes where no video can.
+ *
+ * The video is every frame, at the rate they were taken: sixty a second,
+ * 1920 x 1080, measured in Chrome after it is written (`lib/video.mjs`); what
+ * was measured is the line printed and the line in `<name>.mp4.txt`.
+ *
+ * The GIF is 1600 wide and takes every third frame, at twenty a second. A
+ * GIF's frame lasts a whole number of hundredths of a second, and sixty frames
+ * a second is not one of the rates that allows: five hundredths is, and a
+ * third of the frames is exactly that, so the GIF runs at the speed the video
+ * does. It is the copy for places that play nothing else.
+ */
+async function reportLoop(name, frames, fps = LOOP_FPS) {
+  const video = await writeVideo(path.join(OUT, `${name}.mp4`), frames, fps);
+  const line = describeVideo(video);
+  fs.writeFileSync(path.join(OUT, `${name}.mp4.txt`), `${line}\n`);
+  say(line);
+  const every = fps % 20 === 0 ? fps / 20 : 1;
+  const picked = frames.filter((_, i) => i % every === 0);
+  reportGif(name, picked, fps / every, { width: 1600 });
+}
 
 /** Write a recording, and its smaller copy when it is too heavy for a post. */
 function reportGif(name, frames, fps, opts = {}) {
