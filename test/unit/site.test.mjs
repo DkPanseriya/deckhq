@@ -492,7 +492,10 @@ test('FORWARD: an address the site used to have sends its reader on, and says no
     assert.match(html, /<meta name="robots" content="noindex" \/>/, `${old} asks to be indexed`);
     const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
     assert.ok(main.includes(`<a class="btn" href="${to}">`), `${old} has no link to ${to}`);
-    const words = main.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+    const words = main
+      .replace(/<[^>]*>/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
     assert.ok(words < 40, `${old} says ${words} words; it only forwards`);
     assert.ok(!/<img[^>]*media\//.test(main), `${old} shows a picture`);
     // Where it sends a reader is a page that exists, at a section that exists.
