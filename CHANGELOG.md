@@ -6,6 +6,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The line that ties a name to its robot no longer runs across a robot.** A name that has had to
+  move away from its robot is tied back to it by a thin line, and that line went to the robot's
+  feet through whatever was in between: over a junior's own head and body when its tag was set
+  above it, and across the junior beside it on a crew's arc. The line now ends at the edge of the
+  robot it belongs to and passes over no other robot, badge, count or name. A place whose line
+  would cross one is passed over for the next free place; only a name with no other place has its
+  line bent round whoever is in the way, or cut short. A type that a crew says once, such as
+  `Explore ×2`, is tied to the nearest robot of that type.
+
 ## 1.7.1 — 2026-10-11
 
 ### Highlights

@@ -1,0 +1,106 @@
+/**
+ * A LEADER NEVER CROSSES A FIGURE, AND TWO TAGS ARE NEVER ONE BLOCK (11 October).
+ *
+ * Two things the product's own picture of a crew showed (`crew`, the golden
+ * and the site's): the line tying `Junior / test-engineer` to its junior ran
+ * down through that junior's head and body, the line of `Explore ×2` ran
+ * across the junior beside it, and two juniors' tags sat one directly on the
+ * other on the far side of somebody else.
+ *
+ * Geometry, asked of the real plan, the real seats and the frame's own label
+ * pass (`test/helpers/label-frame.mjs`), through a context that only measures.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { populationFloor } from '../helpers/large-floor.mjs';
+import { drawnBox, figuresOf, frameAt, leaderOf } from '../helpers/label-frame.mjs';
+import { figureBox, leaderFor, segmentEnters } from '../../public/render/leader-line.js';
+
+/** The owner's CSS stage, the full window's, and the goldens'. */
+const STAGES = [
+  [1420, 690],
+  [2000, 1024],
+  [1600, 869],
+];
+
+/** The floors the rules are held over; `wide` is `three` in a 1920 × 1080 window. */
+const FLOORS = [
+  ...['crew', 'demo', 'crowded', 'away', 'three', 'pair'].flatMap((name) =>
+    STAGES.map(([w, h]) => [name, w, h]),
+  ),
+  ['three', 1920, 949],
+];
+
+/** A box drawn in by `by` on every side: what is inside a figure, not on its edge. */
+const inset = (r, by) => ({ x: r.x + by, y: r.y + by, w: r.w - by * 2, h: r.h - by * 2 });
+
+test('a leader crosses no figure: it ends at the edge of its own and passes over nobody else', () => {
+  let leaders = 0;
+  for (const [name, w, h] of FLOORS) {
+    const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+    const figures = figuresOf(f);
+    const names = f.labels.labels
+      .filter((it) => f.labels.plan.get(it.id))
+      .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
+    const chrome = f.labels.obstacles.filter((o) => /^(badge|pill|chip|plate):/.test(o.id));
+    for (const it of f.labels.labels) {
+      const line = leaderOf(it, f.labels.plan.get(it.id));
+      if (!line) continue;
+      leaders++;
+      const who = `${name} ${w}x${h}: the leader of ${f.labels.texts.get(it.id)}`;
+      for (let i = 0; i + 3 < line.length; i += 2) {
+        const [ax, ay, bx, by] = line.slice(i, i + 4);
+        for (const fig of figures) {
+          // Touching a figure's edge is not crossing it; a hair inside is.
+          const over = segmentEnters(ax, ay, bx, by, inset(fig, 0.25));
+          assert.equal(over, null, `${who} crosses ${f.agentsById.get(fig.id).label}`);
+        }
+        // Nor through anybody else's name, nor a badge or a chip.
+        for (const other of [...names, ...chrome]) {
+          if (other.id === it.id || other.id === `badge:${it.id}`) continue;
+          const over = segmentEnters(ax, ay, bx, by, inset(other, 0.25));
+          assert.equal(over, null, `${who} crosses ${f.labels.texts.get(other.id) || other.id}`);
+        }
+      }
+      // It ends ON a figure's edge: its own, or another of the type it names.
+      const [ex, ey] = line.slice(-2);
+      const ends = figures.filter(
+        (b) =>
+          ex >= b.x - 0.01 && ex <= b.x + b.w + 0.01 && ey >= b.y - 0.01 && ey <= b.y + b.h + 0.01,
+      );
+      assert.ok(ends.length > 0, `${who} ends at nobody`);
+    }
+  }
+  assert.ok(leaders >= 10, `these floors draw leaders: ${leaders}`);
+});
+
+test('a leader is straight where that is clear, bent round a figure in its way, and cut short last', () => {
+  const own = figureBox(100, 100, 10);
+  assert.deepEqual(own, { x: 100 - 6.75, y: 100 - 25.2, w: 13.5, h: 25.2 });
+  // Over the head: from the name's foot to the crown, not to the feet.
+  const over = { x: 80, y: 40, w: 40, h: 12 };
+  assert.deepEqual(leaderFor(over, own, []), { line: [100, 52, 100, own.y], clear: true });
+  // Down and to the right: corner to corner.
+  const aside = { x: 140, y: 110, w: 40, h: 12 };
+  assert.deepEqual(leaderFor(aside, own, []).line, [140, 110, own.x + own.w, 100]);
+  // Somebody standing on that line: out along one axis, in along the other.
+  const far = { x: 200, y: 130, w: 40, h: 12 };
+  const between = { x: 140, y: 100, w: 20, h: 25 };
+  const bent = leaderFor(far, own, [between]);
+  assert.equal(bent.clear, false);
+  assert.equal(bent.line.length, 6, 'one bend');
+  assert.deepEqual(bent.line.slice(-2), [own.x + own.w, 100], 'and it still reaches its figure');
+  for (let i = 0; i + 3 < bent.line.length; i += 2) {
+    const [ax, ay, bx, by] = bent.line.slice(i, i + 4);
+    assert.equal(segmentEnters(ax, ay, bx, by, between), null);
+    assert.equal(segmentEnters(ax, ay, bx, by, own), null);
+  }
+  // Walled in on both bends: cut short of the first figure, pointing at its own.
+  const wall = [between, { x: 120, y: 120, w: 40, h: 20 }, { x: 190, y: 105, w: 20, h: 15 }];
+  const cut = leaderFor(far, own, wall);
+  assert.equal(cut.clear, false);
+  assert.equal(cut.line.length, 4);
+  for (const r of wall) assert.equal(segmentEnters(...cut.line.slice(0, 4), r), null);
+});

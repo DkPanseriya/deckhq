@@ -41,6 +41,7 @@ import {
 import { worldToScreen } from './agents.js';
 import { crewChipBoxes } from './crew-draw.js';
 import { abbreviateName, resolveLabelCollisions, WALL_CLEAR_PX } from './label-spots.js';
+import { figureBox } from './leader-line.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
 import { placeBubbles } from './bubble-spots.js';
 import { toolBubbleText } from './rig-bubble.js';
@@ -229,8 +230,10 @@ export function planFrameLabels(ctx, view) {
   for (const rec of records) {
     const s = worldToScreen(rec, camera);
     // The body as it is DRAWN: a junior's is a ladder step smaller (WP-99).
-    const box = characterBox(s.x, s.y, view.uOf ? view.uOf(rec) : charU);
-    obstacles.push({ id: `body:${rec.id}`, ...box, pin: true });
+    const u = view.uOf ? view.uOf(rec) : charU;
+    const box = characterBox(s.x, s.y, u);
+    // `body`: the figure itself, which no name's leader may cross (`leader-line.js`).
+    obstacles.push({ id: `body:${rec.id}`, ...box, pin: true, body: figureBox(s.x, s.y, u) });
     // WP-89 · a crew parent's raised hand is pinned too: §4, a junior's name
     // is never drawn over it. Measured generously — an obstacle may claim
     // more than it uses.
@@ -242,6 +245,7 @@ export function planFrameLabels(ctx, view) {
         w: box.w,
         h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
         pin: true,
+        of: rec.id,
       });
     }
   }
@@ -262,8 +266,9 @@ export function planFrameLabels(ctx, view) {
   /** @type {Map<string, number>} the figures drawn under a wait badge, and its top */
   const badged = new Map();
   for (const box of view.badgeBoxes || []) {
-    obstacles.push({ ...box, pin: true });
     const id = /^badge:/.test(String(box.id)) ? String(box.id).slice(6) : '';
+    // `of`: whose it is. A leader to that figure may cross its own badge's slot.
+    obstacles.push({ ...box, pin: true, of: id || undefined });
     const rec = screenOf.get(id);
     if (!rec) continue;
     badged.set(id, box.y);
@@ -280,6 +285,7 @@ export function planFrameLabels(ctx, view) {
         w: box.w,
         h: head - under,
         pin: true,
+        of: id,
       });
     }
   }
@@ -356,6 +362,8 @@ export function planFrameLabels(ctx, view) {
       // The near ring is measured from here: the feet, the body's height and
       // its half-width, at the scale this figure is drawn at.
       feet: { x: s.x, y: s.y },
+      // Its own body, where a leader to it ends: at its edge, never across it.
+      figure: figureBox(s.x, s.y, u),
       // NEAR IS ONE DISTANCE FOR THE WHOLE FLOOR (WP-99): a lead's body height,
       // whoever the name belongs to. A junior is drawn a ladder step smaller,
       // and measured in its own height the ring round a 12.8 px junior was
