@@ -92,6 +92,29 @@ function walk(dir, exts) {
 
 let out = '';
 
+/**
+ * The directory a page's relative addresses resolve from: its own, or the
+ * site's root for a page that carries `<base href="/" />`.
+ *
+ * @param {string} page @param {string} html
+ */
+const anchorOf = (page, html) => (/<base href="\/" \/>/.test(html) ? out : path.dirname(page));
+
+/**
+ * Addresses the site used to have. Each forwards to where its subject is now
+ * (`site/build.mjs`, `REDIRECTS`), because a README on npm and a release note
+ * once sent a reader there. The home page's forwarding is to a section.
+ */
+const FORWARDS = {
+  'studio.html': 'features.html#studio',
+  'characters.html': 'features.html#see',
+  'model.html': 'features.html#needs-you',
+  'adapters.html': 'features.html#runtimes',
+  'hooks-and-privacy.html': 'privacy.html',
+  'docs.html': 'faq.html#manual',
+  'log/index.html': 'changelog.html',
+};
+
 before(() => {
   out = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-site-'));
   const built = spawnSync(process.execPath, [path.join(siteDir, 'build.mjs'), '--out', out], {
@@ -162,21 +185,27 @@ test('the one-line installers are published, byte for byte, at the URL the pages
 
 test('every internal link resolves to a file that exists', () => {
   const pages = walk(out, ['.html']);
-  assert.equal(pages.length, 8, 'the site is eight pages');
+  assert.equal(
+    pages.length,
+    8 + Object.keys(FORWARDS).length,
+    'the site is eight pages and the addresses that forward to them',
+  );
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf8');
-    const where = path.relative(out, page);
-    // The one absolute path on the site is the 404 page's `<base>`: GitHub
-    // Pages serves that file for a missing address at any depth, so its links
-    // have to resolve from the site's own root. It is checked on its own, and
-    // no other page may carry one.
+    const where = path.relative(out, page).replace(/\\/g, '/');
+    // The one absolute path on the site is a `<base>`. GitHub Pages serves
+    // the 404 page for a missing address at any depth, and one forwarding
+    // page sits below the root, so the links of those two have to resolve
+    // from the site's own root. No other page may carry one.
     const base = html.match(/<base href="([^"]+)" \/>/);
-    assert.equal(base ? base[1] : null, where === '404.html' ? '/' : null, `${where}: base`);
+    const rooted = where === '404.html' || where.includes('/');
+    assert.equal(base ? base[1] : null, rooted ? '/' : null, `${where}: base`);
     const links = html.replace(/<base [^>]*>/, '');
+    const from = anchorOf(page, html);
     for (const m of links.matchAll(/(?:href|src)="([^"]+)"/g)) {
       const href = m[1];
       if (/^(https?:|mailto:|#)/.test(href)) continue;
-      const target = path.resolve(path.dirname(page), href.split('#')[0]);
+      const target = path.resolve(from, href.split('#')[0]);
       assert.ok(fs.existsSync(target), `${where} points at ${href}, which was not built`);
     }
     // A `srcset` names files too, and a dense screen fetches the second one.
@@ -184,7 +213,7 @@ test('every internal link resolves to a file that exists', () => {
       for (const candidate of m[1].split(',')) {
         const file = candidate.trim().split(/\s+/)[0];
         assert.ok(
-          fs.existsSync(path.resolve(path.dirname(page), file)),
+          fs.existsSync(path.resolve(from, file)),
           `${where} offers ${file} in a srcset, which was not built`,
         );
       }
@@ -436,22 +465,45 @@ test('the markdown converter handles what a release note contains', async () => 
 });
 
 test('the site publishes no page the blueprint used to put here', () => {
-  // WP-95a. The five that went, by the URL they had: a stranger who followed
-  // an old link gets a 404 from GitHub Pages rather than the document.
-  for (const gone of [
-    'docs.html',
-    'model.html',
-    'adapters.html',
-    'hooks-and-privacy.html',
-    'log/index.html',
-    'log/1.html',
-    // 1.7.0 · merged into Features, and the scheme script that went with the
-    // light scheme.
-    'characters.html',
-    'studio.html',
-    'theme.js',
-  ]) {
+  // WP-95a. The pages that went are not published: an entry of the log and
+  // the scheme script that went with the light scheme are a 404.
+  for (const gone of ['log/1.html', 'log/2.html', 'theme.js']) {
     assert.ok(!fs.existsSync(path.join(out, gone)), `${gone} is still published`);
+  }
+});
+
+test('FORWARD: an address the site used to have sends its reader on, and says nothing else', () => {
+  // The README that npm showed for 1.7.0 linked `studio.html`, which was a
+  // 404. Every address a README, a release note or the old site itself gave
+  // out now forwards: a refresh, a plain link for a browser that follows
+  // none, and not a sentence of the page that used to be there.
+  for (const [old, to] of Object.entries(FORWARDS)) {
+    const file = path.join(out, old);
+    assert.ok(fs.existsSync(file), `${old} is a 404`);
+    const html = fs.readFileSync(file, 'utf8');
+    assert.ok(
+      html.includes(`<meta http-equiv="refresh" content="0; url=${to}" />`),
+      `${old} does not forward to ${to}`,
+    );
+    assert.ok(
+      html.includes(`<link rel="canonical" href="${to.split('#')[0]}" />`),
+      `${old} does not name the page it moved to`,
+    );
+    assert.match(html, /<meta name="robots" content="noindex" \/>/, `${old} asks to be indexed`);
+    const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+    assert.ok(main.includes(`<a class="btn" href="${to}">`), `${old} has no link to ${to}`);
+    const words = main.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean).length;
+    assert.ok(words < 40, `${old} says ${words} words; it only forwards`);
+    assert.ok(!/<img[^>]*media\//.test(main), `${old} shows a picture`);
+    // Where it sends a reader is a page that exists, at a section that exists.
+    const [target, section] = to.split('#');
+    const landed = fs.readFileSync(path.join(out, target), 'utf8');
+    if (section) assert.ok(landed.includes(`id="${section}"`), `${to} is not there`);
+  }
+  // None of them is offered to a crawler as a page.
+  const listed = fs.readFileSync(path.join(out, 'sitemap.txt'), 'utf8');
+  for (const old of Object.keys(FORWARDS)) {
+    assert.ok(!listed.includes(`/${old}`), `the sitemap lists ${old}`);
   }
 });
 
@@ -472,7 +524,7 @@ test('the build copies every image its pages reference', () => {
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
     for (const m of html.matchAll(/<(?:img|source)[^>]*\ssrc="([^"]+)"/g)) {
-      const target = path.resolve(path.dirname(page), m[1]);
+      const target = path.resolve(anchorOf(page, html), m[1]);
       assert.ok(fs.existsSync(target), `${path.relative(out, page)} shows a missing ${m[1]}`);
     }
   }
