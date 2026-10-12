@@ -87,6 +87,19 @@ export const THEME = opt('--theme', 'default');
  */
 export const LEDGER_FIXTURE = argv.includes('--ledger-fixture');
 /**
+ * A FLOOR THAT TAKES A REPLY. The sessions here are invented, so a reply typed
+ * to one has nowhere to go: the fixture's `claude` prints `[]` and the send
+ * fails. With `--rehearsal` a send is answered by `scripts/demo-claude.mjs`
+ * instead: it tells the daemon the session took a prompt, through the real
+ * hook endpoint, and answers one line that says no model ran. Everything
+ * between the key press and that line is the product's own path.
+ *
+ * It exists so the three keys can be shown working (reply, approve, bench)
+ * without anybody's real session in the picture. Off by default, and the
+ * goldens never use it.
+ */
+export const REHEARSAL = argv.includes('--rehearsal');
+/**
  * WP-45. A signed asset pack to install into the fixture before the floor
  * comes up, so a demo can be photographed in one of its themes and its
  * settings sheet can be photographed offering them.

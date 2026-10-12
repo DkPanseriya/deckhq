@@ -1437,7 +1437,9 @@ and 22, the type check once, and on Linux a pixel comparison of the floor agains
 `test/goldens/`. [`CONTRIBUTING.md`](../CONTRIBUTING.md) has the rest.
 
 `npm run demo` is the floor to photograph: synthetic sessions in a temp directory, so a picture
-needs no real project name. `scripts/capture-floor.mjs` photographs a running floor;
+needs no real project name. Its sessions are invented, so a reply to one fails; with
+`node scripts/demo-floor.mjs --rehearsal` a reply is answered by a stand-in that tells the floor
+the session took a prompt and says, in its one line, that no model ran. `scripts/capture-floor.mjs` photographs a running floor;
 `scripts/capture-hero.mjs` records one while an agent's turn ends through the real hook endpoint,
 and `scripts/gif-encoder.mjs` encodes the frames with no dependency.
 

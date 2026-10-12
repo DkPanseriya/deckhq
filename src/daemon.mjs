@@ -245,7 +245,8 @@ function envHoldMs() {
  *           studioWatchOptions?: {pollMs?:number, debounceMs?:number},
  *           sessionFocus?: import('./core/session-focus.mjs').FocusRunner,
  *           sessionPid?: (agent:any) => Promise<number|null>,
- *           describeTerminal?: (opts:any) => Promise<{label:string|null}> }} [opts]
+ *           describeTerminal?: (opts:any) => Promise<{label:string|null}>,
+ *           sendBin?: {command:string, args?:string[], env?:Record<string,string>} }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
@@ -376,6 +377,12 @@ export async function startDaemon(opts = {}) {
     // What "Reveal file" in the share sheet runs. Overridable so a test opens
     // no file manager on the machine it runs on.
     revealFolder: opts.revealFolder,
+    // A stand-in for the `claude` a send starts, handed to the adapter's own
+    // `bin` seam by `startTurn`. Undefined in production: no shipped command
+    // passes it. `scripts/demo-floor.mjs --rehearsal` does, so a reply typed
+    // on a floor of invented sessions is answered by a script that says so,
+    // and the real `claude` is never started against a session that is not one.
+    sendBin: opts.sendBin,
     // WP-45. Where installed asset packs live. Overridable for the same
     // reason `stateFile` is: a test must never read the developer's own.
     packsDir,

@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+### Added
+
+- **A demo floor that takes a reply**, for contributors and for filming:
+  `node scripts/demo-floor.mjs --rehearsal`. The demo's sessions are invented, so until now a
+  reply or an approval on one simply failed. In a rehearsal the send is answered by a small
+  stand-in for `claude` that reports the prompt through the real hook endpoint and replies with
+  one line saying no model ran, so reply, approve and bench can all be shown on a floor with
+  nobody's real work on it. Nothing in the published commands passes the stand-in.
+
 ### Changed
 
 - **Every room has a header.** The loose lines of text in a room's corner are a **title bar** with

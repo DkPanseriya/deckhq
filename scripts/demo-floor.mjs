@@ -19,6 +19,8 @@
  *   node scripts/demo-floor.mjs --now ISO          # pin the clock (WP-63), for a capture
  *   node scripts/demo-floor.mjs --ledger-fixture   # + a synthetic week of ledger records,
  *                                                  #   so the day's card and Wrapped appear
+ *   node scripts/demo-floor.mjs --rehearsal        # a reply is answered by a stand-in that
+ *                                                  #   says no model ran (`demo-claude.mjs`)
  *
  * Ctrl-C to stop. The fixture lives in a temp directory and is rebuilt on
  * every run; nothing is written to your real ~/.claude or ~/.deckhq.
@@ -50,6 +52,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 
 import { CARDS_OFF } from '../public/postcard.js';
 import { themeByName, themeNames } from '../src/core/themes.mjs';
@@ -65,6 +68,7 @@ import {
   POPULATION,
   PORT,
   PROJECTS_DIR,
+  REHEARSAL,
   ROOT,
   STATE_DIR,
   THEME,
@@ -372,6 +376,15 @@ process.env.DECKHQ_HOSTNAME = 'DECKHQ-DEMO';
 process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH}`;
 
 const { startDaemon } = await import('../src/daemon.mjs');
+// `--rehearsal`: a send is answered by the stand-in (see `demo-args.mjs`). The
+// port it reports to is only known once the daemon is listening, so it is
+// added to this same array below.
+const sendBin = REHEARSAL
+  ? {
+      command: process.execPath,
+      args: [fileURLToPath(new URL('./demo-claude.mjs', import.meta.url))],
+    }
+  : undefined;
 // stateFile is passed explicitly so the daemon skips its legacy migration —
 // the demo must never pull anything out of a real install.
 const { url, port, close } = await startDaemon({
@@ -384,7 +397,9 @@ const { url, port, close } = await startDaemon({
   // reading, or photographing, whatever the developer happens to have
   // installed in their own `~/.deckhq/packs`.
   packsDir: path.join(STATE_DIR, 'packs'),
+  sendBin,
 });
+if (sendBin) sendBin.args.push('--demo-port', String(port));
 
 // Install hooks through the real consent-gated endpoint, AFTER the listener is
 // up. The port has to be the one actually bound — `--port` may have been taken
