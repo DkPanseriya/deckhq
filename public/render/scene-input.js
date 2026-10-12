@@ -211,7 +211,7 @@ export class SceneInput extends SceneDraw {
       // What can be pressed says so with the pointer as well as with its
       // highlight; everything else keeps the floor's own cursor.
       if (!this._dragFrom) {
-        const pressable = !!hit && hit.kind !== 'room';
+        const pressable = !!hit && hit.kind !== 'header';
         this.canvas.style.cursor = pressable ? 'pointer' : this._pannable() ? 'grab' : '';
       }
     }

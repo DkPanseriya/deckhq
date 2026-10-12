@@ -27,6 +27,7 @@ import {
   sanitizeRooms,
 } from '../../src/core/room-settings.mjs';
 import { DEFAULT_SETTINGS, sanitizeSettings } from '../../src/core/store-settings.mjs';
+import { Scene } from '../../public/render/scene.js';
 import { buildLookDocument, parseLookDocument } from '../../src/core/look.mjs';
 import { ZONE_HUES } from '../../public/render/look-ambience.js';
 import { DEFAULT_LOOK } from '../../public/render/look-options.js';
@@ -60,7 +61,7 @@ function mount(/** @type {any} */ over = {}) {
   hostEl.hidden = true;
   const snapshot = {
     projects: [
-      { id: 'C:/work/orbital-api', name: 'orbital-api', pinned: false },
+      { id: 'C:/work/orbital-api', name: 'orbital-api', pinned: false, ...over.project },
       { id: 'C:/work/docs', name: 'docs', pinned: true },
     ],
     settings: { rooms: over.rooms || {}, look: DEFAULT_LOOK },
@@ -77,13 +78,14 @@ function mount(/** @type {any} */ over = {}) {
     doc,
     hostEl,
     getSnapshot: () => snapshot,
-    anchorFor: () => ({ x: 300, y: 140, w: 400, h: 22 }),
+    anchorFor: () => over.anchor || { x: 300, y: 140, w: 400, h: 22 },
     actions: {
       filterToProject: act('filter'),
       newAgent: act('new'),
       pinProject: act('pin'),
       showWhiteboard: act('board'),
       revealFolder: act('folder'),
+      ...(over.actions ? over.actions(act) : {}),
     },
     saveSetting: async (/** @type {any} */ patch) => {
       saves.push(patch);
@@ -328,4 +330,98 @@ test('the room is reachable from the keys: the palette has its settings and its 
     /if \(sel\.kind === 'project'\) return openRoomSettings\(sel\.id\);/,
   );
   assert.match(read('public/index.html'), /id="room-popover" role="dialog" hidden/);
+});
+
+// ------------------------------------------- the room's screen, and its archive
+
+/** The two actions the shell has for a room beyond the five rows. */
+const more = (/** @type {Function} */ act) => ({
+  runDashboard: act('dashboard'),
+  archiveProject: act('archive'),
+});
+
+test('“Run the dashboard” is offered where the project has one, and “Archive this room” only for a room nobody is working in', () => {
+  const ROOM = 'C:/work/orbital-api';
+  // Somebody is working in it and it has no dashboard: the five rows, as before.
+  const busy = mount({ actions: more, project: { activeCount: 2 } });
+  busy.menu.open(ROOM);
+  assert.equal(busy.buttons().length, 5);
+  const quiet = mount({ actions: more, project: { hasDashboard: true, activeCount: 0 } });
+  quiet.menu.open(ROOM);
+  assert.deepEqual(quiet.buttons().map(quiet.label).slice(5), [
+    'Run the dashboard',
+    'Archive this room',
+  ]);
+  quiet.buttons()[5].fire('click');
+  assert.deepEqual(quiet.calls, [['dashboard', ROOM]]);
+  assert.equal(quiet.menu.isOpen(), false, 'a press closes the popover');
+  quiet.menu.open(ROOM);
+  quiet.buttons()[6].fire('click');
+  assert.deepEqual(quiet.calls.at(-1), ['archive', ROOM, true]);
+  // An archived room is not offered archiving again, and a shell with neither
+  // action behind it is offered neither row.
+  const gone = mount({ actions: more, project: { activeCount: 0, archived: true } });
+  gone.menu.open(ROOM);
+  assert.ok(!gone.buttons().map(gone.label).includes('Archive this room'));
+  const bare = mount({ project: { hasDashboard: true, activeCount: 0 } });
+  bare.menu.open(ROOM);
+  assert.equal(bare.buttons().length, 5);
+  // The shell hands the popover both, by the names the palette uses.
+  const rooms = read('public/app-rooms.js');
+  assert.match(rooms, /runDashboard: runProjectDashboard,\s*archiveProject: setProjectArchived,/);
+});
+
+test('a room in the bottom row: the popover stays wholly on the page', () => {
+  // Measured on the demo floor at 1600x900: under design-system's bar the
+  // popover ran from 591 to 981, with its last rows off the bottom.
+  const m = mount({ anchor: { x: 585, y: 563, w: 600, h: 22 } });
+  m.doc.documentElement.clientHeight = 900;
+  m.hostEl.getBoundingClientRect = () => ({ width: 336, height: 390 });
+  m.menu.open('C:/work/orbital-api');
+  assert.deepEqual([m.hostEl.style.left, m.hostEl.style.top], ['585px', '502px']);
+  // A room with space under its bar is untouched by the rule…
+  const high = mount();
+  high.doc.documentElement.clientHeight = 900;
+  high.hostEl.getBoundingClientRect = () => ({ width: 336, height: 390 });
+  high.menu.open('C:/work/orbital-api');
+  assert.deepEqual([high.hostEl.style.left, high.hostEl.style.top], ['300px', '168px']);
+  // …and one at the right edge is pulled in by its measured width, as before.
+  const wide = mount({ anchor: { x: 1500, y: 140, w: 90, h: 22 } });
+  wide.menu.open('C:/work/orbital-api');
+  assert.deepEqual([wide.hostEl.style.left, wide.hostEl.style.top], ['1260px', '168px']);
+});
+
+test('a room’s choice is painted when it is made: the write hands the floor its snapshot again', () => {
+  // A settings write pushes no snapshot, and the scene reads a room's choices
+  // out of one. Measured on the demo floor: four seconds after a colour was
+  // picked, `setState` had not run again and the room was still unpainted.
+  const rooms = read('public/app-rooms.js');
+  assert.match(rooms, /const saved = await saveSetting\(patch\);/);
+  assert.match(rooms, /if \(saved && latestSnapshot\) scene\?\.setState\?\.\(latestSnapshot\);/);
+  assert.doesNotMatch(rooms, /^\s*saveSetting,$/m, 'the popover writes without repainting');
+});
+
+test('a header that only has words is a `header` hit: said on a hover, nothing on a press, and never called `room`', () => {
+  // `room` is left free: another renderer's name for a room's plate.
+  const hit = read('public/render/scene-hit.js');
+  assert.match(hit, /return \{ kind: 'header', id: plate\.id \};/);
+  assert.doesNotMatch(hit, /kind: 'room'/);
+  // The hover says the header's sentence, and adds a press only for a project's.
+  const scene = { plateTooltipFor: (/** @type {string} */ id) => `words for ${id}` };
+  const title = (/** @type {any} */ h) => Scene.prototype.hoverTitleFor.call(scene, h);
+  assert.equal(title({ kind: 'header', id: '__office__' }), 'words for __office__');
+  assert.equal(
+    title({ kind: 'project', id: 'p1' }),
+    'words for p1. Press for this room’s settings.',
+  );
+  assert.equal(title({ kind: 'room', id: '__office__' }), '', '`room` still means a header here');
+  // No pointer cursor over it, and the shell knows the kind and does nothing with a press.
+  assert.match(
+    read('public/render/scene-input.js'),
+    /const pressable = !!hit && hit\.kind !== 'header';/,
+  );
+  const shell = read('public/app.js') + read('public/app-floor.js');
+  assert.match(shell, /'screen', 'resting', 'header'\]/, 'the shell reads the header as an agent');
+  assert.match(shell, /if \(sel\.kind === 'header'\) return selectAgent\(null\);/);
+  assert.doesNotMatch(shell, /sel\.kind === 'room'/);
 });

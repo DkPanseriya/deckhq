@@ -195,7 +195,7 @@ export async function loadRenderModules({
           if (sel.kind === 'screen') return runProjectDashboard(sel.id);
           if (sel.kind === 'resting') return openResting();
           // A header with nothing behind it: a press there is a press on the floor.
-          if (sel.kind === 'room') return selectAgent(null);
+          if (sel.kind === 'header') return selectAgent(null);
           selectAgent(sel.id);
         },
         onHover: (hit) => {

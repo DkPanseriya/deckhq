@@ -119,11 +119,11 @@ let clearedTimers = [];
  * kinds this pass adds; anything unrecognised falls back to `'agent'` so a
  * future kind degrades to the old behaviour instead of throwing.
  * @param {unknown} hit
- * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent'|'shelf'|'screen'|'resting'|'room',
+ * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent'|'shelf'|'screen'|'resting'|'header',
  *   id:string}|null} `'shelf'` (the project folder) and `'screen'` (the
  *   dashboard) were added to the body and to two call sites without being
  *   added here, so both of those branches were unreachable to a checker (WP-22).
- *   `'resting'` is the lounge's `+N resting` chip. `'room'` is the header of a
+ *   `'resting'` is the lounge's `+N resting` chip. `'header'` is the header of a
  *   room that is not a project's — Your Office, the Lounge — which says what
  *   its symbols mean on a hover and does nothing on a press.
  */
@@ -132,7 +132,7 @@ function normaliseHit(hit) {
   if (typeof hit === 'string') return { kind: 'agent', id: hit };
   const h = /** @type {any} */ (hit);
   if (!h.id) return null;
-  const known = ['project', 'whiteboard', 'new-agent', 'shelf', 'screen', 'resting', 'room'];
+  const known = ['project', 'whiteboard', 'new-agent', 'shelf', 'screen', 'resting', 'header'];
   return { kind: known.includes(h.kind) ? h.kind : 'agent', id: String(h.id) };
 }
 

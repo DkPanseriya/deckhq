@@ -25,6 +25,7 @@
  */
 
 import { el, latestSnapshot, look, scene, toast } from './app-state.js';
+import { runProjectDashboard } from './app-launchers.js';
 import { saveSetting } from './app-notify.js';
 import { ROOM_COLOUR_IDS, createRoomMenu } from './room-menu.js';
 
@@ -109,8 +110,20 @@ export function wireRoomMenu(filterToProject, newAgent, showWhiteboard, revealFo
       showWhiteboard,
       revealFolder,
       pinProject: setProjectPinned,
+      runDashboard: runProjectDashboard,
+      archiveProject: setProjectArchived,
     },
-    saveSetting,
+    // PAINTED WHEN IT IS CHOSEN. The floor reads a room's choices out of the
+    // snapshot (`scene.js`, `setState`), a settings write pushes no snapshot,
+    // and the next one may be many seconds away on a quiet floor: measured on
+    // the demo floor, a colour picked here was still unpainted four seconds
+    // later. `saveSetting` has already stamped the answer on the snapshot the
+    // page holds; this hands that snapshot back to the floor.
+    saveSetting: async (/** @type {Record<string, unknown>} */ patch) => {
+      const saved = await saveSetting(patch);
+      if (saved && latestSnapshot) scene?.setState?.(latestSnapshot);
+      return saved;
+    },
     colours: ROOM_COLOUR_IDS,
     swatchOf: (id) => look?.roomSwatchFor?.(id) || '',
     coloursShown: () => Boolean(look?.LOOK?.roomTint?.zoned),

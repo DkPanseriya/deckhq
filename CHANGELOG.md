@@ -16,8 +16,11 @@
   what the room is doing. The bar is the tone of the room's own walls in every light and style.
 - **A room's settings are behind its title bar.** Press a project room's bar (or `⌘K`, _Room
   settings_) for a small panel: show only this room, new agent here, pin or unpin, a colour for
-  this room, its board and its folder. A press on the old plate filtered to the project; that is
-  the panel's first row now. A room's choices are kept per project and are never part of a look.
+  this room, its board and its folder, **Run the dashboard** where the project has one, and
+  **Archive this room** for a room nobody is working in. A press on the old plate filtered to the
+  project; that is the panel's first row now. A room's choices are kept per project and are never
+  part of a look. A choice is painted when it is made, and the panel stays wholly on the page
+  under a room in the bottom row.
 - **The board on a room's wall is lit**, with a line for each state somebody in the room is in, and
   it, the title bar and the `+` are outlined under the pointer, with a tooltip that says what a
   press does.

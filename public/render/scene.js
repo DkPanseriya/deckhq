@@ -447,11 +447,11 @@ export class Scene extends SceneInput {
   hoverTitleFor(hit) {
     if (!hit) return '';
     const header =
-      hit.kind === 'project' || hit.kind === 'room' ? this.plateTooltipFor(hit.id) : '';
+      hit.kind === 'project' || hit.kind === 'header' ? this.plateTooltipFor(hit.id) : '';
     switch (hit.kind) {
       case 'project':
         return header ? `${header}. Press for this room’s settings.` : '';
-      case 'room':
+      case 'header':
         return header;
       case 'new-agent':
         return 'Start a new agent in this room.';

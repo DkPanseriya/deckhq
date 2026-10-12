@@ -180,7 +180,7 @@ export class SceneHit extends SceneLabels {
         if (plate.kind === 'project') return { kind: 'project', id: plate.id };
         // The office's and the lounge's headers do nothing on a press, but
         // their slots have words, and the hover is where the words are.
-        return { kind: 'room', id: plate.id };
+        return { kind: 'header', id: plate.id };
       }
     }
     return null;

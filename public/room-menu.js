@@ -17,7 +17,8 @@
  *   Room colour           Auto, or one of the six zone hues — for THIS room
  *   [the slot]            a build's own per-room rows (`roomExtraRows`): this
  *                         build has one way to draw an agent, so it has none
- *   Open the board · Open folder
+ *   Open the board · Open folder · Run the dashboard, where the project has one
+ *   Archive this room    only for a room nobody is working in
  *
  * A ROOM'S CHOICES ARE SETTINGS, NOT THE LOOK. They are written to the
  * daemon's `rooms` map through the settings route, which validates them
@@ -71,7 +72,8 @@ export function roomExtraRows(_ctx) {
  * @param {(projectId:string) => {x:number, y:number, w:number, h:number}|null} opts.anchorFor
  *   where that room's title bar is, in the window's own pixels
  * @param {Record<string, Function>} opts.actions `filterToProject`, `newAgent`,
- *   `pinProject`, `showWhiteboard`, `revealFolder`
+ *   `pinProject`, `showWhiteboard`, `revealFolder`; and, where a build has
+ *   them, `runDashboard` and `archiveProject`
  * @param {(patch:Record<string, unknown>) => Promise<any>} opts.saveSetting
  * @param {ReadonlyArray<string>} opts.colours the hue ids, in the floor's order
  * @param {(id:string) => string} [opts.swatchOf] a hue's own colour, for its dot
@@ -202,6 +204,18 @@ export function createRoomMenu(opts) {
       actions.showWhiteboard(id),
     );
     item(hostEl, 'folder', 'Open folder', 'this project on disk', () => actions.revealFolder(id));
+    // The room has a screen only where there is a dashboard to run.
+    if (project.hasDashboard && actions.runDashboard) {
+      item(hostEl, 'dashboard', 'Run the dashboard', 'its dev server', () =>
+        actions.runDashboard(id),
+      );
+    }
+    // The header chip's rule: a room somebody is working in cannot be archived.
+    if ((project.activeCount ?? 0) === 0 && !project.archived && actions.archiveProject) {
+      item(hostEl, 'archive', 'Archive this room', 'take it off the floor', () =>
+        actions.archiveProject(id, true),
+      );
+    }
     hostEl
       .appendChild(el('div', 'lookbar-foot room-menu-foot'))
       .appendChild(el('span', 'lookbar-foot-keys', 'Esc to close'));
@@ -209,12 +223,19 @@ export function createRoomMenu(opts) {
   }
 
   function place() {
-    const at = openFor ? anchorFor(openFor) : null;
-    if (!at) return;
+    // Under the room's bar, and wholly on the page: a room in the bottom row
+    // has no space under its bar for a popover this tall.
+    const bar = openFor ? anchorFor(openFor) : null;
+    if (!bar) return;
     const vw = Number(doc.documentElement?.clientWidth) || 1200;
-    const left = Math.max(8, Math.min(at.x, vw - 340));
+    const vh = Number(doc.documentElement?.clientHeight) || 800;
+    const box = hostEl.getBoundingClientRect?.() || { width: 336, height: 0 };
+    const x = bar.x;
+    const y = bar.y + bar.h + 6;
+    const left = Math.max(8, Math.min(x, vw - (Number(box.width) || 336) - 4));
+    const top = Math.max(8, Math.min(y, vh - (Number(box.height) || 0) - 8));
     hostEl.style.left = `${Math.round(left)}px`;
-    hostEl.style.top = `${Math.round(at.y + at.h + 6)}px`;
+    hostEl.style.top = `${Math.round(top)}px`;
   }
 
   /** @param {any} e */
