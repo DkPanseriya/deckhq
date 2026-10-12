@@ -132,6 +132,12 @@ function lerpAngle(a, b, u) {
  */
 const TYPE_ARM = arm(2.05, 0.45, 'rest');
 
+// THE BODY IS STILL WHILE IT TYPES; ONLY THE HANDS MOVE. Until 13 October 2026
+// every key of this clip also lifted the whole figure (`bob` 0.4 and back, four
+// times in 0.9 s: a 4.4 Hz shake of the body). On a floor zoomed in that read
+// as a figure vibrating at its desk, and the owner said what it looked like.
+// The slow life of a seated figure is the idle phase's (the antenna, the blink).
+
 /** @type {Clip} */
 const TYPE_CLIP = {
   duration: 0.9,
@@ -143,21 +149,21 @@ const TYPE_CLIP = {
       lean: 0.15,
       armR: { ...TYPE_ARM, hand: 'key' },
       armL: { ...TYPE_ARM, hand: 'key' },
-      bob: 0.4,
+      bob: 0,
       fingerPhase: 1,
     }),
     kf(0.125, { armR: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0, fingerPhase: 0 }),
-    kf(0.25, { armL: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0.4, fingerPhase: 1 }),
+    kf(0.25, { armL: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0, fingerPhase: 1 }),
     kf(0.375, { armL: { ...TYPE_ARM, hand: 'key' }, bob: 0, fingerPhase: 0.15 }),
-    kf(0.5, { armR: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0.4, fingerPhase: 0.9 }),
+    kf(0.5, { armR: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0, fingerPhase: 0.9 }),
     kf(0.625, { armR: { ...TYPE_ARM, hand: 'key' }, bob: 0, fingerPhase: 0.05 }),
-    kf(0.75, { armL: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0.4, fingerPhase: 1 }),
+    kf(0.75, { armL: { ...TYPE_ARM, shoulder: 2.15, hand: 'key' }, bob: 0, fingerPhase: 1 }),
     kf(0.875, { armL: { ...TYPE_ARM, hand: 'key' }, bob: 0, fingerPhase: 0.15 }),
     kf(1, {
       lean: 0.15,
       armR: { ...TYPE_ARM, hand: 'key' },
       armL: { ...TYPE_ARM, hand: 'key' },
-      bob: 0.4,
+      bob: 0,
       fingerPhase: 1,
     }),
   ],

@@ -27,6 +27,9 @@
 - **The new-agent sheet asks in the order you answer**: what it should start on, what to call it,
   and its chest badge — which is shown as the robot wearing it, drawn by the floor's own painter,
   where it was seven outlines under the word "Avatar". The rename sheet is the same two choices.
+- **A robot at its desk sits still while it types.** Every key press also lifted the whole figure,
+  four times in 0.9 s, which read as a robot shaking at its desk on a floor zoomed in. Only the
+  hands move now, and a key tap is a finger's travel (a fiftieth of the figure, was a thirtieth).
 
 ## 1.8.0 — 2026-10-11
 

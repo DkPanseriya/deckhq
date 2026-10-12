@@ -293,13 +293,15 @@ export function rigSetup(k, id, tints, h, phase, dim, life, pose) {
 
 /**
  * How far a typing arm lifts its mitt, local units: the `type` clip's key-down
- * shoulder is 0.1 rad past its rest, and that becomes 0.035 of lift.
+ * shoulder is 0.1 rad past its rest, and that becomes 0.02 of lift. A FINGER'S
+ * TRAVEL, a fiftieth of the figure: it was 0.035, and a mitt pumping that far
+ * at the hip, twice a second, did not read as typing (13 October 2026).
  * @param {{shoulder:number, hand:string}|undefined} arm
  */
 function keyTap(arm) {
   if (!arm || arm.hand !== 'key') return 0;
-  const d = (Number(arm.shoulder) - 2.05) * 0.35;
-  return d > 0 ? Math.min(0.04, d) : 0;
+  const d = (Number(arm.shoulder) - 2.05) * 0.2;
+  return d > 0 ? Math.min(0.02, d) : 0;
 }
 
 /**

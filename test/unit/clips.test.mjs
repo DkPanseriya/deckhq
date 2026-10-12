@@ -317,6 +317,15 @@ test('type: both hands are on the keys, in front of the body, all cycle', () => 
   }
 });
 
+test('type: the body is still while it types; only the hands move', () => {
+  // Every key of this clip once lifted the whole figure: four lifts in 0.9 s,
+  // a body shaking at 4.4 Hz at its desk. The owner said what that looked like.
+  const d = CLIPS.type.duration;
+  for (let i = 0; i <= 36; i += 1) {
+    assert.equal(sampleClip('type', (d * i) / 36, false).bob, 0, `the body lifts at ${i}/36`);
+  }
+});
+
 test('type: fingerPhase varies so the L2 finger taps animate', () => {
   const d = CLIPS.type.duration;
   const seen = new Set();
