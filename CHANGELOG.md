@@ -15,6 +15,16 @@
   one line saying no model ran, so reply, approve and bench can all be shown on a floor with
   nobody's real work on it. Nothing in the published commands passes the stand-in.
 
+### Fixed
+
+- **Hooks installed from the Windows app work on a PC with no Node of its own.** They were written
+  as `node -e …`, which starts whatever `node` the shell finds; on a PC with the app and no Node
+  that is nothing, and the floor stayed on its slower path without saying why. A DeckHQ running
+  on the app's own Node now writes its hooks on that Node, by path. Hooks already written the old
+  way read as not installed where no `node` can be found, so the floor offers the reinstall that
+  cures them. Two DeckHQs on one machine (the app, and one started with `npx`) leave each
+  other's hooks alone as long as they run. Tested as a rule; not yet seen on a PC without Node.
+
 ### Changed
 
 - **Every room has a header.** The loose lines of text in a room's corner are a **title bar** with

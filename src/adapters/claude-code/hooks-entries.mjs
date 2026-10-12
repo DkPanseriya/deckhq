@@ -11,7 +11,9 @@
  * user (or another tool) put there.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CLAUDE_DIR } from './parse.mjs';
 
 /** `true` — Claude Code supports the hook mechanism this module implements. */
@@ -93,9 +95,96 @@ export function hookScript(port) {
   );
 }
 
-/** @param {number} port */
-export function hookCommand(port) {
-  return `node -e "${hookScript(port)}"`;
+/** This package's root: this file is three folders below it. */
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+/**
+ * THE APP'S OWN NODE, when the app is what is running this daemon.
+ *
+ * The Windows app carries a Node of its own and is laid out as
+ * `<app>/node/node.exe` beside `<app>/core/`, which is this package. A hook
+ * written as `node -e …` runs whatever `node` the user's shell finds — and on
+ * a PC that has the app and no Node of its own it finds none, so every hook
+ * the app installed did nothing and said nothing. Where this process IS that
+ * bundled Node, its path is the one thing known to exist.
+ *
+ * Pure: two paths in, a path or null out.
+ * @param {string} [execPath] the Node running this process
+ * @param {string} [packageRoot] this package's root
+ * @returns {string|null} the bundled Node's path, or null for any other Node
+ */
+export function bundledNode(execPath = process.execPath, packageRoot = PACKAGE_ROOT) {
+  const dir = path.dirname(String(execPath || ''));
+  if (path.basename(dir).toLowerCase() !== 'node') return null;
+  const same = (/** @type {string} */ a, /** @type {string} */ b) =>
+    path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+  return same(path.resolve(dir, '..', 'core'), packageRoot) ? String(execPath) : null;
+}
+
+/**
+ * What a hook command starts with: `node`, or the app's own Node by path.
+ *
+ * The path is written with forward slashes, which every shell a hook may be
+ * run by reads the same way, and bare where it can be: a quoted program name
+ * is not a command to PowerShell. A path with a space is quoted, because
+ * nothing else can carry it. A path with a character that some shell would
+ * expand inside quotes (`$`, a backtick, `%`, `!`, a quote) is not written at
+ * all: the command falls back to `node`, which is what it always was.
+ * @param {string} [execPath] @param {string} [packageRoot]
+ * @returns {string}
+ */
+export function hookRunner(execPath, packageRoot) {
+  const own = bundledNode(execPath, packageRoot);
+  if (!own) return 'node';
+  const p = own.replace(/\\/g, '/');
+  if (/["$`%!]/.test(p)) return 'node';
+  return /^[A-Za-z0-9_.:/~-]+$/.test(p) ? p : `"${p}"`;
+}
+
+/**
+ * @param {number} port
+ * @param {string} [runner] what starts it; `hookRunner()` unless a test says
+ */
+export function hookCommand(port, runner = hookRunner()) {
+  return `${runner} -e "${hookScript(port)}"`;
+}
+
+/**
+ * What one of our command entries is started by: `node`, a path, or null for
+ * an entry that is not ours, is the `http` one, or is not in a shape we wrote.
+ * @param {any} entry
+ * @returns {string|null}
+ */
+export function runnerOfEntry(entry) {
+  if (!entry || entry._deckhq !== true || entry.type === 'http') return null;
+  const m = /^(?:"([^"]+)"|(\S+)) -e "/.exec(String(entry.command || ''));
+  return m ? m[1] || m[2] : null;
+}
+
+/**
+ * Can a hook started by `runner` start at all, on this machine, now?
+ *
+ * `node` runs if a `node` is on this process's PATH; a path runs if the file
+ * is there. Asked only when an installed entry's runner is not the one this
+ * daemon would write (`runnerStale`), so an ordinary status check reads no
+ * directory.
+ * @param {string|null} runner
+ * @param {{env?:Record<string, string|undefined>, platform?:string,
+ *   exists?:(file:string) => boolean}} [deps]
+ */
+export function runnerRuns(runner, deps = {}) {
+  if (!runner) return false;
+  const exists = deps.exists || fs.existsSync;
+  if (runner !== 'node') return exists(runner);
+  const env = deps.env || process.env;
+  const names =
+    (deps.platform || process.platform) === 'win32'
+      ? ['node.exe', 'node.cmd', 'node.bat', 'node']
+      : ['node'];
+  for (const dir of String(env.PATH || env.Path || '').split(path.delimiter)) {
+    if (dir && names.some((name) => exists(path.join(dir, name)))) return true;
+  }
+  return false;
 }
 
 /**
@@ -119,10 +208,10 @@ export function portOfEntry(entry) {
 
 /**
  * One `{type:'command', ...}` hook entry, tagged for exact removal.
- * @param {number} port
+ * @param {number} port @param {string} [runner]
  */
-export function hookEntry(port) {
-  return { type: 'command', command: hookCommand(port), _deckhq: true };
+export function hookEntry(port, runner) {
+  return { type: 'command', command: hookCommand(port, runner), _deckhq: true };
 }
 
 /**
@@ -152,22 +241,24 @@ export function permissionEntry(port) {
  * two matcher entries (docs §4.1: matcher `permission_prompt` or
  * `idle_prompt`) rather than relying on matcher regex/alternation support.
  * @param {number} port
+ * @param {string} [runner] what starts each command; `hookRunner()` by default
  * @returns {Record<string, any[]>}
  */
-export function buildHooksBlock(port) {
+export function buildHooksBlock(port, runner) {
+  const entry = () => hookEntry(port, runner);
   return {
-    UserPromptSubmit: [{ hooks: [hookEntry(port)] }],
+    UserPromptSubmit: [{ hooks: [entry()] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [hookEntry(port)] },
-      { matcher: 'idle_prompt', hooks: [hookEntry(port)] },
+      { matcher: 'permission_prompt', hooks: [entry()] },
+      { matcher: 'idle_prompt', hooks: [entry()] },
     ],
-    Stop: [{ hooks: [hookEntry(port)] }],
-    SubagentStop: [{ hooks: [hookEntry(port)] }],
-    SessionStart: [{ hooks: [hookEntry(port)] }],
-    SessionEnd: [{ hooks: [hookEntry(port)] }],
+    Stop: [{ hooks: [entry()] }],
+    SubagentStop: [{ hooks: [entry()] }],
+    SessionStart: [{ hooks: [entry()] }],
+    SessionEnd: [{ hooks: [entry()] }],
     // No matcher: every tool, because "which tool" is the whole point.
-    PreToolUse: [{ hooks: [hookEntry(port)] }],
-    PostToolUse: [{ hooks: [hookEntry(port)] }],
+    PreToolUse: [{ hooks: [entry()] }],
+    PostToolUse: [{ hooks: [entry()] }],
     // WP-19. The one entry the runtime waits on.
     PermissionRequest: [{ hooks: [permissionEntry(port)] }],
   };

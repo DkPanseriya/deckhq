@@ -22,6 +22,9 @@ import {
   PERMISSION_TIMEOUT_SECONDS,
   portOfEntry,
   PERMISSION_PATH,
+  hookRunner,
+  runnerOfEntry,
+  runnerRuns,
 } from './hooks-entries.mjs';
 
 /**
@@ -148,6 +151,54 @@ export function firstDeckhqPort(settings) {
     }
   }
   return null;
+}
+
+/**
+ * What the first `_deckhq`-tagged command entry is started by (`node`, or a
+ * path), or null where there is none we can read. All of ours are written in
+ * one pass, so the first is representative of the set.
+ * @param {any} settings
+ * @returns {string|null}
+ */
+export function firstDeckhqRunner(settings) {
+  const hooks = settings && settings.hooks;
+  if (!isPlainObject(hooks)) return null;
+  for (const groups of Object.values(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      const list = group && Array.isArray(group.hooks) ? group.hooks : [];
+      for (const h of list) {
+        const runner = runnerOfEntry(h);
+        if (runner) return runner;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * ARE THE INSTALLED HOOKS STARTED BY SOMETHING THAT CANNOT START?
+ *
+ * The one case this exists for: hooks written as `node -e …` on a PC that has
+ * the app and no Node, which post nothing and report nothing. Stale means BOTH
+ * that the installed runner is not the one this daemon would write AND that it
+ * cannot run here. The second half is what keeps two DeckHQs on one machine
+ * (the app, and one started with `npx`) from rewriting each other's entries
+ * for ever: each finds the other's runner working and leaves it alone.
+ *
+ * An entry in a shape we cannot read is not called stale: nothing is rewritten
+ * on a guess.
+ * @param {any} settings
+ * @param {{runner?:string, runs?:(runner:string) => boolean}} [deps]
+ *   `runner` is what this daemon would write; `runs` stands in for the disk
+ * @returns {boolean}
+ */
+export function runnerStale(settings, deps = {}) {
+  const have = firstDeckhqRunner(settings);
+  if (!have) return false;
+  const want = String(deps.runner || hookRunner()).replace(/^"|"$/g, '');
+  if (have === want) return false;
+  return !(deps.runs || runnerRuns)(have);
 }
 
 /**

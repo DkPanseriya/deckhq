@@ -31,6 +31,7 @@ import {
   hasDeckhqEntries,
   isPlainObject,
   deepEqual,
+  runnerStale,
 } from './hooks-policy.mjs';
 
 export * from './hooks-entries.mjs';
@@ -63,15 +64,21 @@ export async function installedPort() {
  * mismatch reads as not installed, which puts the banner back up and offers
  * the user the one-click reinstall that fixes it.
  *
+ * So does what starts them. Hooks written as `node -e …` on a PC that has the
+ * app and no Node of its own start nothing: that too reads as not installed
+ * (`runnerStale`), and the same reinstall writes them on the app's own Node.
+ *
  * @param {number} [port] omit to ask only whether anything of ours is present
+ * @param {{runner?:string, runs?:(runner:string) => boolean}} [deps] for tests:
+ *   the runner this daemon would write, and a stand-in for the disk
  * @returns {Promise<boolean>}
  */
-export async function installed(port) {
+export async function installed(port, deps) {
   try {
     const { parsed } = await readSettings();
     if (!hasDeckhqEntries(parsed)) return false;
     if (port == null) return true;
-    return firstDeckhqPort(parsed) === Number(port);
+    return firstDeckhqPort(parsed) === Number(port) && !runnerStale(parsed, deps);
   } catch {
     return false;
   }
@@ -82,19 +89,22 @@ export async function installed(port) {
  * error and changes nothing if the file is malformed, otherwise backs up the
  * exact original bytes, merges our tagged entries in, and writes atomically.
  *
- * A no-op if already installed at this port. If ours are present but pointing
- * at a different port, they are removed first and re-added — otherwise the
- * daemon could never recover from a port change.
+ * A no-op if already installed at this port and started by something that
+ * runs. If ours are present but pointing at a different port, or started by a
+ * `node` this machine does not have, they are removed first and re-added —
+ * otherwise the daemon could never recover from either.
  *
  * @param {number} [port]
+ * @param {{runner?:string, runs?:(runner:string) => boolean}} [deps] for tests
  * @returns {Promise<void>}
  */
-export async function install(port = DEFAULT_PORT) {
+export async function install(port = DEFAULT_PORT, deps) {
   {
     const { parsed } = await readSettings();
     if (hasDeckhqEntries(parsed)) {
-      if (firstDeckhqPort(parsed) === Number(port)) return; // already correct
-      await remove(); // stale port: take ours out, then put them back below
+      const current = firstDeckhqPort(parsed) === Number(port) && !runnerStale(parsed, deps);
+      if (current) return; // already correct
+      await remove(); // stale port or runner: take ours out, then put them back below
     }
   }
 
@@ -106,7 +116,7 @@ export async function install(port = DEFAULT_PORT) {
 
   const next = { ...parsed };
   const hooks = isPlainObject(next.hooks) ? { ...next.hooks } : {};
-  const ours = buildHooksBlock(port);
+  const ours = buildHooksBlock(port, deps?.runner);
   for (const event of HOOK_EVENTS) {
     const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
     hooks[event] = [...existing, ...ours[event]];

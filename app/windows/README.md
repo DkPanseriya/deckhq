@@ -133,9 +133,12 @@ configured yourself is the same floor.
 - It does not update itself, and nothing in it checks for a new version.
 - It does not install, bundle or update the WebView2 Runtime.
 - It does not add itself to startup, register a file type or a protocol, or pin anything.
-- It does not put `node` on your `PATH`. That has one consequence today: the hooks DeckHQ installs
-  for Claude Code run `node -e …`, so on a PC with no Node of its own they do nothing and the floor
-  stays in its degraded, hook-less mode. Fixing that is a change to the core, not to this shell.
+- It does not put `node` on your `PATH`. The hooks the app installs for Claude Code are therefore
+  started by the app's own Node, by its path (`…/DeckHQ/node/node.exe -e …`), so they work on a PC
+  with no Node of its own. Hooks an earlier build of the app wrote as `node -e …` read as not
+  installed on such a PC, and the floor's own reinstall rewrites them. **Not yet seen on a PC
+  without Node:** the rule is tested, a hook firing there from a real Claude Code session is not.
+  The Claude Code plugin and the status line still need a `node` and a `deckhq` on `PATH`.
 
 ## Limits
 
