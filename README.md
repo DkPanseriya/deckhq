@@ -9,7 +9,7 @@
 DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
 queue until you clear it.
 
-![The DeckHQ floor, moving. A robot finishes its turn at a desk and a red badge appears over it. It stands, walks the corridor into Your Office and sits on the sofa beside the two already waiting, and the plate on Your Office goes from 2 waiting to 3.](docs/media/site/hero-walk.gif)
+![The DeckHQ floor, moving. A robot finishes its turn at a desk and a red badge appears over it. It stands, walks the corridor into Your Office and sits on the sofa beside the two already waiting, and the count in the header of Your Office goes from 2 waiting to 3.](docs/media/site/hero-walk.gif)
 
 _Capture: the running product on its demo floor, where the projects are invented._
 

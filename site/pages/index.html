@@ -76,11 +76,11 @@
     <img
       src="media/hero-walk.png"
       fetchpriority="high"
-      alt="The DeckHQ floor, moving. A robot named Elif finishes its turn at a desk in the orbital-api room and a red badge appears over it. It stands, the room's lights go down behind it, and it walks the corridor into Your Office and sits on the sofa beside the two already waiting. The plate on Your Office goes from 2 waiting to 3 waiting."
+      alt="The DeckHQ floor, moving. A robot named Elif finishes its turn at a desk in the orbital-api room and a red badge appears over it. It stands, the room's lights go down behind it, and it walks the corridor into Your Office and sits on the sofa beside the two already waiting. The count in the header of Your Office goes from 2 waiting to 3."
     />
     <figcaption>
       One real walk on the demo floor, recorded at 60 frames a second. Elif finishes in orbital-api,
-      crosses the corridor and sits in Your Office; the plate goes from 2 waiting to 3.
+      crosses the corridor and sits in Your Office; its header goes from 2 waiting to 3.
     </figcaption>
   </figure>
 </section>
@@ -114,7 +114,7 @@
       <figure class="split-media shot">
         <img
           src="media/office.png"
-          alt="Your Office with six robots waiting. Four sit under red badges reading 4h, 40m, 7m and 1d 2h, each with a tick. Two more, Zola and Kobe, hold a hand up. The room's plate reads: 6 waiting, oldest 1d 2h."
+          alt="Your Office with six robots waiting. Four sit under red badges reading 4h, 40m, 7m and 1d 2h, each with a tick. Two more, Zola and Kobe, hold a hand up. The room's header counts 6 waiting, 2 with a hand up and 4 for review."
         />
       </figure>
     </div>
@@ -176,15 +176,15 @@
           its project's room with a first name it keeps for good.
         </p>
         <p>
-          The plate on the room says what you might act on in the biggest type:
-          <strong>2 need you · oldest 1d 2h</strong>. Under it, what somebody is running right now,
-          and today's tokens.
+          Every room has a header: its name, and four numbers in the same four places in every room.
+          Here, <strong>2</strong> need you, <strong>1</strong> is working, none stalled, and
+          <strong>5.8M</strong> tokens today. Point at it and it says the same in a sentence.
         </p>
       </div>
       <figure class="split-media shot">
         <img
           src="media/room.png"
-          alt="One project room, orbital-api. Its plate reads: 2 need you, oldest 1d 2h; Elif, Bash npm test; today 5.8M tok. A green robot named Elif sits at the desk with a terminal bubble over its head."
+          alt="One project room, orbital-api. Its header has four counts, each beside a small symbol: 2 need you, 1 working, 0 stalled, 5.8M tokens today. A green robot named Elif sits at the desk with a terminal bubble over its head."
         />
       </figure>
     </div>
@@ -399,7 +399,7 @@
         <figure class="shot">
           <img
             src="media/lights-off.png"
-            alt="The checkout-flow room with its lights off: a grey room with one empty desk. Its plate reads: 2 need you, oldest 4h."
+            alt="The checkout-flow room with its lights off: a grey room with one empty desk. Its header counts 2 that need you and nobody working."
           />
         </figure>
         <h3>The lights go off.</h3>

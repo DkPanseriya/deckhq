@@ -287,7 +287,7 @@ is in the lounge, so a bench with nobody working at it is not drawn; the panel s
 `repo · worktree-name`. One exception: a worktree session whose sub-agents are at work takes a desk
 until they finish, because that is where they have room to stand.
 
-The room's plate counts everybody, whichever worktree they are in. So do the idle list, the deck,
+The room's header counts everybody, whichever worktree they are in. So do the idle list, the deck,
 the usage tables and Studio, which is enabled once per repository. A room pinned back when it was
 a worktree's keeps its repository's room pinned.
 
@@ -989,7 +989,7 @@ These are real, and listed here rather than discovered later.
   (today, 7 days, 30 days), the total, and the split into **input, cache write, cache read and
   output**, with tables for where it went — by project, by session, by model, by day, and by tool —
   plus this week against the week before. The panel carries the same four counters for one session;
-  a room plate carries the room's day. Every figure is a sum of records in your own local ledger,
+  a room's header carries the room's day. Every figure is a sum of records in your own local ledger,
   and a counter your runtime never reported reads **`no data`** rather than a confident `0`: Claude
   Code and OpenCode report all four, Codex and the Gemini CLI report no cache-write figure at all.
 
@@ -997,7 +997,7 @@ These are real, and listed here rather than discovered later.
   everywhere it used to be. It is an estimate and never a bill: DeckHQ multiplies observed tokens
   by published list prices so you can compare projects against each other, it has no idea what your
   plan charges you, and every figure carries the dated table it came from — `rate card <date>` and
-  `list price`, on the review card, the room plate and `deckhq stats` alike. The table is
+  `list price`, on the review card, the room's header and `deckhq stats` alike. The table is
   `src/data/rates.json`, keyed by model id prefix; a `~/.deckhq/rates.json` merges over it entry by
   entry and takes effect the moment you save the file, with no restart. A model the table has no
   row for reads **no rate** rather than `$0.00`: we would rather show you nothing than a number we
@@ -1124,7 +1124,7 @@ It opens a small sheet with a live preview and three switches, all on when it op
 | **Hide session details** | No session title, no tool text, no model. A working robot's bubble says `shell` or `files` only.   |
 | **Add the footer**       | A slim band under the floor: the DeckHQ mark, one line of the floor's own numbers, `deckhq.dev`. |
 
-**What is hidden, and why.** A real floor carries real names: the repository on each room's plate,
+**What is hidden, and why.** A real floor carries real names: the repository on each room's title bar,
 the branch on a worktree's bench, the command over a working robot's head. Those are the things a
 picture gives away, so they are off unless you turn them on. A room keeps the same invented name
 from one picture to the next, so a floor you post twice is recognisably the same floor.
