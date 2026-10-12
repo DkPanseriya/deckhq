@@ -308,6 +308,8 @@ const HELP = [
   '  --no-window    reuse or start the daemon and print the URL; open nothing',
   '  --dry-run      print what this would start and what it would open, and do',
   '                 neither. Starts nothing, opens nothing, writes nothing.',
+  '  --json         with --dry-run: the same answer as one line of JSON, for a',
+  '                 program to read',
   '  --pin          ask whether to put DeckHQ on your Desktop and Start Menu,',
   '                 even if that question has been answered before',
   '  --no-pin       never ask',
@@ -574,6 +576,51 @@ async function dryRunApp(argv, deps) {
 
   const port = running?.port ?? (Number(deps.port) || DEFAULT_PORT);
   const url = running?.url ?? `http://127.0.0.1:${port}/`;
+
+  // `--json`: the same answer for a program. The Windows app's shell asked
+  // this question by reading the sentences below with a pattern, which a
+  // reworded sentence would have broken without a test noticing in time. One
+  // line, one object, and the keys are the contract: `daemon.running`,
+  // `daemon.url`, `daemon.command` (what would be started, or null),
+  // `window.mode` (`none`, `app` or `tab`) and `window.command`.
+  if (argv.includes('--json')) {
+    /** @type {any} */
+    let window = { mode: 'none', browser: null, command: null };
+    if (!argv.includes('--no-window')) {
+      let found = null;
+      try {
+        found = deps.findBrowser ? deps.findBrowser() : (await import('./chrome.mjs')).findChrome();
+      } catch {
+        found = null;
+      }
+      const plan = planOpen({
+        url,
+        platform: deps.platform,
+        dataDir: deps.dataDir,
+        browser: found,
+      });
+      window = {
+        mode: plan.mode === 'app' ? 'app' : 'tab',
+        browser: plan.mode === 'app' ? plan.browser : null,
+        command: plan.command ? [plan.command.command, ...plan.command.args] : null,
+      };
+    }
+    write(
+      `${JSON.stringify({
+        dryRun: true,
+        daemon: {
+          running: Boolean(running),
+          url,
+          port,
+          command: running
+            ? null
+            : [node, bin, '--no-open', ...(deps.port ? ['--port', String(deps.port)] : [])],
+        },
+        window,
+      })}\n`,
+    );
+    return 0;
+  }
 
   write('\n  --dry-run: nothing below was started, opened or written.\n\n');
   write(

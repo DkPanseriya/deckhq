@@ -630,6 +630,49 @@ test('--dry-run starts nothing, opens nothing, and says what it would do', async
   assert.match(io.stdout, /--app=http:\/\/127\.0\.0\.1:4317\//);
 });
 
+test('--dry-run --json is one line a program can read, and still starts nothing', async () => {
+  const io = capture();
+  const calls = [];
+  const code = await runApp(['--dry-run', '--json'], {
+    ...io,
+    platform: 'linux',
+    dataDir: '/state',
+    find: async () => null,
+    start: async () => assert.fail('--dry-run must not start a daemon'),
+    findBrowser: () => '/usr/bin/google-chrome',
+    offerPin: async () => assert.fail('--dry-run must not ask anything'),
+    spawnFn: recordingSpawn(calls),
+    node: '/usr/bin/node',
+    bin: '/pkg/bin/deckhq.mjs',
+  });
+  assert.equal(code, 0);
+  assert.equal(calls.length, 0);
+  assert.equal(io.stdout.trim().split('\n').length, 1, 'one line');
+  const plan = JSON.parse(io.stdout);
+  assert.deepEqual(plan.daemon, {
+    running: false,
+    url: 'http://127.0.0.1:4317/',
+    port: 4317,
+    command: ['/usr/bin/node', '/pkg/bin/deckhq.mjs', '--no-open'],
+  });
+  assert.equal(plan.dryRun, true);
+  assert.equal(plan.window.mode, 'app');
+  assert.equal(plan.window.browser, '/usr/bin/google-chrome');
+  assert.ok(plan.window.command.includes('--app=http://127.0.0.1:4317/'));
+
+  const reused = capture();
+  await runApp(['--dry-run', '--json', '--no-window'], {
+    ...reused,
+    find: async () => ({ port: 4400, url: 'http://127.0.0.1:4400/' }),
+    findBrowser: () => null,
+  });
+  assert.deepEqual(JSON.parse(reused.stdout), {
+    dryRun: true,
+    daemon: { running: true, url: 'http://127.0.0.1:4400/', port: 4400, command: null },
+    window: { mode: 'none', browser: null, command: null },
+  });
+});
+
 test('--dry-run against a running daemon says it would be reused', async () => {
   const io = capture();
   const code = await runApp(['--dry-run', '--no-window'], {

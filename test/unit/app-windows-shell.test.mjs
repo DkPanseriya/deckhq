@@ -110,6 +110,32 @@ test('the shell reads the lines the CLI really prints', async () => {
   assert.equal(pattern('ReusedPattern').exec(found)[1], 'http://127.0.0.1:4400/');
   assert.equal(pattern('ReusedPattern').test(await say(async () => null)), false);
 
+  // 1b. The same question as JSON, which is what the shell asks first.
+  assert.ok(
+    source('Daemon.cs').includes('"app --dry-run --json --no-window"'),
+    'the shell asks for JSON',
+  );
+  const sayJson = async (find) => {
+    let out = '';
+    const code = await runApp(['--dry-run', '--json', '--no-window'], {
+      find,
+      write: (s) => (out += s),
+      error: (s) => (out += s),
+      findBrowser: () => null,
+    });
+    assert.equal(code, 0);
+    return out;
+  };
+  const foundJson = await sayJson(async () => ({ port: 4400, url: 'http://127.0.0.1:4400/' }));
+  assert.equal(pattern('ReusedJsonPattern').exec(foundJson)[1], 'http://127.0.0.1:4400/');
+  assert.equal(JSON.parse(foundJson).daemon.running, true);
+  const noneJson = await sayJson(async () => null);
+  assert.equal(pattern('ReusedJsonPattern').test(noneJson), false);
+  assert.equal(JSON.parse(noneJson).daemon.running, false);
+  // The JSON answer is never read as the sentence, nor the sentence as JSON.
+  assert.equal(pattern('ReusedPattern').test(foundJson), false);
+  assert.equal(pattern('ReusedJsonPattern').test(found), false);
+
   // 2. The daemon's first line, and its "already running" line (bin/deckhq.mjs).
   const bin = read('bin', 'deckhq.mjs');
   assert.ok(bin.includes('process.stdout.write(`\\n  DeckHQ  ${url}\\n\\n`)'));
@@ -127,9 +153,8 @@ test('the shell reads the lines the CLI really prints', async () => {
   // 3. The flags the shell passes exist.
   let help = '';
   await runApp(['--help'], { write: (s) => (help += s) });
-  for (const flag of ['--dry-run', '--no-window', '--no-pin', '--port'])
+  for (const flag of ['--dry-run', '--json', '--no-window', '--no-pin', '--port'])
     assert.ok(help.includes(flag), flag);
-  assert.ok(source('Daemon.cs').includes('"app --dry-run --no-window"'));
   assert.ok(source('Daemon.cs').includes('"--no-open"') && bin.includes("flag('--no-open')"));
   assert.ok(source('Program.cs').includes('app --no-pin'));
 });

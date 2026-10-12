@@ -18,6 +18,13 @@ namespace DeckHQ.Shell
 {
     internal sealed class Daemon
     {
+        // What `deckhq app --dry-run --json` answers when a DeckHQ is already there:
+        // one line of JSON whose `daemon` object says so. Read with a pattern
+        // because this shell is C# 5 with no JSON reader of its own (a quote is
+        // written \x22, so the pattern itself holds none); the key order is the
+        // CLI's (`running`, then `url`) and a test holds the two together.
+        public const string ReusedJsonPattern = @"\x22daemon\x22:\{\x22running\x22:true,\x22url\x22:\x22(http://127\.0\.0\.1:\d+/)\x22";
+        // The same answer as a sentence: what a core older than `--json` prints.
         public const string ReusedPattern = @"Daemon:\s+(http://127\.0\.0\.1:\d+/)\s+\(already running";
         public const string ListeningPattern = @"^\s*DeckHQ\s+(http://127\.0\.0\.1:\d+/)\s*$";
         public const string AlreadyPattern = @"DeckHQ is already running at (http://127\.0\.0\.1:\d+/)";
@@ -71,7 +78,7 @@ namespace DeckHQ.Shell
             StringBuilder errors = new StringBuilder();
             using (Process find = new Process())
             {
-                find.StartInfo = Node("app --dry-run --no-window" + PortArgument(port));
+                find.StartInfo = Node("app --dry-run --json --no-window" + PortArgument(port));
                 find.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e)
                 {
                     if (e.Data != null) lock (errors) errors.AppendLine(e.Data);
@@ -93,7 +100,8 @@ namespace DeckHQ.Shell
                     Error = said.Length > 0 ? said : "DeckHQ could not look for a running daemon.";
                     return false;
                 }
-                Match reused = Regex.Match(output, ReusedPattern);
+                Match reused = Regex.Match(output, ReusedJsonPattern);
+                if (!reused.Success) reused = Regex.Match(output, ReusedPattern);
                 if (!reused.Success) return false;
                 Url = reused.Groups[1].Value;
                 Started = false;

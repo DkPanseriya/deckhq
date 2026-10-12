@@ -14,6 +14,10 @@
   stand-in for `claude` that reports the prompt through the real hook endpoint and replies with
   one line saying no model ran, so reply, approve and bench can all be shown on a floor with
   nobody's real work on it. Nothing in the published commands passes the stand-in.
+- **`deckhq app --dry-run --json`**: what the command would start and open, as one line of JSON
+  (`daemon.running`, `daemon.url`, `daemon.command`, `window.mode`, `window.command`). The Windows
+  app's shell now asks its "is a DeckHQ already running" question this way, and still reads the
+  sentences of an older core.
 
 ### Fixed
 
