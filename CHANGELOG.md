@@ -6,6 +6,19 @@
 
 ## Unreleased
 
+## 1.9.0 — 2026-10-13
+
+### Highlights
+
+Every room has a header. The loose lines of text in a room's corner are a title bar with the
+room's name and a strip of four numbers that sit in the same four places in every room: how many
+need you, how many are working, how many have stalled, and today's tokens. Press a room's title bar
+and that project's own settings open: pin it, give it a colour, start an agent in it, open its
+board or its folder. A session you left open at its prompt is now drawn resting, as idle, and is no
+longer counted as working; a sub-agent in one long command stays beside its lead; and a robot at
+its desk sits still while it types. Hooks installed from the Windows app work on a PC with no Node
+of its own.
+
 ### Added
 
 - **A demo floor that takes a reply**, for contributors and for filming:

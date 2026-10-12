@@ -1,6 +1,6 @@
 {
   "name": "deckhq",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "An office for your AI coding agents. DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your queue until you clear it. Local, free, MIT, zero dependencies.",
   "keywords": [
     "claude-code",
