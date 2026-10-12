@@ -409,7 +409,7 @@ test('SECURITY: injection through every construct produces only the allowed elem
   assert.equal(climb.tagName, 'BUTTON');
 });
 
-test('SECURITY: untrusted text cannot make the parser run away', () => {
+test('SECURITY: untrusted text cannot make the parser run away', (t) => {
   const big = [
     `${'a/'.repeat(20000)}x.js:1`,
     `https://example.com/${'('.repeat(20000)}`,
@@ -418,10 +418,18 @@ test('SECURITY: untrusted text cannot make the parser run away', () => {
     `${'['.repeat(10000)}x${'](a)'.repeat(10000)}`,
     `${'a.b.c.d.'.repeat(5000)}:1`,
   ];
+  // MEASURED IN THIS PROCESS'S OWN CPU TIME, NOT ON THE WALL CLOCK. Running away
+  // is work done, and the wall clock also counts every other process on the
+  // machine: this test failed three times on 11 and 13 October 2026 with the
+  // suite running beside two renders, at 2.4 to 2.9 s of wall time for inputs
+  // that cost a fraction of that. CPU time does not move with the neighbours.
   for (const text of big) {
-    const t0 = Date.now();
+    const wall = Date.now();
+    const from = process.cpuUsage();
     render(text);
-    const ms = Date.now() - t0;
-    assert.ok(ms < 2000, `a ${text.length}-character input took ${ms} ms`);
+    const used = process.cpuUsage(from);
+    const ms = Math.round((used.user + used.system) / 1000);
+    t.diagnostic(`${text.length} characters: ${ms} ms of CPU, ${Date.now() - wall} ms on the wall`);
+    assert.ok(ms < 2000, `a ${text.length}-character input took ${ms} ms of CPU`);
   }
 });
