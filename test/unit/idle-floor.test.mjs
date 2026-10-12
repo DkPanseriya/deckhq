@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import { colorForAgent, iconForAgent, stateForAgent } from '../../public/render/scene-agent.js';
 import { clipForActivity, initialClipFor } from '../../public/render/agents-activity.js';
-import { IDLE_LABEL, visualState } from '../../public/panel-rules.js';
+import { IDLE_LABEL, isSendKey, visualState } from '../../public/panel-rules.js';
 import { counts, projects } from '../../src/core/model.mjs';
 
 const working = { ackState: 'active', activityState: 'working' };
@@ -39,6 +39,16 @@ test('the panel draws the same robot and names it Idle', () => {
   assert.equal(visualState(working), 'working');
   assert.equal(visualState(idle), 'benched');
   assert.equal(IDLE_LABEL, 'Idle');
+});
+
+test('the reply box sends on Ctrl+Enter or Cmd+Enter, and on nothing else', () => {
+  assert.equal(isSendKey({ key: 'Enter', ctrlKey: true }), true);
+  assert.equal(isSendKey({ key: 'Enter', metaKey: true }), true);
+  assert.equal(isSendKey({ key: 'Enter' }), false, 'Enter alone is a new line');
+  assert.equal(isSendKey({ key: 'Enter', shiftKey: true }), false);
+  assert.equal(isSendKey({ key: 'a', ctrlKey: true }), false);
+  assert.equal(isSendKey({ key: 'Enter', ctrlKey: true, isComposing: true }), false);
+  assert.equal(isSendKey(null), false);
 });
 
 test('idle is not working, in the header and in the room', () => {

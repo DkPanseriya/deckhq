@@ -32,6 +32,20 @@ export const STATE_ICON_GLYPH = {
   let_go: '',
 };
 
+/**
+ * Is this key press "send what is in the reply box"?
+ *
+ * Ctrl+Enter, or Cmd+Enter on a Mac: the same key the new-agent sheet sends
+ * on. Plain Enter stays a new line, because a reply to a coding agent is often
+ * several lines and a send cannot be taken back. Never while an input method
+ * is still composing a character.
+ * @param {{key?:string, ctrlKey?:boolean, metaKey?:boolean, isComposing?:boolean}} e
+ * @returns {boolean}
+ */
+export function isSendKey(e) {
+  return !!e && e.key === 'Enter' && (e.ctrlKey === true || e.metaKey === true) && !e.isComposing;
+}
+
 /** What an open session doing nothing is called, wherever a state is named. */
 export const IDLE_LABEL = 'Idle';
 

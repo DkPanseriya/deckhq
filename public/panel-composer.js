@@ -9,7 +9,7 @@
  */
 
 import { drafts } from './drafts.js';
-import { DEMO_REFUSAL } from './panel-rules.js';
+import { DEMO_REFUSAL, isSendKey } from './panel-rules.js';
 import { who } from './panel-format.js';
 import { currentId } from './panel-state.js';
 import { setStreaming } from './panel-live.js';
@@ -88,7 +88,8 @@ export function createComposerPart(ctx) {
     // Mid-turn means actively producing output. A finished turn standing for
     // review, or a hand up waiting for an answer, is exactly when a reply is
     // wanted — no second keystroke there.
-    if (agent.live && agent.activityState === 'working') {
+    // An idle session is open and doing nothing: there is no turn to interrupt.
+    if (agent.live && agent.activityState === 'working' && agent.idle !== true) {
       const proceed = window.confirm(
         'This session is currently live and may be mid-turn. Send anyway?',
       );
@@ -158,6 +159,13 @@ export function createComposerPart(ctx) {
 
   // The composer's own two listeners, on elements of their own.
   form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    sendText(textarea.value);
+  });
+
+  // Ctrl+Enter (Cmd+Enter) sends, as in the new-agent sheet. Enter is a new line.
+  textarea.addEventListener('keydown', (e) => {
+    if (!isSendKey(e)) return;
     e.preventDefault();
     sendText(textarea.value);
   });

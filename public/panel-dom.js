@@ -354,6 +354,7 @@ export function buildPanelDom() {
   // Plain, not primary: `2 Approve` is the only filled button on the screen.
   sendBtn.className = 'btn';
   sendBtn.textContent = 'Send';
+  sendBtn.title = 'Send this reply (Ctrl+Enter)';
   composerRow.append(hintEl, sendBtn);
   form.append(inputLabel, textarea, composerRow);
 

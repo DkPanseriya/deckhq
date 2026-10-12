@@ -208,6 +208,65 @@ export function snapScaleToDevice(scale, planW, dpr) {
  * A CSS-pixel offset on the nearest device pixel.
  * @param {number} v @param {number} dpr @returns {number}
  */
+/**
+ * WHAT A ZOOMED VIEW IS LOOKING AT, so that a new plan can be looked at in the
+ * same place.
+ *
+ * A re-plan is a new building: rooms move, and the old pan means nothing on
+ * it. It used to be thrown away and the floor centred, which is right at the
+ * fit scale and wrong zoomed in — a reader looking closely at one room was
+ * thrown to the middle of the building every time a panel opened (the stage
+ * narrows, the building is laid again) or a session left. Seen while filming
+ * the floor close, 13 October 2026.
+ *
+ * The anchor is the room under the middle of the view (the nearest one, if the
+ * middle is in a corridor) and where in that room the middle falls, as two
+ * fractions. Corridors are not rooms: they have no identity to find again.
+ *
+ * Pure. `null` where there is nothing to hold on to.
+ * @param {{rooms?:Array<{id:any, kind?:string, x:number, y:number, w:number, h:number}>}|null} plan
+ * @param {{panX:number, panY:number}} camera @param {number} scale
+ * @param {number} viewW @param {number} viewH
+ * @returns {{id:string, fx:number, fy:number}|null}
+ */
+export function viewAnchorOf(plan, camera, scale, viewW, viewH) {
+  if (!plan || !Array.isArray(plan.rooms) || !(scale > 0)) return null;
+  const wx = (viewW / 2 - camera.panX) / scale;
+  const wy = (viewH / 2 - camera.panY) / scale;
+  let best = null;
+  let bestD = Infinity;
+  for (const r of plan.rooms) {
+    if (!r || r.kind === 'corridor' || !(r.w > 0) || !(r.h > 0)) continue;
+    const dx = Math.max(r.x - wx, 0, wx - (r.x + r.w));
+    const dy = Math.max(r.y - wy, 0, wy - (r.y + r.h));
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      best = r;
+      bestD = d;
+    }
+  }
+  if (!best) return null;
+  return { id: String(best.id), fx: (wx - best.x) / best.w, fy: (wy - best.y) / best.h };
+}
+
+/**
+ * The pan that puts an anchor's point back in the middle of the view on
+ * `plan`, or `null` where that room is not in this plan.
+ * @param {{rooms?:Array<{id:any, kind?:string, x:number, y:number, w:number, h:number}>}|null} plan
+ * @param {{id:string, fx:number, fy:number}|null} anchor @param {number} scale
+ * @param {number} viewW @param {number} viewH
+ * @returns {{panX:number, panY:number}|null}
+ */
+export function panForAnchor(plan, anchor, scale, viewW, viewH) {
+  if (!plan || !anchor || !Array.isArray(plan.rooms) || !(scale > 0)) return null;
+  const room = plan.rooms.find((r) => r && r.kind !== 'corridor' && String(r.id) === anchor.id);
+  if (!room) return null;
+  return {
+    panX: viewW / 2 - (room.x + anchor.fx * room.w) * scale,
+    panY: viewH / 2 - (room.y + anchor.fy * room.h) * scale,
+  };
+}
+
 export function snapToDevice(v, dpr) {
   const k = Number(dpr) || 1;
   return Math.round(v * k) / k;

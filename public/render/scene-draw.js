@@ -19,6 +19,7 @@ import { rigSeatOf, worldToScreen } from './agents.js';
 import { BADGE_MIN_PX_PER_UNIT, juniorScaleFor } from './scene-lod.js';
 import { PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import { paintBoardLive, paintPressable } from './room-header.js';
+import { ZOOM_MIN, panForAnchor, viewAnchorOf } from './scene-camera.js';
 import { SceneFrame, waitingBadgeMs } from './scene-frame.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
@@ -167,6 +168,12 @@ export class SceneDraw extends SceneFrame {
             camera: this._cameraParams(),
           }
         : null;
+    // What a zoomed-in reader is looking at, read off the OLD plan: the new
+    // one is looked at in the same room (`viewAnchorOf`).
+    const anchor =
+      this._plan && this._zoom > ZOOM_MIN + 1e-6
+        ? viewAnchorOf(this._plan, this._camera, this._scale(), this._viewW || 1, this._viewH || 1)
+        : null;
     this._plan = buildPlan(this._snapshot.projects || [], agents, {
       targetAspect,
       // The stage the floor is about to be drawn on (WP-59). `targetAspect` is
@@ -194,9 +201,18 @@ export class SceneDraw extends SceneFrame {
     this._bakeFloor();
     this._fadeFrom = previous;
     this._fadeStartedAt = previous ? frameMs() : 0;
-    // The pan referred to a floor that no longer exists, so it is discarded;
-    // the magnification is the user's and is kept.
-    this._centerCamera();
+    // The pan referred to a floor that no longer exists, so it is not kept as
+    // a number. At the fit scale the floor is centred. Zoomed in, the view goes
+    // back to the room it was on, at the magnification the user chose; only if
+    // that room is no longer in the building is the floor centred.
+    const pan = panForAnchor(this._plan, anchor, this._scale(), this._viewW || 1, this._viewH || 1);
+    if (pan) {
+      this._camera.panX = pan.panX;
+      this._camera.panY = pan.panY;
+      this._clampCamera();
+    } else {
+      this._centerCamera();
+    }
     this.canvas.style.cursor = this._pannable() ? 'grab' : '';
   }
 
