@@ -664,7 +664,10 @@ export class SceneDraw extends SceneFrame {
   _boardStatesFor(projectId) {
     const seen = new Set();
     for (const a of (this._snapshot && this._snapshot.agents) || []) {
-      if (a && a.projectId === projectId && a.ackState === 'active') seen.add(a.activityState);
+      // An idle session lights no line: the board says what is HAPPENING in the room.
+      if (a && a.projectId === projectId && a.ackState === 'active' && a.idle !== true) {
+        seen.add(a.activityState);
+      }
     }
     return ['for_review', 'needs_input', 'stalled', 'working'].filter((s) => seen.has(s));
   }

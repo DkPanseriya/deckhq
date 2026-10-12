@@ -30,6 +30,7 @@ import {
   SCAN_LIMIT,
   TICK_INTERVAL_MS,
   toAgentId,
+  idleNow,
 } from './state-machine-rules.mjs';
 import { now as clockNow } from './clock.mjs';
 import { legacyIdsOf, resolveProjects } from './project-of.mjs';
@@ -355,6 +356,8 @@ export class RegistryScan extends RegistryCompute {
       if (!this._hooksInstalled(obs.runtime)) continue;
       if (!obs.live) continue;
       if (obs.lastOutputAt == null) continue;
+      // An idle session has stopped, it has not stalled: nothing was asked of it.
+      if (idleNow(obs)) continue;
       if (obs.activityState === 'working' && now - obs.lastOutputAt > windowMs) {
         obs.activityState = 'stalled';
         changed = true;

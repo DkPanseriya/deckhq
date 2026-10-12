@@ -75,6 +75,7 @@ export class RegistryHooks extends RegistryScan {
         // docs/02-ARCHITECTURE.md §4.1 this clears both timestamps.
         obs.hookLive = true;
         obs.activityState = 'working';
+        obs.turnOpen = true;
         obs.lastOutputAt = now;
         obs.lastActivityAt = Math.max(obs.lastActivityAt, now);
         this.store.setAck(id, { reviewSince: null, needsInputSince: null });
@@ -92,6 +93,7 @@ export class RegistryHooks extends RegistryScan {
       case 'Stop':
         obs.hookLive = true;
         obs.activityState = 'for_review';
+        obs.turnOpen = false;
         obs.currentTool = null;
         obs.closedCleanly = true;
         this._markForReview(id, now);
@@ -113,6 +115,9 @@ export class RegistryHooks extends RegistryScan {
       // for_review session (see `endedOr` and `_computeAgents`).
       case 'PreToolUse':
         obs.hookLive = true;
+        // A tool starting is a turn in flight, whoever started it: a session
+        // woken by something other than a typed prompt is not idle.
+        if (obs.activityState === 'working') obs.turnOpen = true;
         obs.currentTool = event.tool
           ? { name: event.tool.name, summary: event.tool.summary, since: now }
           : null;

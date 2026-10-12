@@ -268,7 +268,7 @@ async function buildFixture(juniors, { parentAgeMs = 0 } = {}) {
  */
 function inAdapter(claudeDir, body) {
   const src = `
-    import { adapter, SUBAGENT_IDLE_MS, SUBAGENT_PARENT_WINDOW_MS } from ${JSON.stringify(
+    import { adapter, SUBAGENT_IDLE_MS, SUBAGENT_BUSY_MS, SUBAGENT_PARENT_WINDOW_MS } from ${JSON.stringify(
       new URL('../../src/adapters/claude-code/adapter.mjs', import.meta.url).href,
     )};
     import fs from 'node:fs/promises';
@@ -502,8 +502,62 @@ test("a junior's title is the Task description, and a junior with no meta still 
   }
 });
 
+test('A JUNIOR IN ONE LONG TOOL CALL STAYS: quiet with its turn open is at work, not gone', async () => {
+  // The owner's floor, 13 October 2026: a junior rendering a film for longer
+  // than five minutes left its lead's side while it was the busiest thing in
+  // the room. Its file cannot move until the tool returns; its last record
+  // says the turn is open.
+  const fx = await buildFixture([
+    { id: 'a0000000000000051', ageMs: 10_000 }, // mid-turn: its last record is a tool call
+    { id: 'a0000000000000052', ageMs: 10_000, finished: true },
+  ]);
+  const file = (id) =>
+    path.join(fx.dir, PARENT_ID, 'subagents', `agent-${id}.jsonl`).replace(/\\/g, '\\\\');
+  try {
+    const out = await inAdapter(
+      fx.root,
+      `
+      const busy = "${file('a0000000000000051')}";
+      const done = "${file('a0000000000000052')}";
+      const ids = (list) => list.filter((s) => s.subagent).map((s) => s.id.slice(-2)).sort();
+      const fresh = ids(await scan());
+
+      // Both silent for six minutes: past the idle window.
+      const quiet = new Date(Date.now() - SUBAGENT_IDLE_MS - 60_000);
+      await fs.utimes(busy, quiet, quiet);
+      await fs.utimes(done, quiet, quiet);
+      const afterIdle = await scan();
+      const again = ids(await scan()); // the second poll reads neither file again
+
+      // And the busy one silent for longer than anything is given.
+      const dead = new Date(Date.now() - SUBAGENT_BUSY_MS - 60_000);
+      await fs.utimes(busy, dead, dead);
+      const afterBusy = ids(await scan());
+
+      const kept = afterIdle.find((s) => s.subagent);
+      result = {
+        fresh,
+        afterIdle: ids(afterIdle),
+        again,
+        afterBusy,
+        keptTurnEnded: kept ? kept.turnEnded : null,
+        keptGrowthIsOld: kept ? Date.now() - kept.lastGrowthAt > SUBAGENT_IDLE_MS : null,
+      };
+    `,
+    );
+    assert.deepEqual(out.fresh, ['51', '52'], 'both are here while their files move');
+    assert.deepEqual(out.afterIdle, ['51'], 'the finished one left; the one mid-call stayed');
+    assert.deepEqual(out.again, ['51'], 'and it is still there on the next poll');
+    assert.equal(out.keptTurnEnded, false);
+    assert.equal(out.keptGrowthIsOld, true, 'its cable is the quiet one: lastGrowthAt is honest');
+    assert.deepEqual(out.afterBusy, [], 'half an hour of silence and it is gone too');
+  } finally {
+    await fx.cleanup();
+  }
+});
+
 test('a junior leaves when its transcript stops moving, and a stale parent is never opened', async () => {
-  const fx = await buildFixture([{ id: 'a0000000000000005', ageMs: 10_000 }]);
+  const fx = await buildFixture([{ id: 'a0000000000000005', ageMs: 10_000, finished: true }]);
   const junior = path
     .join(fx.dir, PARENT_ID, 'subagents', 'agent-a0000000000000005.jsonl')
     .replace(/\\/g, '\\\\');

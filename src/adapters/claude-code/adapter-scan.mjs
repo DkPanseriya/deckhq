@@ -108,6 +108,30 @@ export async function listSessionFiles() {
 export const SUBAGENT_IDLE_MS = 300_000;
 
 /**
+ * How long a junior that is IN THE MIDDLE OF A TURN may be silent and still be
+ * on the floor.
+ *
+ * The five minutes above were measured over the gaps between records, and they
+ * are right for a junior that has finished. They are wrong for one junior in a
+ * thousand: the one running a single tool call for longer than that — a build,
+ * a render, a long test run — whose file cannot move until the tool returns.
+ * It vanished from its lead's side while it was the busiest thing in the room
+ * (seen on the owner's floor, 13 October 2026: a junior rendering a film).
+ *
+ * The file's own last record tells the two apart. A turn that ENDED is over,
+ * and the junior leaves on the five minutes. A turn still open — the last
+ * record is a tool call, or a tool's result the model has not answered — is a
+ * junior at work, and it is kept for this long instead. It is drawn with the
+ * grey cable a quiet junior has always had (`lastGrowthAt`), which is the
+ * honest picture: there, and saying nothing.
+ *
+ * Half an hour, and not longer: nothing marks a junior that was killed
+ * mid-call, so this is also how long such a ghost can stand. It is the same
+ * half hour a silent parent is given.
+ */
+export const SUBAGENT_BUSY_MS = 30 * 60_000;
+
+/**
  * How recently a session's own transcript must have moved before its
  * `subagents/` directory is looked at.
  *
@@ -217,7 +241,7 @@ export async function listSubagentFiles(sessionDir, parentSessionId) {
  * freshness and assembly and nothing else (standing rule 8).
  *
  * A junior whose transcript has not moved for `SUBAGENT_IDLE_MS` is NOT
- * returned. That is the "it leaves when it stops" half of WP-41 and it is a
+ * returned — unless its turn is still open, when it has `SUBAGENT_BUSY_MS`. That is the "it leaves when it stops" half of WP-41 and it is a
  * display decision made in one place: nothing about a junior is persisted, no
  * `ackState` is ever written for one, so a junior leaving the floor cannot
  * touch a user-owned field even in principle.
@@ -227,6 +251,15 @@ export async function listSubagentFiles(sessionDir, parentSessionId) {
  * @param {number} now
  * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
  */
+/**
+ * What a quiet junior's file said the last time it was read, by path. A file
+ * that has not moved cannot say anything new, so it is not read again: without
+ * this, every junior of the last half hour would cost a head and a tail read
+ * on every poll. `summary` is null for one whose turn had ended.
+ * @type {Map<string, {mtimeMs:number, size:number, summary:any}>}
+ */
+const quietJuniors = new Map();
+
 export async function scanSubagents(parents, now) {
   const fresh = parents.filter((p) => now - p.mtimeMs <= SUBAGENT_PARENT_WINDOW_MS);
   if (!fresh.length) {
@@ -237,14 +270,23 @@ export async function scanSubagents(parents, now) {
   const perParent = await mapWithConcurrency(fresh, SCAN_CONCURRENCY, (p) =>
     listSubagentFiles(path.join(path.dirname(p.file), p.sessionId), p.sessionId),
   );
-  const candidates = perParent.flat().filter((f) => now - f.mtimeMs <= SUBAGENT_IDLE_MS);
+  // Everything that moved inside the LONGER window is read; which of the
+  // quiet ones stay is decided below, by what each one's last record says.
+  const candidates = perParent.flat().filter((f) => now - f.mtimeMs <= SUBAGENT_BUSY_MS);
 
   /** @type {Map<string, string>} */
   const index = new Map();
   for (const c of candidates) index.set(c.subagentId, c.file);
   subagentFiles = index;
 
+  // A quiet file is the same file on every poll: read once, kept until it moves.
+  const seen = new Set(candidates.map((c) => c.file));
+  for (const file of quietJuniors.keys()) if (!seen.has(file)) quietJuniors.delete(file);
+
   const summaries = await mapWithConcurrency(candidates, SCAN_CONCURRENCY, async (entry) => {
+    const quiet = now - entry.mtimeMs > SUBAGENT_IDLE_MS;
+    const kept = quiet ? quietJuniors.get(entry.file) : null;
+    if (kept && kept.mtimeMs === entry.mtimeMs && kept.size === entry.size) return kept.summary;
     try {
       const base = path.basename(entry.file);
       const [head, tail, metaText] = await Promise.all([
@@ -261,7 +303,13 @@ export async function scanSubagents(parents, now) {
         mtimeMs: entry.mtimeMs,
         sidechain: true,
       });
-      return {
+      // QUIET, AND ITS TURN IS OVER: it has left. Quiet with its turn still
+      // open, it is in one long tool call, and it stays (`SUBAGENT_BUSY_MS`).
+      if (quiet && summary.turnEnded === true) {
+        quietJuniors.set(entry.file, { mtimeMs: entry.mtimeMs, size: entry.size, summary: null });
+        return null;
+      }
+      const out = {
         ...summary,
         id: agentId(RUNTIME_ID, entry.subagentId),
         // The Task call's own description is a better title than the first
@@ -286,6 +334,9 @@ export async function scanSubagents(parents, now) {
         // difference between working and finished.
         lastGrowthAt: entry.mtimeMs,
       };
+      if (quiet)
+        quietJuniors.set(entry.file, { mtimeMs: entry.mtimeMs, size: entry.size, summary: out });
+      return out;
     } catch (err) {
       // Same rule as a session: one unreadable junior never fails a scan.
       console.error(

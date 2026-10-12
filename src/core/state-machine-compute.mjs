@@ -30,6 +30,7 @@ import {
   endedOr,
   compareAgents,
   changeKey,
+  idleNow,
 } from './state-machine-rules.mjs';
 import { copyBreakdown } from './usage.mjs';
 import { now as clockNow } from './clock.mjs';
@@ -391,6 +392,9 @@ export class RegistryCompute extends RegistrySnapshot {
         // absent field is never filled in with an inference.
         workflowId: junior && summary ? (summary.workflowId ?? null) : null,
         lastGrowthAt: junior && summary ? (summary.lastGrowthAt ?? null) : null,
+        // Open and doing nothing (`idleNow`). Never a junior: its file moving
+        // is the only reason it is on this list at all.
+        idle: junior ? false : idleNow(obs),
         juniorCount: 0,
         // §155. Its own id, except at the live end of a resume chain: there it wears the name and
         // the MK number of the chain's earliest session, because that is the identity the user

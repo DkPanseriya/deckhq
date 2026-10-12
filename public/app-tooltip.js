@@ -148,7 +148,7 @@ export function showTooltip(agentId) {
   const crew = supervisingLineFor(agent, latestSnapshot && latestSnapshot.agents);
   el.tooltip.appendChild(
     tooltipLine(
-      `${STATE_LABELS[agent.activityState] || agent.activityState} · ` +
+      `${agent.idle === true ? 'Idle' : STATE_LABELS[agent.activityState] || agent.activityState} · ` +
         `${crew ? `${crew} · ` : ''}` +
         `${formatNumber(agent.tokens)} tokens · ${elapsedMin}m`,
     ),

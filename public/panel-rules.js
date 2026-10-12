@@ -32,6 +32,9 @@ export const STATE_ICON_GLYPH = {
   let_go: '',
 };
 
+/** What an open session doing nothing is called, wherever a state is named. */
+export const IDLE_LABEL = 'Idle';
+
 export const DEFAULT_APPROVE_TEXT = 'Yes, go ahead.';
 
 /**
@@ -61,6 +64,8 @@ export function visualState(agent) {
   if (!agent) return 'ended';
   if (agent.ackState === 'let_go') return 'let_go';
   if (agent.ackState === 'benched') return 'benched';
+  // Open and doing nothing: the floor draws it resting, and so does the close-up.
+  if (agent.idle === true) return 'benched';
   return agent.activityState;
 }
 

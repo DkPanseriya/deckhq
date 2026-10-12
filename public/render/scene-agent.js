@@ -104,6 +104,11 @@ export function stateForAgent(agent) {
   if (!agent) return 'working';
   if (agent.ackState === 'let_go') return 'let_go';
   if (agent.ackState === 'benched') return 'benched';
+  // OPEN AND DOING NOTHING (`idle`, the daemon's `idleNow`). It is drawn as
+  // the resting robot it is — the bench's own grey, eyes closed — but at its
+  // own desk, because it has not been sent anywhere. Not a seventh colour: the
+  // floor already has one for "resting", and this is that.
+  if (/** @type {any} */ (agent).idle === true) return 'benched';
   return Object.prototype.hasOwnProperty.call(STATE_COLORS, agent.activityState)
     ? agent.activityState
     : 'working';

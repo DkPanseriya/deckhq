@@ -169,6 +169,11 @@ export {
  *                                      every runtime that has no such folder;
  *                                      null is "not in a workflow", never "not
  *                                      looked at".
+ * @property {boolean} [idle]            open, and doing nothing: `working` by
+ *                                      state, with its turn over and no tool
+ *                                      running (`idleNow`). Derived on every
+ *                                      snapshot, never stored. Not counted as
+ *                                      working and not drawn typing.
  * @property {number|null} [lastGrowthAt] WP-89. ms epoch the junior's transcript
  *                                      file last moved, as the scan observed it.
  *                                      The only event a junior has — there is no
@@ -394,6 +399,7 @@ export function counts(agents, opts = {}) {
   let benched = 0;
   let letGo = 0;
   let working = 0;
+  let idle = 0;
 
   // Which projects have a room: one with at least one active agent on the
   // floor. A session at a desk in a project with no room is not drawn — there
@@ -432,7 +438,10 @@ export function counts(agents, opts = {}) {
     if (a.activityState === 'needs_input') handsUp++;
     else if (!junior && a.activityState === 'stalled') stalled++;
     else if (!junior && a.activityState === 'for_review') forReview++;
-    if (a.activityState === 'working') working++;
+    if (a.activityState === 'working') {
+      if (a.idle === true) idle++;
+      else working++;
+    }
     // WP-78. One walk through the three zones, off the one rule. `finished` is
     // no longer "a desk in a repo nobody is in" — an `ended` session is in the
     // lounge now — but it still counts exactly the people the floor has
@@ -462,6 +471,8 @@ export function counts(agents, opts = {}) {
     benched,
     letGo,
     working,
+    /** Open and doing nothing: at a desk, and not in `working`. */
+    idle,
     total: agents.length,
     /** What the floor actually draws. See the note above. */
     drawn: {
@@ -521,7 +532,7 @@ export function projectNameFromCwd(cwd) {
  * @param {Agent[]} agents
  */
 export function projects(agents) {
-  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,costRated:boolean,needsYou:number,working:number,activeCount:number,juniors:number}>} */
+  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,costRated:boolean,needsYou:number,working:number,idle:number,activeCount:number,juniors:number}>} */
   const byId = new Map();
   for (const a of agents) {
     let p = byId.get(a.projectId);
@@ -544,6 +555,8 @@ export function projects(agents) {
         costRated: false,
         needsYou: 0,
         working: 0,
+        // Open sessions doing nothing: in the room, and not in `working`.
+        idle: 0,
         // How many of this project's agents are still on the payroll —
         // neither benched nor let go. A project with none of these has an
         // empty room: nobody is at a desk in it, and it collapses.
@@ -569,7 +582,10 @@ export function projects(agents) {
     else if (a.ackState !== 'let_go') p.sessionCount++;
     if (needsYou(a)) p.needsYou++;
     if (a.ackState === 'active') p.activeCount++;
-    if (a.ackState === 'active' && a.activityState === 'working') p.working++;
+    if (a.ackState === 'active' && a.activityState === 'working') {
+      if (a.idle === true) p.idle++;
+      else p.working++;
+    }
   }
   return [...byId.values()].sort(
     (a, b) => b.sessionCount - a.sessionCount || a.name.localeCompare(b.name),

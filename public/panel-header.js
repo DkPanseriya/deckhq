@@ -11,7 +11,7 @@
  */
 
 import { drafts } from './drafts.js';
-import { STATE_LABELS, STATE_ICON_GLYPH, visualState } from './panel-rules.js';
+import { IDLE_LABEL, STATE_LABELS, STATE_ICON_GLYPH, visualState } from './panel-rules.js';
 import {
   who,
   juniorMetaFor,
@@ -169,9 +169,10 @@ export function createHeaderPart(ctx) {
     icon.textContent = STATE_ICON_GLYPH[a.activityState] || '●';
     // The icon carries the colour; the text label right beside it is the
     // non-colour channel (style.css's "never colour alone" discipline).
-    icon.style.color = stateColor(a.activityState);
+    icon.style.color = stateColor(a.idle === true ? 'benched' : a.activityState);
     const label = document.createElement('span');
-    label.textContent = STATE_LABELS[a.activityState] || a.activityState;
+    label.textContent =
+      a.idle === true ? IDLE_LABEL : STATE_LABELS[a.activityState] || a.activityState;
     chip.append(icon, label);
     metaEl.appendChild(chip);
     // `repo · worktree-name` in a linked worktree: the room is the repository's.

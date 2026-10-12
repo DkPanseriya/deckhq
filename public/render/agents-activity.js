@@ -108,6 +108,8 @@ export function clipForActivity(activityState) {
  * @param {'desk'|'office'|'lounge'|'let_go'} placement
  */
 export function initialClipFor(agent, placement) {
+  // An idle session is at its desk and off the keys: it must not appear to type.
+  if (placement === 'desk' && /** @type {any} */ (agent).idle === true) return 'stand_wait';
   if (placement === 'desk') return clipForActivity(agent.activityState);
   // WP-78: a hand up is a hand up wherever the agent is waiting. `needs_input`
   // waits at the manager's desk now rather than at its own, and losing the

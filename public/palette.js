@@ -224,7 +224,10 @@ function buildSelectionEntries(ctx) {
   const agent = (snapshot?.agents || []).find((a) => a.id === selectedId);
   if (!agent) return [];
   const who = agent.displayName || agent.label || agent.mk || agent.title || agent.id;
-  const state = STATE_LABELS[agent.ackState === 'active' ? agent.activityState : agent.ackState];
+  const state =
+    agent.ackState === 'active' && agent.idle === true
+      ? 'Idle'
+      : STATE_LABELS[agent.ackState === 'active' ? agent.activityState : agent.ackState];
 
   /** @type {any[]} */
   const out = [];
@@ -298,7 +301,10 @@ function buildAgentEntries(ctx) {
   return agents
     .filter((a) => letGoVisible || a.ackState !== 'let_go')
     .map((a) => {
-      const state = STATE_LABELS[a.ackState === 'active' ? a.activityState : a.ackState] || '';
+      const state =
+        a.ackState === 'active' && a.idle === true
+          ? 'Idle'
+          : STATE_LABELS[a.ackState === 'active' ? a.activityState : a.ackState] || '';
       return {
         id: `agent:${a.id}`,
         group: 'agent',

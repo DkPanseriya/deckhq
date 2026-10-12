@@ -21,6 +21,17 @@
 
 ### Fixed
 
+- **An open session doing nothing is idle, not working.** A session left open at its prompt after
+  you had acknowledged it read as _working_: it was drawn typing at its desk and counted in the
+  header and in its room, for as long as it stayed open (seen: five days). It is now **idle**: it
+  rests at its own desk in the bench's grey, it does not type, it is not counted as working, and
+  the panel and the tooltip call it Idle. One prompt and it is at work again. Idle is read from
+  what DeckHQ observes on every refresh; nothing is stored and no state was added.
+- **A sub-agent in one long tool call stays beside its lead.** A junior was taken off the floor
+  when its transcript had not moved for five minutes, which is right for one that has finished and
+  wrong for one running a build or a render for longer than that. A junior whose last record
+  shows its turn still open is now kept for up to half an hour of silence, drawn with the grey
+  cable of a quiet junior; one whose turn has ended still leaves on the five minutes.
 - **Hooks installed from the Windows app work on a PC with no Node of its own.** They were written
   as `node -e …`, which starts whatever `node` the shell finds; on a PC with the app and no Node
   that is nothing, and the floor stayed on its slower path without saying why. A DeckHQ running

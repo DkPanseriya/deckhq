@@ -95,11 +95,46 @@ export function toAgentId(runtime, rawId) {
   return agentId(/** @type {any} */ (runtime), bare);
 }
 
+/**
+ * IS THIS SESSION OPEN AND DOING NOTHING?
+ *
+ * The six states have no word for it. A session whose turn ended goes to
+ * `for_review`; once the user acknowledges it, it is "working" again as far as
+ * `activityState` goes, because that is the only state an open session with
+ * nothing owed can be in. So a session left open at its prompt for five days
+ * was drawn typing at its desk and counted as working — which the owner read,
+ * correctly, as a bug (13 October 2026: "all careerops sessions are not active
+ * and parked or waiting").
+ *
+ * Idle is DERIVED, never stored and never a seventh state: an open session
+ * that reads `working`, is running no tool, and whose turn is known to be
+ * over. "Known" is a hook where there is one (`turnOpen`: a prompt opens a
+ * turn, `Stop` closes it) and the transcript's own last record where this
+ * daemon has seen no hook for the session — after a restart, say.
+ *
+ * It touches no user-owned field and moves nobody: an idle session is still at
+ * its desk, still `active`, and one prompt makes it working again.
+ * @param {{live?:boolean, activityState?:string, currentTool?:unknown,
+ *   turnOpen?:boolean|null, turnEnded?:boolean}} obs
+ * @returns {boolean}
+ */
+export function idleNow(obs) {
+  if (!obs || !obs.live || obs.activityState !== 'working' || obs.currentTool) return false;
+  if (obs.turnOpen === false) return true;
+  return obs.turnOpen == null && obs.turnEnded === true;
+}
+
 export function freshObserved(runtime) {
   return {
     runtime,
     activityState: /** @type {ActivityState} */ ('ended'),
     hookLive: /** @type {boolean|null} */ (null),
+    /**
+     * Is a turn in flight, as the hooks tell it: true from a prompt (or a tool
+     * starting), false from `Stop`, null where this daemon has seen neither.
+     * Read by `idleNow` and by nothing else.
+     */
+    turnOpen: /** @type {boolean|null} */ (null),
     live: false,
     lastOutputAt: /** @type {number|null} */ (null),
     lastActivityAt: 0,
@@ -443,6 +478,8 @@ export function changeKey(agents) {
       a.workflowId +
       K +
       a.lastGrowthAt +
+      K +
+      a.idle +
       K +
       a.juniorCount +
       K +

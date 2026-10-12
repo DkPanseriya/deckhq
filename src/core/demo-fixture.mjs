@@ -154,6 +154,8 @@ export function buildDemoSnapshot(opts = {}) {
       gitBranch: i % 3 === 0 ? 'main' : `feat/${project}-${i + 1}`,
       model: 'claude-sonnet-4-5',
       live: activityState === 'working' || activityState === 'needs_input',
+      // No actor is idle: every one of them is cast in a state.
+      idle: false,
       activityState,
       ackState,
       reviewSince: activityState === 'for_review' ? waitedSince : null,

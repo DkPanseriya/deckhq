@@ -1263,3 +1263,91 @@ test('a ledger that throws is counted separately and changes no agent', async ()
   assert.equal(snap.agents.length, 1);
   assert.equal(snap.agents[0].ackState, 'active');
 });
+
+// ---------------------------------------------------------------------------
+// Idle: open, and doing nothing (13 October 2026)
+// ---------------------------------------------------------------------------
+//
+// The owner's floor showed two sessions "working" in a project where every
+// session was parked: both had been left open at their prompt, one for eight
+// hours and one for five days, acknowledged long ago. `activityState` has no
+// word for that, so they read `working`, were drawn typing and were counted.
+// `idle` is derived from what is observed; it is never stored.
+
+/** Hooks on, and a store that was seeded long ago: nothing is put up for review at start. */
+async function setupSeededHookRegistry(overrides = {}) {
+  const store = fakeStore();
+  store.markSeeded(1);
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', overrides)],
+    live: [makeLive('a')],
+  });
+  const registry = new Registry({ store, adapters: [adapter] });
+  registry.setHookStatus({ 'claude-code': { supported: true, installed: true } });
+  await registry.refresh();
+  return { registry, adapter };
+}
+
+test('idle: a session open at its prompt after a restart is idle, not working', async () => {
+  // Hooks on, no hook seen by THIS daemon, the transcript's last record a finished turn.
+  const { registry } = await setupSeededHookRegistry({ lastRole: 'assistant', turnEnded: true });
+  const agent = find(registry, 'a');
+  assert.equal(agent.activityState, 'working', 'the state is unchanged: there is no seventh');
+  assert.equal(agent.idle, true);
+  const counts = registry.snapshot().counts;
+  assert.equal(counts.working, 0, 'it is not counted as working');
+  assert.equal(counts.idle, 1);
+  assert.equal(counts.needsYou, 0, 'and it asks nothing of anybody');
+  const room = registry.snapshot().projects[0];
+  assert.equal(room.working, 0);
+  assert.equal(room.idle, 1);
+});
+
+test('idle: mid-turn is working, whatever was seen before', async () => {
+  const { registry } = await setupSeededHookRegistry({ lastRole: 'user', turnEnded: false });
+  assert.equal(find(registry, 'a').idle, false, 'the transcript says a turn is open');
+  assert.equal(registry.snapshot().counts.working, 1);
+});
+
+test('idle: a prompt opens the turn, Stop closes it, and acknowledging leaves it idle', async () => {
+  const { registry } = await setupSeededHookRegistry({ lastRole: 'assistant', turnEnded: true });
+  const prompt = (at) =>
+    registry.applyHook({
+      runtime: 'claude-code',
+      sessionId: 'a',
+      hookEvent: 'UserPromptSubmit',
+      at,
+    });
+
+  // The hook is ahead of the transcript: the file still ends on the old turn.
+  prompt(1000);
+  assert.equal(find(registry, 'a').idle, false, 'a prompt just went in: working');
+
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'Stop', at: 2000 });
+  assert.equal(find(registry, 'a').activityState, 'for_review');
+  assert.equal(find(registry, 'a').idle, false, 'waiting on the user is not idle');
+
+  registry.act(find(registry, 'a').id, 'acknowledge');
+  const acked = find(registry, 'a');
+  assert.equal(acked.activityState, 'working');
+  assert.equal(acked.idle, true, 'seen, nothing owed, nothing running');
+  assert.equal(acked.reviewSince, null);
+
+  // IT DOES NOT STALL. Nothing was asked of it, however long it sits.
+  registry.tick(2000 + 999 * 24 * 60 * 60 * 1000);
+  assert.equal(find(registry, 'a').activityState, 'working');
+  assert.equal(find(registry, 'a').idle, true);
+
+  // One prompt and it is at work again; a session that then goes quiet stalls as it always did.
+  prompt(5000);
+  assert.equal(find(registry, 'a').idle, false);
+  registry.tick(5000 + 600001);
+  assert.equal(find(registry, 'a').activityState, 'stalled');
+});
+
+test('idle: a tool running is never idle', async () => {
+  const { registry } = await setupSeededHookRegistry({ lastRole: 'assistant', turnEnded: true });
+  assert.equal(find(registry, 'a').idle, true);
+  registry.applyHook(preToolUse('Bash', 'Bash npm test', 1000));
+  assert.equal(find(registry, 'a').idle, false);
+});
