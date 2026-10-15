@@ -25,6 +25,7 @@ import { execFile } from 'node:child_process';
 
 import { lastMcpServers, parseMcpList, readHead } from './parse.mjs';
 import { listSessionFiles } from './adapter-scan.mjs';
+import { claudeBin } from './claude-bin.mjs';
 
 /**
  * How long `claude mcp list` gets.
@@ -60,14 +61,19 @@ export const MCP_LIST_MAX_BUFFER = 1024 * 1024;
  * — a one-shot command — and never on the daemon's poll path, so the reason
  * `liveSessions()` caches its spawn (`adapter-live.mjs`, §77) does not apply.
  *
- * @param {{run?: typeof execFile}} [deps]
+ * @param {{run?: typeof execFile, bin?: string|null}} [deps] `bin`: where `claude` is
  * @returns {Promise<{text:string|null, reason:string|null}>}
  */
 export function runMcpList(deps = {}) {
   const run = deps.run || execFile;
+  const claude = deps.bin === undefined ? claudeBin() : deps.bin;
   return new Promise((resolve) => {
+    if (!claude) {
+      resolve({ text: null, reason: 'claude is not on PATH' });
+      return;
+    }
     run(
-      'claude',
+      claude,
       ['mcp', 'list'],
       { windowsHide: true, timeout: MCP_LIST_TIMEOUT_MS, maxBuffer: MCP_LIST_MAX_BUFFER },
       (err, stdout) => {

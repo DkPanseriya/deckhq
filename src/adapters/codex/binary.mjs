@@ -183,10 +183,12 @@ export function findOnPath(name, opts = {}) {
   const env = opts.env || process.env;
   const platform = opts.platform || process.platform;
   const sep = platform === 'win32' ? ';' : ':';
+  // A relative entry means "the working folder", which must never supply the binary.
+  const absolute = platform === 'win32' ? path.win32.isAbsolute : path.posix.isAbsolute;
   const dirs = String(env.PATH || env.Path || '')
     .split(sep)
     .map((d) => d.trim().replace(/^"|"$/g, ''))
-    .filter(Boolean);
+    .filter((d) => d && absolute(d));
   const exts = platform === 'win32' ? opts.exts || SPAWNABLE_WIN_EXTS : [''];
   // Join with the TARGET platform's rules, not the host's, so both searches
   // can be exercised from one test run.

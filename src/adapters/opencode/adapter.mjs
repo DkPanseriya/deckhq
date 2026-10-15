@@ -46,6 +46,7 @@ import {
   sessionFromSqlRow,
   truncateTitle,
 } from './parse.mjs';
+import { findOnPath } from '../../core/editor.mjs';
 
 /**
  * How stale the cached session roster is allowed to get before OpenCode's CLI
@@ -154,7 +155,10 @@ function runOpencode(args, { cwd, timeoutMs = CLI_TIMEOUT_MS } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn('opencode', args, {
+      // By its path on PATH: a bare name is looked for in `cwd`, the project, first.
+      const found = findOnPath('opencode', { exts: ['.exe', '.com'] });
+      if (!found) throw Object.assign(new Error('opencode is not on PATH'), { code: 'ENOENT' });
+      child = spawn(found, args, {
         cwd: cwd || undefined,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],

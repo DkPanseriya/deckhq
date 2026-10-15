@@ -20,6 +20,7 @@ import { PROJECTS_DIR, TAIL_BYTES, readTail, parseConversation } from './parse.m
 import { parseConversationDetail } from './transcript-detail.mjs';
 import { createStreamParser } from './stream.mjs';
 import { subagentFiles } from './adapter-scan.mjs';
+import { claudeBin } from './claude-bin.mjs';
 
 /**
  * Find the on-disk transcript file for a raw (unprefixed) session id by
@@ -189,7 +190,13 @@ export const SEND_STDERR_BYTES = 8 * 1024;
 export function send(id, text, opts = {}) {
   const { sessionId } = splitAgentId(id);
   const { cwd, timeoutMs = 120_000, onEvent, signal } = opts;
-  const bin = opts.bin || { command: 'claude', args: [] };
+  // By its path on PATH, never by bare name: the turn runs in the session's
+  // project folder, which a bare name would be looked for in first (`claude-bin.mjs`).
+  const found = opts.bin ? null : claudeBin();
+  if (!opts.bin && !found) {
+    return Promise.resolve({ ok: false, error: 'claude is not on PATH' });
+  }
+  const bin = opts.bin || { command: /** @type {string} */ (found), args: [] };
   const spawnChild = opts.spawnFn || spawn;
   const argv = [...(bin.args || []), ...sendArgs(sessionId, text)];
 

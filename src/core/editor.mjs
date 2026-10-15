@@ -93,8 +93,12 @@ function isExecutableFile(p) {
  * out to, because `where`/`which` is one more program between us and a
  * decision that has to be exact.
  *
- * @param {string} name  a member of EDITOR_NAMES
- * @param {{env?: NodeJS.ProcessEnv, platform?: string, isFile?: (p:string)=>boolean}} [opts]
+ * A RELATIVE `PATH` ENTRY (`.`, `bin`) IS SKIPPED: it means "the working folder",
+ * and a program found there is the one the working folder supplied.
+ *
+ * @param {string} name  a member of EDITOR_NAMES, or a coding tool
+ * @param {{env?: NodeJS.ProcessEnv, platform?: string, isFile?: (p:string)=>boolean,
+ *   exts?: ReadonlyArray<string>}} [opts] `exts` replaces `PATHEXT` on Windows
  * @returns {string|null} absolute path, or null when it is not on PATH
  */
 export function findOnPath(name, opts = {}) {
@@ -102,13 +106,14 @@ export function findOnPath(name, opts = {}) {
   const platform = opts.platform || process.platform;
   const exists = opts.isFile || isExecutableFile;
   const sep = platform === 'win32' ? ';' : ':';
+  const absolute = platform === 'win32' ? path.win32.isAbsolute : path.posix.isAbsolute;
   const dirs = String(env.PATH || env.Path || '')
     .split(sep)
     .map((d) => d.trim().replace(/^"|"$/g, ''))
-    .filter(Boolean);
+    .filter((d) => d && absolute(d));
   const exts =
     platform === 'win32'
-      ? String(env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+      ? (opts.exts ? opts.exts.join(';') : String(env.PATHEXT || '.COM;.EXE;.BAT;.CMD'))
           .split(';')
           .map((e) => e.trim().toLowerCase())
           .filter(Boolean)

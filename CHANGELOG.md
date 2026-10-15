@@ -8,6 +8,11 @@
 
 ### Security
 
+- **`claude` is started from PATH, never from a project folder.** A reply from the panel runs
+  `claude` in the session's project folder, where a bare name is looked for first on Windows; a
+  `claude.exe` committed to a repository would have run in its place. It is now found on PATH (in
+  absolute folders only) and started by that path, and with none on PATH nothing is started. The
+  same for the Gemini CLI and OpenCode, and a relative PATH entry is never searched for any tool.
 - **The Windows app's build runs the release gates `npm publish` runs.** The app carries exactly
   what `npm pack` would publish, and `npm pack` skips `prepublishOnly`, so a gate that only lived
   there was never run for an installer. The build now runs each gate the repository has and stops

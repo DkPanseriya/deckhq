@@ -15,6 +15,7 @@ import { execFile } from 'node:child_process';
 import { agentId } from '../../core/model.mjs';
 import { PROJECTS_DIR } from './parse.mjs';
 import { systemExe } from '../../core/system-exe.mjs';
+import { claudeBin } from './claude-bin.mjs';
 
 /** The id every agent from this runtime carries, before the colon. */
 export const RUNTIME_ID = 'claude-code';
@@ -89,8 +90,13 @@ export async function computeAvailable() {
  */
 export function probeLiveSessions() {
   return new Promise((resolve) => {
+    const claude = claudeBin();
+    if (!claude) {
+      resolve([]);
+      return;
+    }
     execFile(
-      'claude',
+      claude,
       ['agents', '--json'],
       { windowsHide: true, timeout: 5000, maxBuffer: 4 * 1024 * 1024 },
       (err, stdout) => {

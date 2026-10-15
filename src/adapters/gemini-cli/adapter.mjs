@@ -50,6 +50,7 @@ import {
   sessionIdFromFilename,
   truncateTitle,
 } from './parse.mjs';
+import { findOnPath } from '../../core/editor.mjs';
 
 /** Bound on how many file heads we will open looking for one session id. */
 const MAX_ID_LOOKUP_SCAN = 500;
@@ -485,7 +486,10 @@ function runGemini(args, { cwd, timeoutMs } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn('gemini', args, {
+      // By its path on PATH: a bare name is looked for in `cwd`, the project, first.
+      const found = findOnPath('gemini', { exts: ['.exe', '.com'] });
+      if (!found) throw Object.assign(new Error('gemini is not on PATH'), { code: 'ENOENT' });
+      child = spawn(found, args, {
         cwd: cwd || undefined,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],

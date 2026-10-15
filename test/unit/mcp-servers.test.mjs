@@ -178,6 +178,7 @@ test('runMcpList spawns `claude mcp list` as an argv array, never a shell string
   /** @type {any[]} */
   const calls = [];
   await runMcpList({
+    bin: 'claude',
     run: (
       /** @type {any} */ file,
       /** @type {any} */ args,
@@ -199,6 +200,7 @@ test('a missing binary, a timeout and an error each say which one it was', async
   const reason = async (/** @type {any} */ err) =>
     (
       await runMcpList({
+        bin: 'claude',
         run: (
           /** @type {any} */ _f,
           /** @type {any} */ _a,
