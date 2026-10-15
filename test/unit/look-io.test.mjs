@@ -167,6 +167,11 @@ test('eleven bad documents are each refused with a reason, and none is half-appl
   assert.equal(refused.problems[0].picker, 'rug.wool');
 });
 
+/** The layers the DeckHQ app's look may carry beyond the floor everybody has. */
+const APP_LAYERS = ['robot', 'ready', 'finish', 'quality', 'frameRate'];
+/** Which of them THIS build draws: the ones its own sanitiser fills in. */
+const DRAWN = new Set(APP_LAYERS.filter((k) => k in sanitizeLook(DEFAULT_LOOK)));
+
 test('a look from the app loads here: its extra layers are read and dropped, nothing else is let in', () => {
   // What the app's look file adds when its layers are not at their defaults.
   const fromApp = {
@@ -179,8 +184,13 @@ test('a look from the app loads here: its extra layers are read and dropped, not
   };
   const result = /** @type {any} */ (validateLookDocument(fromApp));
   assert.ok('ok' in result, result.error);
-  for (const key of ['robot', 'ready', 'finish', 'quality', 'frameRate']) {
-    assert.equal(key in result.look, false, `${key} is not a layer this build draws`);
+  for (const key of APP_LAYERS) {
+    if (DRAWN.has(key)) {
+      // A build that draws the layer reads it like any other key of the look.
+      assert.equal(result.look[key], fromApp[key], `${key} is drawn here and kept`);
+    } else {
+      assert.equal(key in result.look, false, `${key} is not a layer this build draws`);
+    }
   }
   // The floor itself arrived whole.
   assert.deepEqual(result.look.floors, docFor('paper-office').floors);
@@ -202,7 +212,8 @@ test('the app’s own layers survive a settings save here, and nothing else ride
   const out = /** @type {any} */ (sanitizeLook(stored));
   assert.equal(out.finish, 'clay');
   assert.equal(out.robot, 'stem');
-  assert.equal('quality' in out, false, 'not a plain id: dropped');
+  // Not a plain id: set aside here, or replaced by the default where the build draws it.
+  assert.notEqual(out.quality, 'x y');
   assert.equal('path' in out, false, 'not one of the app’s layers: dropped');
   assert.equal(
     out.floors.office,
