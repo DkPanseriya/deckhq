@@ -181,6 +181,13 @@ export function roomHeaderFor(room, snapshot, plan, wait) {
     };
   });
   const said = slots.map((s) => `${HEADER_SLOT_SPECS[s.id].says} ${s.on ? s.text : 'none'}`);
+  // Open sessions doing nothing (`idle`) have no slot: the strip holds what
+  // asks for attention or is moving. The hover says them, where any are.
+  if (kind === 'project') {
+    const p = (snap.projects || []).find((/** @type {any} */ x) => x.id === room.id) || {};
+    const idle = num(p.idle);
+    if (idle > 0) said.push(`idle ${idle}`);
+  }
   const pinned = room.pinned === true;
   return {
     title: String(room.name || ''),

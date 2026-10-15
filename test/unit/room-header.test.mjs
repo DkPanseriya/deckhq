@@ -193,6 +193,11 @@ test('THE WORDS ARE THE TOOLTIP’S: every slot is said in words, zero or not', 
     header.tooltip,
     'orbital-api · need you 2 · working none · stalled none · tokens today 5.8M',
   );
+  // Idle sessions have no slot of their own; the hover says them where there are any.
+  assert.equal(
+    roomHeaderFor(ROOM, snapshot({ working: 0, idle: 2 })).tooltip,
+    'orbital-api · need you 2 · working none · stalled none · tokens today 5.8M · idle 2',
+  );
   for (const kind of Object.keys(HEADER_SLOTS)) {
     for (const id of HEADER_SLOTS[kind]) {
       const spec = HEADER_SLOT_SPECS[id];

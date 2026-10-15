@@ -6,6 +6,11 @@
 
 ## Unreleased
 
+### Changed
+
+- **A room's hover says how many sessions in it are idle**, open and doing nothing, where there
+  are any. The strip of counts is unchanged: idle has no slot of its own.
+
 ### Fixed
 
 - **A look shared from the DeckHQ app opens here.** The app's look file can name a robot, a
