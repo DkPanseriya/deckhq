@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { agentId } from '../../core/model.mjs';
 import { PROJECTS_DIR } from './parse.mjs';
+import { systemExe } from '../../core/system-exe.mjs';
 
 /** The id every agent from this runtime carries, before the colon. */
 export const RUNTIME_ID = 'claude-code';
@@ -47,7 +48,7 @@ export async function mapWithConcurrency(items, limit, fn) {
 /** @param {string} cmd */
 export function commandExists(cmd) {
   return new Promise((resolve) => {
-    const finder = process.platform === 'win32' ? 'where' : 'which';
+    const finder = process.platform === 'win32' ? systemExe('where') : 'which';
     execFile(finder, [cmd], { windowsHide: true, timeout: 5000 }, (err) => resolve(!err));
   });
 }

@@ -48,6 +48,7 @@ import { DATA_DIR } from './paths.mjs';
 import { appProfileDir } from './app-window.mjs';
 import { TAG } from './launcher.mjs';
 import { readAppFlags, recordedEntries, writeAppFlags } from './launcher-apply.mjs';
+import { systemExe } from './system-exe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,7 +70,11 @@ export const TASKBAR_FLAG = 'taskbar';
  * @param {string} [powershell]
  * @returns {{command:string, args:string[]}}
  */
-export function taskbarCommand(action, specFile, powershell = 'powershell.exe') {
+export function taskbarCommand(
+  action,
+  specFile,
+  powershell = systemExe('powershell', { platform: 'win32' }),
+) {
   return {
     command: powershell,
     args: [

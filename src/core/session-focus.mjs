@@ -30,6 +30,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { systemExe } from './system-exe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +60,11 @@ export function intArg(value, what) {
  * @param {string} [powershell]
  * @returns {{command:string, args:string[]}}
  */
-export function focusCommand(action, opts = {}, powershell = 'powershell.exe') {
+export function focusCommand(
+  action,
+  opts = {},
+  powershell = systemExe('powershell', { platform: 'win32' }),
+) {
   const args = [
     '-NoProfile',
     '-NonInteractive',

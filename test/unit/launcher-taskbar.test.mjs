@@ -24,6 +24,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { systemExe } from '../../src/core/system-exe.mjs';
 
 const { scratchDir } = await import('../helpers/isolate.mjs');
 const { TAG, description } = await import('../../src/core/launcher.mjs');
@@ -143,7 +144,7 @@ test('taskbar.ps1 writes one property, and only to a shortcut that carries the t
 
 test('the script runs with -File and named parameters: the exact argv', () => {
   assert.deepEqual(taskbarCommand('look', 'C:/state/taskbar-1.json'), {
-    command: 'powershell.exe',
+    command: systemExe('powershell', { platform: 'win32' }),
     args: [
       '-NoProfile',
       '-NonInteractive',

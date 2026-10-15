@@ -12,6 +12,7 @@ import '../helpers/isolate.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { systemExe } from '../../src/core/system-exe.mjs';
 
 const {
   DEFAULT_HEIGHT,
@@ -150,7 +151,7 @@ test('the profile is under the state dir, never beside the user own browsing', (
 
 test('the default-browser fallback is the same three commands the daemon uses', () => {
   assert.deepEqual(defaultBrowserCommand({ platform: 'win32', url: URL_4317 }), {
-    command: 'cmd',
+    command: systemExe('cmd', { platform: 'win32' }),
     args: ['/c', 'start', '', URL_4317],
   });
   assert.deepEqual(defaultBrowserCommand({ platform: 'darwin', url: URL_4317 }), {

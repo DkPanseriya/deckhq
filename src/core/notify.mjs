@@ -27,6 +27,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { systemExe } from './system-exe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -82,7 +83,7 @@ export function notifyCommand(platform, title, body, opts = {}) {
 
   if (platform === 'win32') {
     return {
-      command: 'powershell',
+      command: systemExe('powershell', { platform }),
       args: [
         '-NoProfile',
         '-NonInteractive',

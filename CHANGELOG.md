@@ -6,6 +6,14 @@
 
 ## Unreleased
 
+### Security
+
+- **Windows' own tools are started by their full path.** On Windows a command given by bare
+  name (`cmd`, `powershell`, `where`, `reg`, `explorer`) is looked for in the working folder
+  before `PATH`, and DeckHQ starts some of them in a session's project folder: a file of that name
+  committed to a repository would have run in place of Windows' own. Each is now named under the
+  Windows folder the system reports, and a test refuses a bare name anywhere in the code.
+
 ### Changed
 
 - **`deckhq doctor` says what its egress row is.** It read "none. no outbound sockets.", which looked

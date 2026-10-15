@@ -31,6 +31,7 @@
  */
 import path from 'node:path';
 import process from 'node:process';
+import { systemExe } from './system-exe.mjs';
 
 /** The app window's size on a first run, before Chrome remembers its own. */
 export const DEFAULT_WIDTH = 1600;
@@ -145,7 +146,9 @@ export function defaultBrowserCommand(opts) {
   const platform = opts.platform || process.platform;
   const url = String(opts.url || '');
   if (!url) return null;
-  if (platform === 'win32') return { command: 'cmd', args: ['/c', 'start', '', url] };
+  if (platform === 'win32') {
+    return { command: systemExe('cmd', { platform }), args: ['/c', 'start', '', url] };
+  }
   if (platform === 'darwin') return { command: 'open', args: [url] };
   return { command: 'xdg-open', args: [url] };
 }

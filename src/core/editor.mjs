@@ -39,6 +39,7 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 
 import { assertCmdSafe, cmdQuote } from './cmdline.mjs';
+import { systemExe } from './system-exe.mjs';
 
 /**
  * @typedef {object} EditorSpec
@@ -212,7 +213,11 @@ export function editorArgv(editor, file, line, opts = {}) {
     // first and last character of the string after /c, so the real command
     // line needs its own pair inside them.
     const line_ = `""${editor.command}" ${args.map((a) => cmdQuote(a, CMD_REFUSAL)).join(' ')}"`;
-    return ['cmd.exe', ['/d', '/s', '/c', line_], { windowsVerbatimArguments: true }];
+    return [
+      systemExe('cmd', { platform }),
+      ['/d', '/s', '/c', line_],
+      { windowsVerbatimArguments: true },
+    ];
   }
   return [editor.command, args, {}];
 }

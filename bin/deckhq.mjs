@@ -33,6 +33,7 @@
  */
 import { spawn } from 'node:child_process';
 import process from 'node:process';
+import { systemExe } from '../src/core/system-exe.mjs';
 
 const argv = process.argv.slice(2);
 
@@ -188,7 +189,10 @@ async function main() {
   const openBrowser = (url) => {
     try {
       if (process.platform === 'win32') {
-        spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+        spawn(systemExe('cmd'), ['/c', 'start', '', url], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref();
       } else if (process.platform === 'darwin') {
         spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
       } else {

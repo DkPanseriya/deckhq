@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './paths.mjs';
 import { RECORD_NAME, TAG } from './launcher.mjs';
 import { pngToIco, readIco } from './ico.mjs';
+import { systemExe } from './system-exe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -61,7 +62,7 @@ export function iconPngPath() {
  */
 export function runShortcutScript(args, deps = {}) {
   const exec = deps.exec || execFile;
-  const ps = deps.powershell || 'powershell.exe';
+  const ps = deps.powershell || systemExe('powershell', { platform: 'win32' });
   return new Promise((resolve, reject) => {
     exec(
       ps,

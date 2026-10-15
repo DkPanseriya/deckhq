@@ -18,6 +18,7 @@ import {
   openInEditor,
   resolveEditor,
 } from '../../src/core/editor.mjs';
+import { systemExe } from '../../src/core/system-exe.mjs';
 
 /** A PATH containing exactly the named commands. */
 function fakeMachine(commands, { platform = 'linux', dir = '/usr/bin' } = {}) {
@@ -126,7 +127,7 @@ test('the argv is an array, and the file always travels as its own element', () 
 test('WINDOWS: a .cmd launcher goes through cmd.exe verbatim, and unsafe paths are refused', () => {
   const editor = { name: 'code', command: 'C:\\bin\\code.cmd' };
   const [cmd, args, opts] = editorArgv(editor, 'C:/proj/src/a b.ts', 12, { platform: 'win32' });
-  assert.equal(cmd, 'cmd.exe');
+  assert.equal(cmd, systemExe('cmd', { platform: 'win32' }));
   assert.deepEqual(args.slice(0, 3), ['/d', '/s', '/c']);
   // `cmd /s` strips the first and last character of the string after /c, so
   // the real command line carries its own pair of quotes inside them.

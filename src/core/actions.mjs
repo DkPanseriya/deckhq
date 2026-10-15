@@ -25,6 +25,7 @@ import path from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
 import process from 'node:process';
+import { systemExe } from './system-exe.mjs';
 
 /**
  * @typedef {object} ProjectAction
@@ -149,7 +150,11 @@ export async function revealInFileManager(dir) {
   if (!info.isDirectory()) throw new Error('Not a directory');
 
   const cmd =
-    process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+    process.platform === 'win32'
+      ? systemExe('explorer')
+      : process.platform === 'darwin'
+        ? 'open'
+        : 'xdg-open';
   // argv array, never a shell string — the path is user data.
   const child = spawn(cmd, [target], { detached: true, stdio: 'ignore' });
   child.unref();
@@ -181,9 +186,12 @@ export async function runAction(cwd, action) {
   if (process.platform === 'win32' && (ext === '.bat' || ext === '.cmd')) {
     // `cmd /c` is required to run a batch file, but the path goes in as its
     // own argv element so nothing in it is ever parsed as a command.
-    spawnArgs = ['cmd', ['/c', target]];
+    spawnArgs = [systemExe('cmd'), ['/c', target]];
   } else if (ext === '.ps1') {
-    spawnArgs = ['powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', target]];
+    spawnArgs = [
+      systemExe('powershell'),
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', target],
+    ];
   } else if (ext === '.sh') {
     spawnArgs = ['sh', [target]];
   } else {
@@ -208,7 +216,7 @@ export async function runAction(cwd, action) {
 export function openUrl(url) {
   if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) URLs can be opened');
   if (process.platform === 'win32') {
-    execFile('cmd', ['/c', 'start', '', url], () => {});
+    execFile(systemExe('cmd'), ['/c', 'start', '', url], () => {});
   } else if (process.platform === 'darwin') {
     execFile('open', [url], () => {});
   } else {

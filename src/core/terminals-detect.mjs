@@ -24,6 +24,7 @@ import {
   LINUX_TERMINALS,
   WINDOWS_TERMINALS,
 } from './terminals-catalog.mjs';
+import { systemExe } from './system-exe.mjs';
 
 /**
  * The emulators this platform can use, in preference order.
@@ -90,7 +91,7 @@ export function buildLaunch(terminal, ctx) {
 /** @param {string} cmd @returns {Promise<boolean>} */
 export function binOnPath(cmd) {
   return new Promise((resolve) => {
-    const finder = process.platform === 'win32' ? 'where' : 'which';
+    const finder = process.platform === 'win32' ? systemExe('where') : 'which';
     execFile(finder, [cmd], { windowsHide: true, timeout: 5000 }, (err) => resolve(!err));
   });
 }

@@ -45,6 +45,7 @@ import {
 } from '../../src/core/notify-watch.mjs';
 import { Registry } from '../../src/core/state-machine.mjs';
 import { DEFAULT_SETTINGS } from '../../src/core/store.mjs';
+import { systemExe } from '../../src/core/system-exe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -413,7 +414,7 @@ test('oneLine flattens control characters and caps the length', () => {
 test('SECURITY: the Windows argv is a fixed script plus two separate values', () => {
   const cmd = notifyCommand('win32', 'DeckHQ', HOSTILE, { scriptPath: 'C:/x/notify.ps1' });
   assert.deepEqual(cmd, {
-    command: 'powershell',
+    command: systemExe('powershell', { platform: 'win32' }),
     args: [
       '-NoProfile',
       '-NonInteractive',

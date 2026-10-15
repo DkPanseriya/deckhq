@@ -10,6 +10,7 @@ import { execFile, spawn } from 'node:child_process';
 import { splitAgentId } from '../../core/model.mjs';
 import { launchTerminal, trySpawnDetached } from '../../core/terminals.mjs';
 import { APP_SESSION_ID, appSessionIdFor } from './desktop.mjs';
+import { systemExe } from '../../core/system-exe.mjs';
 
 /**
  * Spawn an interactive terminal attached to this session.
@@ -65,7 +66,7 @@ export function computeAppAvailable() {
   if (process.platform !== 'win32') return Promise.resolve(false);
   return new Promise((resolve) => {
     execFile(
-      'reg',
+      systemExe('reg'),
       ['query', 'HKCU\\SOFTWARE\\Classes\\claude'],
       { windowsHide: true, timeout: 5000 },
       (err) => resolve(!err),
@@ -179,7 +180,12 @@ export async function openInApp(sessionId, cwd, opts = {}) {
  */
 async function dispatchUri(uri, cwd) {
   if (process.platform === 'win32') {
-    const child = spawn('cmd', ['/c', 'start', '', uri], { cwd, detached: true, stdio: 'ignore' });
+    // By its full path: a bare `cmd` is looked for first in `cwd`, the session's project.
+    const child = spawn(systemExe('cmd'), ['/c', 'start', '', uri], {
+      cwd,
+      detached: true,
+      stdio: 'ignore',
+    });
     child.unref();
     return;
   }

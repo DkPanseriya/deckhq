@@ -31,6 +31,7 @@ import {
   parsePsTable,
   parseWmctrl,
 } from '../../src/core/session-focus.mjs';
+import { systemExe } from '../../src/core/system-exe.mjs';
 
 const p = (pid, ppid, name, extra = {}) => ({ pid, ppid, name, ...extra });
 const w = (hwnd, pid, title, windowClass = 'Chrome_WidgetWin_1') => ({
@@ -475,7 +476,8 @@ test('what the person is told afterwards is what was read back, not what was hop
 
 test('SECURITY: the script is run with -File and the only values are numbers this module wrote', () => {
   const table = focusCommand('table', { pid: 4242 });
-  assert.equal(table.command, 'powershell.exe');
+  // Windows' own, by its full path: never a `powershell.exe` found in a working folder.
+  assert.equal(table.command, systemExe('powershell', { platform: 'win32' }));
   assert.deepEqual(table.args, [
     '-NoProfile',
     '-NonInteractive',
