@@ -383,6 +383,10 @@ test('editor: only a name on the allowlist is ever stored (WP-47)', async () => 
       store.setSettings({ editor: hostile });
       assert.equal(store.settings.editor, '', `${JSON.stringify(hostile)} must not be stored`);
     }
+    // The settings above scheduled a debounced write on the real clock. Let it
+    // land now: on a loaded machine it otherwise fired late, in the middle of
+    // the hand-written file below or of the folder's removal (5.1, 11 Oct).
+    await store.flush();
 
     // Including one hand-written into state.json behind the daemon's back.
     await fsp.writeFile(
