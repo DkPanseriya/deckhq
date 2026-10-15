@@ -6,6 +6,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Zoomed in, the floor stays on the room you are looking at.** Opening a panel or a session
+  leaving lays the building again, and a zoomed view was thrown back to the middle of it each
+  time. It now returns to the same room, at your magnification; at the fit scale nothing changes.
+- **Ctrl+Enter sends a reply** from the panel (Cmd+Enter on a Mac), as it does in the new-agent
+  sheet. Enter is still a new line. An idle session no longer asks "may be mid-turn" before a send.
+
 ## 1.9.0 — 2026-10-13
 
 ### Highlights
@@ -34,11 +42,6 @@ of its own.
 
 ### Fixed
 
-- **Zoomed in, the floor stays on the room you are looking at.** Opening a panel or a session
-  leaving lays the building again, and a zoomed view was thrown back to the middle of it each
-  time. It now returns to the same room, at your magnification; at the fit scale nothing changes.
-- **Ctrl+Enter sends a reply** from the panel (Cmd+Enter on a Mac), as it does in the new-agent
-  sheet. Enter is still a new line. An idle session no longer asks "may be mid-turn" before a send.
 - **An open session doing nothing is idle, not working.** A session left open at its prompt after
   you had acknowledged it read as _working_: it was drawn typing at its desk and counted in the
   header and in its room, for as long as it stayed open (seen: five days). It is now **idle**: it
