@@ -167,6 +167,49 @@ test('eleven bad documents are each refused with a reason, and none is half-appl
   assert.equal(refused.problems[0].picker, 'rug.wool');
 });
 
+test('a look from the app loads here: its extra layers are read and dropped, nothing else is let in', () => {
+  // What the app's look file adds when its layers are not at their defaults.
+  const fromApp = {
+    ...docFor('paper-office'),
+    robot: 'stem',
+    ready: 'night-shift',
+    finish: 'clay',
+    quality: 'high',
+    frameRate: '60',
+  };
+  const result = /** @type {any} */ (validateLookDocument(fromApp));
+  assert.ok('ok' in result, result.error);
+  for (const key of ['robot', 'ready', 'finish', 'quality', 'frameRate']) {
+    assert.equal(key in result.look, false, `${key} is not a layer this build draws`);
+  }
+  // The floor itself arrived whole.
+  assert.deepEqual(result.look.floors, docFor('paper-office').floors);
+  // Still closed to anything else, under any name.
+  for (const extra of ['path', 'project', 'session', 'robots']) {
+    const refused = validateLookDocument({ ...fromApp, [extra]: 'x' });
+    assert.ok('error' in refused, `${extra} was let in`);
+  }
+});
+
+test('the app’s own layers survive a settings save here, and nothing else rides along', () => {
+  const stored = {
+    .../** @type {any} */ (presetById('paper-office')).look,
+    finish: 'clay',
+    robot: 'stem',
+    quality: 'x y',
+    path: 'C:/secret',
+  };
+  const out = /** @type {any} */ (sanitizeLook(stored));
+  assert.equal(out.finish, 'clay');
+  assert.equal(out.robot, 'stem');
+  assert.equal('quality' in out, false, 'not a plain id: dropped');
+  assert.equal('path' in out, false, 'not one of the app’s layers: dropped');
+  assert.equal(
+    out.floors.office,
+    /** @type {any} */ (presetById('paper-office')).look.floors.office,
+  );
+});
+
 test('a file is size-bounded before it is parsed, and a non-JSON file says so', () => {
   assert.ok('error' in parseLookDocument('x'.repeat(MAX_LOOK_BYTES + 1)));
   assert.match(/** @type {any} */ (parseLookDocument('{')).error, /not JSON/);

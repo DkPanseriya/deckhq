@@ -8,6 +8,12 @@
 
 ### Fixed
 
+- **A look shared from the DeckHQ app opens here.** The app's look file can name a robot, a
+  ready-made look and its 3D layers, and this build refused the whole file over them. They are now
+  read and set aside; the floor arrives whole, and any other unknown key is still refused. A
+  settings save made here also keeps those choices in the settings file the app shares, instead
+  of writing them out.
+
 - **Zoomed in, the floor stays on the room you are looking at.** Opening a panel or a session
   leaving lays the building again, and a zoomed view was thrown back to the middle of it each
   time. It now returns to the same room, at your magnification; at the fit scale nothing changes.

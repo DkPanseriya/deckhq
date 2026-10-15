@@ -124,6 +124,25 @@ const LATER_KEYS = Object.freeze({
   font: FONT_IDS,
 });
 
+/**
+ * KEYS A LOOK FROM A BUILD THAT DRAWS MORE MAY CARRY, read without complaint
+ * and dropped (`normalizeLook` keeps only what this build's tables name).
+ *
+ * The DeckHQ app draws layers this build does not: which robot stands in the
+ * office (`robot`), the ready-made look a floor was set from (`ready`), and a
+ * second renderer's `finish`, `quality` and `frameRate`. A look exported
+ * there carries them when they are not their default, and this build refused
+ * the whole file over them ("a look carries robot, which a look may not") —
+ * a floor shared from the app could not be opened here. Each of them is a
+ * choice of how to draw, never a project, a path or a session, so the reason
+ * the list of keys is closed does not apply to them.
+ *
+ * Named one by one rather than "anything unknown": an unknown key is still
+ * refused, because a file that carried a path under a new name must not be
+ * accepted for having one.
+ */
+const FOREIGN_KEYS = Object.freeze(['robot', 'ready', 'finish', 'quality', 'frameRate']);
+
 /** The keys a look document may carry, and nothing else. */
 const DOCUMENT_KEYS = Object.freeze([
   'kind',
@@ -138,6 +157,7 @@ const DOCUMENT_KEYS = Object.freeze([
   'lounge',
   'agentSize',
   ...Object.keys(LATER_KEYS),
+  ...FOREIGN_KEYS,
 ]);
 
 /**
@@ -338,7 +358,30 @@ export function parseLookDocument(text) {
  */
 export function sanitizeLook(v) {
   const look = normalizeLook(v);
-  return validateLook(look).ok ? look : normalizeLook(DEFAULT_LOOK);
+  return carryForeign(v, validateLook(look).ok ? look : normalizeLook(DEFAULT_LOOK));
+}
+
+/**
+ * THE APP'S OWN LAYERS SURVIVE A SAVE HERE. The DeckHQ app and a DeckHQ started
+ * with `npx` read and write the same `state.json`, and `normalizeLook` keeps only
+ * what this build draws: so every settings save made here wrote the app's
+ * robot, ready-made look, finish, quality and frame rate out of the file, and
+ * the app came back to its defaults. They are carried through untouched, short
+ * plain ids only; nothing here draws or reads them.
+ * @param {unknown} raw @param {import('../../public/render/look-options.js').Look} out
+ * @returns {import('../../public/render/look-options.js').Look}
+ */
+function carryForeign(raw, out) {
+  if (!isPlainObject(raw)) return out;
+  /** @type {Record<string, string>} */
+  const kept = {};
+  for (const key of FOREIGN_KEYS) {
+    // A build that draws the layer has already sanitised it: its value wins.
+    if (key in out) continue;
+    const v = raw[key];
+    if (typeof v === 'string' && v.length <= 40 && /^[a-z0-9-]*$/i.test(v)) kept[key] = v;
+  }
+  return Object.keys(kept).length ? { ...out, ...kept } : out;
 }
 
 /**
