@@ -39,7 +39,10 @@ function reportWith(runtime) {
     deck: { found: false, waiting: null, waitingNotRunning: null, oldestWaitAt: null, total: null },
     state: { path: 'x', writable: true, error: null },
     terminal: { id: null, label: null, reason: null, present: false, pinned: false },
-    egress: { outbound: 0, note: 'none. no outbound sockets.' },
+    egress: {
+      outbound: 0,
+      note: 'none by design: only 127.0.0.1 (from the code, not measured on this run)',
+    },
     problems: [],
     notes: [],
   });
@@ -433,7 +436,10 @@ test('`doctor --share` does not print an MCP server name', () => {
     deck: { found: false, waiting: null, waitingNotRunning: null, oldestWaitAt: null, total: null },
     state: { path: 'x', writable: true, error: null },
     terminal: { id: null, label: null, reason: null, present: false, pinned: false },
-    egress: { outbound: 0, note: 'none. no outbound sockets.' },
+    egress: {
+      outbound: 0,
+      note: 'none by design: only 127.0.0.1 (from the code, not measured on this run)',
+    },
     problems: [],
     notes: [],
   };

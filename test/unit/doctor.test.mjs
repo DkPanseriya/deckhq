@@ -241,7 +241,10 @@ test('the report renders a row for every runtime in the registry, available or n
 
   assert.match(text, /hooks {11}installed, port 4317/);
   assert.match(text, /state {11}.*state\.json, writable/);
-  assert.match(text, /egress {10}none\. no outbound sockets\./);
+  assert.match(
+    text,
+    /egress {10}none by design: only 127\.0\.0\.1 \(from the code, not measured on this run\)/,
+  );
 });
 
 test('a THIRD and FOURTH runtime get their doctor rows from the real registry, with no doctor change', async () => {
@@ -1539,7 +1542,7 @@ test('the share block is fenced, and the pitch is its last line', async () => {
   assert.match(block, /on the floor +70 {2}← 69 sessions have already finished/);
   assert.match(block, /waiting on you +47 {2}← none of these are running; oldest 26h/);
   assert.match(block, /hooks +installed, 1,204 events, last 2m ago/);
-  assert.match(block, /egress +none\. no outbound sockets\./);
+  assert.match(block, /egress +none by design: only 127\.0\.0\.1/);
   assert.match(block, /codex +not installed/);
   // Dated to the day, never to the hour: the hour is a fact about the person.
   assert.match(block, /^deckhq doctor · \d{4}-\d{2}-\d{2}$/m);
@@ -1631,7 +1634,8 @@ test('redact removes the machine from anything that reached the block by another
   // Windows home written with the other separator is still home.
   assert.equal(redact('C:/Users/ada/x', { home: 'C:\\Users\\ada', host: 'pc' }), '[path]');
   // What it must NOT touch: the report's own vocabulary.
-  const clean = '70 sessions across 18 projects · 127.0.0.1 · none. no outbound sockets.';
+  const clean =
+    '70 sessions across 18 projects · 127.0.0.1 · none by design: only 127.0.0.1 (from the code, not measured on this run)';
   assert.equal(redact(clean, opts), clean);
   // A two-letter hostname is indistinguishable from a word, so it is left alone
   // rather than shredding the text it is supposed to protect.

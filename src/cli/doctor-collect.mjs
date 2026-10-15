@@ -854,10 +854,16 @@ export async function collectReport(opts = {}) {
     goToSession,
     taskbar,
     names,
-    // Static and deliberate. The core opens no outbound socket at all
-    // (docs/02-ARCHITECTURE.md §9), including from this command: the only
-    // connections it makes are to 127.0.0.1.
-    egress: { outbound: 0, note: 'none. no outbound sockets.' },
+    // Static and deliberate, AND SAID TO BE: the core opens no outbound socket
+    // at all (docs/02-ARCHITECTURE.md §9), including from this command; the only
+    // connections it makes are to 127.0.0.1. That is a property of the code,
+    // held by `test/unit/no-egress.test.mjs`, and nothing on this run measured
+    // it, so the row says which of the two it is (CLAUDE.md: claims are
+    // measured, not asserted).
+    egress: {
+      outbound: 0,
+      note: 'none by design: only 127.0.0.1 (from the code, not measured on this run)',
+    },
     problems,
     notes,
   };

@@ -8,6 +8,11 @@
 
 ### Changed
 
+- **`deckhq doctor` says what its egress row is.** It read "none. no outbound sockets.", which looked
+  like a measurement and was a fixed line. It now reads "none by design: only 127.0.0.1 (from the
+  code, not measured on this run)", and a test holds the code to it: no module of the daemon, the
+  CLI or the page loads a library that can reach outside the machine, and every address a socket
+  is opened to in the source is the loopback one.
 - **A room's hover says how many sessions in it are idle**, open and doing nothing, where there
   are any. The strip of counts is unchanged: idle has no slot of its own.
 
