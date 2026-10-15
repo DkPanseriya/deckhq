@@ -4,6 +4,7 @@
  *
  *   node app/windows/build.mjs                # the real thing: official Node, by hash
  *   node app/windows/build.mjs --local-node   # a TEST build: this machine's own node.exe
+ *   node app/windows/build.mjs --test-keys    # a TEST build that may carry test keys
  *
  * The result is `dist/app/DeckHQ/`:
  *
@@ -112,13 +113,47 @@ async function chooseNode(localNode, pins, log) {
 }
 
 /**
- * @param {{localNode?:boolean, log?:(line:string) => void}} [opts]
+ * The repository's own release gates: scripts a package must pass before it is
+ * made at all. `npm publish` runs them from `prepublishOnly`; this build packs
+ * the same files without `npm publish`, so it runs them itself, or a build of
+ * a branch that pins a test key would carry it into an installer (security
+ * review, 15 October 2026). A repository with none of them has nothing to run.
+ */
+export const RELEASE_GATES = Object.freeze(['scripts/check-release-keys.mjs']);
+
+/**
+ * Run every release gate this repository has. Throws on the first that fails.
+ * @param {{testKeys?:boolean, log:(line:string) => void, repo?:string,
+ *   run?:(file:string) => void}} o
+ */
+export function runReleaseGates(o) {
+  const repo = o.repo || REPO;
+  const gates = RELEASE_GATES.filter((rel) => fs.existsSync(path.join(repo, rel)));
+  for (const rel of gates) {
+    if (o.testKeys) {
+      o.log(`!! --test-keys: ${rel} NOT run. This folder may carry a test key: never publish it.`);
+      continue;
+    }
+    const run =
+      o.run || ((file) => execFileSync(process.execPath, [file], { cwd: repo, stdio: 'inherit' }));
+    try {
+      run(path.join(repo, rel));
+    } catch {
+      throw new Error(`${rel} refused this build. A test build may pass --test-keys.`);
+    }
+    o.log(`release gate  ${rel}: passed`);
+  }
+}
+
+/**
+ * @param {{localNode?:boolean, testKeys?:boolean, log?:(line:string) => void}} [opts]
  * @returns {Promise<{dir:string, files:string[], bytes:number, test:boolean}>}
  */
 export async function build(opts = {}) {
   const log = opts.log || ((line) => process.stdout.write(`${line}\n`));
   const pkg = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8'));
   const pins = readPins();
+  runReleaseGates({ testKeys: Boolean(opts.testKeys), log });
 
   if (!WEBVIEW2_FILES.every((rel) => fs.existsSync(path.join(WEBVIEW2_DIR, rel)))) {
     await fetchWebView2({ cacheDir: path.join(BUILD_DIR, 'cache'), log });
@@ -161,7 +196,10 @@ export async function build(opts = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    await build({ localNode: process.argv.includes('--local-node') });
+    await build({
+      localNode: process.argv.includes('--local-node'),
+      testKeys: process.argv.includes('--test-keys'),
+    });
   } catch (err) {
     process.stderr.write(`\n  build: ${err?.stdout || ''}${err?.message || err}\n\n`);
     process.exitCode = 1;

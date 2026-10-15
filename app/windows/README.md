@@ -46,6 +46,12 @@ node app/windows/build.mjs --local-node   # a TEST build: this machine's own nod
 is running the script, verifies nothing about it, prints a warning and writes `TEST BUILD` into
 `VERSION`. It must never be published; the workflow test refuses a workflow that uses it.
 
+Before it packs anything the build runs the repository's own release gates, the scripts
+`npm publish` runs from `prepublishOnly` (`RELEASE_GATES` in `build.mjs`), because the folder is
+made without `npm publish` and would otherwise skip them. A gate that refuses stops the build.
+`--test-keys` skips them for a test build, says so in the log, and such a folder must never be
+published either.
+
 The installer is compiled by `.github/workflows/app-windows.yml` (run it from the Actions tab), or
 by hand where NSIS 3 is installed:
 

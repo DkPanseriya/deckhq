@@ -222,6 +222,8 @@ test('the workflow builds on windows-2022, publishes nothing, and downloads noth
     /\bnuget\b/i,
     /npm (install|i|ci)\b/,
     /--local-node/,
+    // A build that skips the release gates is a test build, never the workflow's.
+    /--test-keys/,
   ]) {
     assert.ok(!fetcher.test(steps), `the workflow must not use ${fetcher}`);
   }

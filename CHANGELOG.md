@@ -8,6 +8,10 @@
 
 ### Security
 
+- **The Windows app's build runs the release gates `npm publish` runs.** The app carries exactly
+  what `npm pack` would publish, and `npm pack` skips `prepublishOnly`, so a gate that only lived
+  there was never run for an installer. The build now runs each gate the repository has and stops
+  on a refusal; `--test-keys` skips them for a test build, out loud, and the workflow may not use it.
 - **Windows' own tools are started by their full path.** On Windows a command given by bare
   name (`cmd`, `powershell`, `where`, `reg`, `explorer`) is looked for in the working folder
   before `PATH`, and DeckHQ starts some of them in a session's project folder: a file of that name
