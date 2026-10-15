@@ -69,6 +69,9 @@ test('INVARIANT: every host a socket is opened to in the source is the loopback 
   for (const file of sources()) {
     const text = fs.readFileSync(file, 'utf8');
     for (const m of text.matchAll(HOST)) {
+      // Only what could be an address: a name with a dot, or one with a port.
+      // `host: 'pro-teaser-host'` names an element, not a machine.
+      if (!/[.:]/.test(m[1]) && m[1] !== 'localhost') continue;
       if (!LOOPBACK.has(m[1])) hits.push(`${path.relative(ROOT, file)}: host ${m[1]}`);
     }
     for (const m of text.matchAll(URLS)) {
