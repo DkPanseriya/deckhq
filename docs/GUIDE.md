@@ -424,6 +424,20 @@ and **have never been executed on a machine** — the command says so above the 
 time. The macOS icon is a PNG rather than an `.icns`, because converting one means shelling out to
 `iconutil` and this package has no dependencies to spend.
 
+### Removing it
+
+```bash
+deckhq shortcut --remove --yes    # the icons
+deckhq autostart --remove --yes   # the login entry
+deckhq statusline --remove --yes  # the status line, if you added it
+claude plugin uninstall deckhq    # the plugin, if you installed it
+npm uninstall -g deckhq
+```
+
+Hooks installed from the floor are removed on the same hooks screen, which deletes only the entries
+DeckHQ tagged. DeckHQ's own data (state, ledger, app profile) is in `~/.deckhq`; delete that folder
+to remove it too.
+
 ## More on `deckhq doctor`
 
 One command that says what DeckHQ actually knows about this machine, and whether the parts that

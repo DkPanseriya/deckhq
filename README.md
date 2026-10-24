@@ -18,23 +18,27 @@ npx deckhq doctor   # count the sessions on your disk, finished ones included
 npx deckhq app      # the floor, in a window of its own
 ```
 
-`doctor` only reports. One real run read `on the floor 77 ← 71 sessions have already finished;
-the agent view no longer lists them` (3 September 2026); yours will differ. Before DeckHQ has ever
-run on a machine it writes nothing, starts no daemon, opens no window and makes no connection of
-its own: it reads the transcripts on your disk and asks `claude` what is running and which MCP
-servers it has, and Claude Code checks those servers itself, as it does when it starts.
+**Local, and nothing else.** The daemon binds `127.0.0.1` (`HOST` in
+[`src/daemon.mjs`](src/daemon.mjs)) and makes no outbound call. No account, no telemetry,
+**zero runtime dependencies** ([`package.json`](package.json) has no `dependencies` field),
+**MIT** ([`LICENSE`](LICENSE)). Both commands need Node 18 or newer, nothing else.
 
-`app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and the first time
-asks once whether you want a Desktop and Start Menu icon. Both need Node 18 or newer, nothing else.
+<details>
+<summary><strong>What the two commands do, and where it has run</strong></summary>
 
-**Platforms.** Used day to day on Windows. The test suite runs on Windows, macOS and Linux in CI
-(Node 18, 20 and 22); the macOS and Linux desktop pieces (app bundle, terminals, desktop entries)
-are written from their documentation and have not been run on a real machine yet.
+`doctor` only reports. Before DeckHQ has ever run on a machine it writes nothing, starts no daemon,
+opens no window and makes no connection of its own: it reads the transcripts on your disk and asks
+`claude` what is running and which MCP servers it has, and Claude Code checks those servers itself.
+One real run read `on the floor 77 ← 71 sessions have already finished; the agent view no longer
+lists them` (3 September 2026); yours will differ.
 
-- **Local.** The daemon binds `127.0.0.1` and nothing else (`HOST` in
-  [`src/daemon.mjs`](src/daemon.mjs)) and makes no outbound call. No account, no telemetry.
-- **Zero runtime dependencies.** [`package.json`](package.json) has no `dependencies` field.
-- **MIT**, and all of it is in this repository: [`LICENSE`](LICENSE).
+`app` starts the daemon, opens the floor in Chrome or Edge with no tab strip (your default browser,
+and you are told so, when there is neither), and the first time asks once about an icon.
+**Platforms:** used day to day on Windows; the test suite runs on Windows, macOS and Linux in CI
+(Node 18, 20 and 22); the macOS and Linux desktop pieces are written from their documentation and
+have not been run on a real machine yet.
+
+</details>
 
 ## What you see
 
@@ -68,11 +72,43 @@ are written from their documentation and have not been run on a real machine yet
   </tr>
 </table>
 
-_Captures: the running product on its demo floor, where the projects are invented._
+_Captures: the running product on its demo floor, where the projects are invented._ Tokens by
+project, session, model, day and tool, a picture of your floor you can post, and the rest:
+[the features](https://deckhq.dev/features.html). [The manual](docs/GUIDE.md) has every command,
+key and file.
 
-Tokens by project, session, model, day and tool, a picture of your floor you can post, and the
-rest, with a picture each: [the features](https://deckhq.dev/features.html).
-[The manual](docs/GUIDE.md) has every command, key and file.
+## Change the look
+
+![The same DeckHQ floor shown in each of its eleven style presets in turn, from Studio oak and Night lab to Paper office and Colour plan, with the name of each preset on a label in the corridor.](docs/media/readme/styles.gif)
+
+_Capture: one demo floor in each of the eleven presets, as the product draws them._
+
+**Look** in the header, or `L`, opens the five you reach for most: **agent size**, **light**
+(Default, Morning, Evening or Night shift), **style** (eleven presets, Studio oak to Walnut
+executive, in one row that scrolls sideways), **density** and **room colours**. Settings → Look
+has the rest: **72 options over fourteen pickers**. A combination that would leave a rug
+unreadable on its floor is **refused with the reason and changes nothing**. A look is a file you
+own, and it names no project, no path and no session, so you can post it:
+`deckhq look export > my-floor.json`, then `deckhq look import my-floor.json`.
+
+## Studio
+
+Opt-in per project (`deckhq studio enable <project>`): a real `claude` session interviews you and
+writes a blueprint, a roster and a board; each hired role gets its own git worktree and session. A
+card its role thinks is done comes back as a handover, **flagged, never moved**, and a card past
+its budget goes to **Blocked** while **nothing is killed**. **Not yet watched:** a real planner
+interview, or a hired session's real reply. [More on the site](https://deckhq.dev/features.html#studio)
+and [in the manual](docs/GUIDE.md#studio).
+
+<img src="docs/media/site/board.png" width="100%" alt="The Studio board for orbital-api, with cards in Backlog, Ready, In progress, Review, Done and Blocked." />
+
+## Coming: the same office, in 3D
+
+<img src="docs/media/readme/office-3d.gif" width="100%" alt="The DeckHQ floor seen from above, and then the same floor in 3D. The view switches, the rooms gain walls, and the camera comes down into the design-system room, where two robots type at a shared desk and two juniors sit on the floor with laptops. A label reads Coming from the moment the view is 3D." />
+
+_Not released, and not in this repository: a clip of the 3D office on the demo floor._ Same
+sessions, same seats, same queue; one key switches the view, and nothing is cleared by looking.
+[The 3D office on the site](https://deckhq.dev/3d.html).
 
 ## Why not the agent view you already have?
 
@@ -87,60 +123,8 @@ background and lets you answer one from a list. Use both. They do different jobs
 | **Which tools**      | Claude Code sessions. Its pages name no other tool.                                                                                               | Claude Code, verified. Codex, verified for reading and replying. Gemini CLI and OpenCode adapters are written and unverified.                     |
 | **What you look at** | A list in your terminal, grouped by state, with the sessions that need you at the top. A research preview.                                        | An office seen from above in a window of its own: one room per repository, one robot per session.                                                 |
 
-As of October 2026. Agent view is described from Anthropic's own pages as they read on the 10th:
-[the announcement](https://claude.com/blog/agent-view-in-claude-code) and
-[the documentation](https://code.claude.com/docs/en/agent-view). `deckhq doctor` prints agent
-view's own count beside its own.
-
-## Install, the other ways
-
-<details>
-<summary><strong>No Node on the machine, a step at a time, or an installer to double-click</strong></summary>
-
-**No Node on the machine?** Paste the line for your shell:
-
-```powershell
-irm https://deckhq.dev/install.ps1 | iex
-```
-
-```bash
-curl -fsSL https://deckhq.dev/install.sh | sh
-```
-
-Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
-distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
-icon, and opens the window. Read them first: [`install.ps1`](scripts/install/install.ps1) and
-[`install.sh`](scripts/install/install.sh) are two short files in this repository, served from the
-site byte for byte.
-
-**Rather double-click?** [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd)
-on Windows and [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command)
-on macOS carry the same line and nothing else. SmartScreen may warn about the unsigned `.cmd`, and
-a downloaded `.command` arrives without its run bit; the pasted lines have neither caveat.
-
-**A step at a time:** `npm install -g deckhq`, then `deckhq app`, then
-`deckhq shortcut --install --yes` for the icon.
-
-</details>
-
-## Make it yours
-
-- **Look** (`L`): agent size, light, eleven style presets, density and room colours, and 72 options
-  in Settings. A combination that would leave a rug unreadable on its floor is refused with the
-  reason and changes nothing. A look names no project, path or session, so you can post it:
-  `deckhq look export > my-floor.json`.
-
-  <img src="docs/media/site/look-panel.png" width="420" alt="The Look panel: agent size, light (Default, Morning, Evening, Night shift), style presets such as Studio oak and Night lab, density and room colours." />
-
-- **Studio**, opt-in per project (`deckhq studio enable <project>`): a real `claude` session
-  interviews you and writes a blueprint, a roster and a board; each hired role gets its own git
-  worktree and session. A card its role thinks is done comes back as a handover, **flagged, never
-  moved**, and a card past its budget goes to **Blocked** while **nothing is killed**. **Not yet
-  watched:** a real planner interview, or a hired
-  session's real reply. [More on the site](https://deckhq.dev/features.html#studio) and
-  [in the manual](docs/GUIDE.md#studio).
-
-  <img src="docs/media/site/board.png" width="100%" alt="The Studio board for orbital-api, with cards in Backlog, Ready, In progress, Review, Done and Blocked." />
+As of October 2026, from Anthropic's [announcement](https://claude.com/blog/agent-view-in-claude-code)
+and [documentation](https://code.claude.com/docs/en/agent-view) as they read on the 10th.
 
 ## What it never does
 
@@ -159,46 +143,41 @@ a downloaded `.command` arrives without its run bit; the pasted lines have neith
   into your settings only after showing you the literal JSON and the exact file, backs the file up
   first, tags what it wrote, and removes only what it tagged.
 
-## Runtimes
+## Install, run it like an app, remove it
 
-| Runtime         | Status                            | What that means                                                                                                        |
-| --------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Claude Code** | verified                          | Read, reply, streamed sends, hooks, and a permission prompt answered from the panel on a real session, once            |
-| **Codex**       | verified for reading and replying | Real sessions read and a real reply sent, 4 September 2026. No hooks, no permission card, liveness inferred from mtime |
-| **Gemini CLI**  | **unverified**                    | Implemented against the runtime's documented on-disk format; never run against real data                               |
-| **OpenCode**    | **unverified**                    | Implemented against the published CLI; never run against real data                                                     |
+<details>
+<summary><strong>No Node on the machine, an installer to double-click, an icon, a login entry</strong></summary>
 
-An adapter is unverified until somebody has run it against real data from a real install, and it
-says so until then — in the app, and here. [`docs/ADAPTERS.md`](docs/ADAPTERS.md) is the rule, and
-it is why this table exists.
+**No Node on the machine?** Paste the line for your shell:
 
-## Run it like an app
+```powershell
+irm https://deckhq.dev/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://deckhq.dev/install.sh | sh
+```
+
+Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
+distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
+icon, and opens the window. Read them first: [`install.ps1`](scripts/install/install.ps1) and
+[`install.sh`](scripts/install/install.sh) are two short files in this repository, served from the
+site byte for byte. **Rather double-click?** [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd)
+on Windows and [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command)
+on macOS carry the same line and nothing else. SmartScreen may warn about the unsigned `.cmd`, and
+a downloaded `.command` arrives without its run bit. **A step at a time:** `npm install -g deckhq`.
 
 ```bash
 deckhq shortcut --install --yes   # a Desktop and Start Menu icon for `deckhq app`
 deckhq autostart --install --yes  # the daemon, quietly, when you log in
 ```
 
-`deckhq app` reuses a running DeckHQ or starts one, and closing its window stops nothing: the
-daemon outlives it. Both commands above print every path they would write and the exact command
-each will run **before** `--yes`, tag every file they create, and remove only what they tagged.
-**Windows is the platform this was run on.** The macOS bundle and the Linux desktop entries are
-written from Apple's and freedesktop.org's documentation and have never been executed on a machine.
-A machine with neither Chrome nor Edge gets its default browser, and is told so.
+Both print every path they would write and the exact command each will run **before** `--yes`,
+tag every file they create, and remove only what they tagged. Closing the window stops nothing: the
+daemon outlives it. [Running it like an app](docs/GUIDE.md#run-it-like-an-app) and
+[removing every piece of it](docs/GUIDE.md#removing-it) are in the manual.
 
-### Removing it
-
-```bash
-deckhq shortcut --remove --yes    # the icons
-deckhq autostart --remove --yes   # the login entry
-deckhq statusline --remove --yes  # the status line, if you added it
-claude plugin uninstall deckhq    # the plugin, if you installed it
-npm uninstall -g deckhq
-```
-
-Hooks installed from the floor are removed on the same hooks screen, which deletes only the entries
-DeckHQ tagged. DeckHQ's own data (state, ledger, app profile) is in `~/.deckhq`; delete that folder
-to remove it too.
+</details>
 
 ## Docs
 
@@ -209,17 +188,15 @@ to remove it too.
 | [`SECURITY.md`](SECURITY.md)           | How to report a vulnerability, and what happens after you do            |
 | [`LICENSE`](LICENSE)                   | MIT                                                                     |
 | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | For anyone adding support for another coding tool                       |
-
-[deckhq.dev](https://deckhq.dev/) is the product site: what it does, how it looks, how to install.
+| [deckhq.dev](https://deckhq.dev/)      | The product site: what it does, how it looks, how to install            |
 
 ## Honest limits
-
-Real, and listed here rather than discovered later.
 
 - **Gemini CLI and OpenCode support is unverified.** Both adapters are written against each
   runtime's documented on-disk format or published CLI, and **neither has ever run against real
   data**, because neither runtime is installed on the development machine. Each reports itself
-  unavailable rather than guessing.
+  unavailable rather than guessing. An adapter stays unverified until somebody has run it against
+  real data from a real install ([`docs/ADAPTERS.md`](docs/ADAPTERS.md) is the rule).
 - **Codex is verified for reading and replying, and nothing else.** No compressed session file has
   been read; "Open in terminal" has never opened a window for Codex; Codex cannot say which of its
   sessions are alive, so DeckHQ judges it from when the file was last written; and there are no
@@ -229,9 +206,8 @@ Real, and listed here rather than discovered later.
   machine, one day — Claude Code 2.1.260 on Windows, 4 September 2026. A streamed reply has been
   watched once, the same day.
 - **A crew's pulses say a file is moving, not how fast or how far.** A sub-agent's transcript
-  carries no progress and no success or failure, so all DeckHQ can see is that the file grew. A
-  cable pulses while that happened recently and goes grey when it stops. Nothing on a junior tells
-  you whether it worked.
+  carries no progress and no success or failure, so all DeckHQ can see is that the file grew.
+  Nothing on a junior tells you whether it worked.
 - **The crew is a Claude Code formation.** The other runtimes report too little about sub-agents to
   draw one, so there a junior keeps its seat beside its parent and never gets a cable.
 
@@ -260,21 +236,9 @@ Real, and listed here rather than discovered later.
 
 </details>
 
-## Support
+## Support and contributing
 
-DeckHQ is free, MIT, and built by one person. If it saves you time and you want to support the
-work, the best help is a bug report with `deckhq doctor --share` output, or telling one colleague.
-To send something, ask the author through [GitHub](https://github.com/DkPanseriya); there is no
-official sponsorship programme, on purpose, and nothing in the product changes either way.
-
-## Contributing
-
-Issues and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — it leads
-with the two things that get a change rejected regardless of how good it is: **letting anything but
-you decide what you owe**, and **sending anything off the machine**. The four gates are
-`npm run lint`, `npm run format:check`, `npm run typecheck` and `npm test`; `npm install` brings
-dev tooling only. Security policy in [`SECURITY.md`](SECURITY.md).
-
-## Licence
-
-MIT. See [`CHANGELOG.md`](CHANGELOG.md) for what changed and when.
+Free, MIT, built by one person; no sponsorship programme, on purpose. The best help is a bug report
+with `deckhq doctor --share` output, or telling one colleague. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+leads with what gets a change rejected however good it is: **letting anything but you decide what
+you owe**, and **sending anything off the machine**. Security policy: [`SECURITY.md`](SECURITY.md).
