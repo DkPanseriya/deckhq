@@ -36,3 +36,6 @@ site/hq/
 # generator) lives in its own git repository mounted here. It is never part of
 # the public tree; when it is absent, everything that needs it skips.
 /internal/
+
+# Launch-video kits written by the `brag` tool. Generated, never committed.
+brag-output*/

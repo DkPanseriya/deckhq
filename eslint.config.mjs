@@ -21,6 +21,9 @@ export default [
       // reports every finding twice and reports them against a file nobody
       // edits.
       'site/dist/**',
+      // Launch-video kits written by the `brag` tool into the working folder: generated,
+      // never committed (`.gitignore`), and not this project's code.
+      'brag-output*/**',
     ],
   },
   {

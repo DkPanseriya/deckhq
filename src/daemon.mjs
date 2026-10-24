@@ -472,8 +472,13 @@ export async function startDaemon(opts = {}) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       const origin = String(req.headers.origin || '');
       const site = String(req.headers['sec-fetch-site'] || '');
+      // Loopback and THIS port: another server on localhost (a dev server on
+      // :5173) is another origin. Sec-Fetch-Site says so in current browsers;
+      // the port check holds where that header is missing.
+      const local = /^http:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::(\d+))?$/.exec(origin);
+      const ownPort = req.socket && req.socket.localPort;
       const originOk =
-        origin === '' || /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(origin);
+        origin === '' || (local !== null && Number(local[1] || 80) === Number(ownPort));
       const siteOk = site === '' || site === 'same-origin' || site === 'none';
       if (!originOk || !siteOk) {
         log.warn('rejected cross-site request', req.method, url.pathname, origin || site);

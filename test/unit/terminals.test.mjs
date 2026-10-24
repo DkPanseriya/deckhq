@@ -56,6 +56,14 @@ import {
 import { CMD_UNSAFE_CODE } from '../../src/core/cmdline.mjs';
 import * as shim from '../../src/adapters/claude-code/terminals.mjs';
 import * as moved from '../../src/core/terminals.mjs';
+import { systemExe } from '../../src/core/system-exe.mjs';
+
+// The Windows console is started by its full path, and searches PATH only (not the project folder).
+const WIN_SHELL = systemExe('cmd', { platform: 'win32' });
+const WIN_SPAWN_OPTIONS = {
+  windowsVerbatimArguments: true,
+  env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
+};
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -160,9 +168,14 @@ const EXPECTED = {
   // is the one form in this file that has been run on a real machine.
   'linux/../win32': undefined, // (placeholder removed below; see pairsInTable)
   'win32/windows-console/bin': {
-    cmd: 'cmd.exe',
-    args: ['/d', '/s', '/c', `start "" /d "${WIN_CWD}" cmd /d /s /k claude "--resume" "${ID}"`],
-    spawnOptions: { windowsVerbatimArguments: true },
+    cmd: WIN_SHELL,
+    args: [
+      '/d',
+      '/s',
+      '/c',
+      `start "" /d "${WIN_CWD}" "${WIN_SHELL}" /d /s /k claude "--resume" "${ID}"`,
+    ],
+    spawnOptions: WIN_SPAWN_OPTIONS,
   },
 };
 delete EXPECTED['linux/../win32'];
@@ -558,7 +571,7 @@ test('SECURITY: a session id full of shell metacharacters never becomes shell sy
         '',
         '/d',
         WIN_CWD,
-        'cmd',
+        WIN_SHELL,
         '/d',
         '/s',
         '/k',
@@ -628,14 +641,14 @@ test('the Windows console builds one command line, and asks Node not to quote it
     cwd: WIN_CWD,
   });
   assert.deepEqual(launch, {
-    cmd: 'cmd.exe',
+    cmd: WIN_SHELL,
     args: [
       '/d',
       '/s',
       '/c',
-      `start "" /d "C:\\Dk\\deckhq" cmd /d /s /k claude "--resume" "abc-123"`,
+      `start "" /d "C:\\Dk\\deckhq" "${WIN_SHELL}" /d /s /k claude "--resume" "abc-123"`,
     ],
-    spawnOptions: { windowsVerbatimArguments: true },
+    spawnOptions: WIN_SPAWN_OPTIONS,
   });
 });
 
@@ -667,14 +680,14 @@ test('SECURITY: a Windows working directory with a space and an & stays one word
     '/d',
     '/s',
     '/c',
-    `start "" /d "C:\\Users\\ada\\R&D projects\\deckhq" cmd /d /s /k claude "--resume" "a&b c"`,
+    `start "" /d "C:\\Users\\ada\\R&D projects\\deckhq" "${WIN_SHELL}" /d /s /k claude "--resume" "a&b c"`,
   ]);
   assert.deepEqual(unquoteCmdLine(args[3]), [
     'start',
     '',
     '/d',
     cwd,
-    'cmd',
+    WIN_SHELL,
     '/d',
     '/s',
     '/k',
@@ -751,7 +764,7 @@ test('SECURITY: the Windows console refuses to start anything but a bare command
   );
   assert.equal(
     windowsConsoleLaunch({ command: ['claude'], cwd: '' }).args[3],
-    'start "" cmd /d /s /k claude',
+    `start "" "${WIN_SHELL}" /d /s /k claude`,
   );
 });
 
@@ -798,10 +811,15 @@ test('launchTerminal hands the Windows form its spawn options, so Node does not 
   assert.equal(out.id, 'windows-console');
   assert.deepEqual(spawns, [
     {
-      cmd: 'cmd.exe',
-      args: ['/d', '/s', '/c', `start "" /d "${WIN_CWD}" cmd /d /s /k claude "--resume" "${ID}"`],
+      cmd: WIN_SHELL,
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        `start "" /d "${WIN_CWD}" "${WIN_SHELL}" /d /s /k claude "--resume" "${ID}"`,
+      ],
       cwd: WIN_CWD,
-      options: { windowsVerbatimArguments: true },
+      options: WIN_SPAWN_OPTIONS,
     },
   ]);
 });

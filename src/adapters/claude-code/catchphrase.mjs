@@ -161,38 +161,70 @@ async function candidates(o) {
   return out.map(({ file, size }) => ({ file, size }));
 }
 
+/** A transcript line longer than this is skipped, not held in memory (8 Mi characters). */
+const MAX_LINE_CHARS = 8 * 1024 * 1024;
+
 /**
  * Count the phrase in one file's in-window assistant turns.
  *
  * Streams, never loads the file, and parses only the lines that already
  * contain the phrase. Never throws: an unreadable or truncated file
  * contributes what it managed to read.
+ * The budget is checked while the file is read, not only between files: a
+ * single multi-gigabyte transcript would otherwise be read to the end whatever
+ * the limits say. A line longer than `MAX_LINE_CHARS` is skipped rather than
+ * held, because a string that size cannot be built and the throw would land in
+ * a stream handler, outside any try.
+ *
  * @param {string} file
  * @param {{since:number, until:number}} window
- * @returns {Promise<{count:number, bytes:number}>}
+ * @param {{maxBytes?:number, deadline?:number, now?:()=>number}} [budget]
+ * @returns {Promise<{count:number, bytes:number, truncated:boolean}>}
  */
-export function countInFile(file, window) {
+export function countInFile(file, window, budget = {}) {
+  const maxBytes = budget.maxBytes ?? Infinity;
+  const deadline = budget.deadline ?? Infinity;
+  const clock = budget.now || (() => Date.now());
   return new Promise((resolve) => {
     let count = 0;
     let bytes = 0;
+    let truncated = false;
     /** Whatever followed the last newline in the previous chunk. */
     let carry = '';
+    /** True while the rest of an over-long line is being discarded. */
+    let skipping = false;
     let stream;
     try {
       stream = fs.createReadStream(file, { encoding: 'utf8' });
     } catch {
-      resolve({ count: 0, bytes: 0 });
+      resolve({ count: 0, bytes: 0, truncated: false });
       return;
     }
-    stream.on('data', (chunk) => {
+    stream.on('data', (/** @type {string} */ chunk) => {
       bytes += Buffer.byteLength(chunk, 'utf8');
+      if (bytes > maxBytes || clock() >= deadline) {
+        stream.destroy();
+        resolve({ count, bytes, truncated: true });
+        return;
+      }
+      if (skipping) {
+        const nl = chunk.indexOf('\n');
+        if (nl < 0) return;
+        chunk = chunk.slice(nl + 1);
+        skipping = false;
+      }
       const text = carry + chunk;
       const lastNl = text.lastIndexOf('\n');
       if (lastNl < 0) {
         // One line longer than a chunk. Keep it whole — a transcript record is
-        // a single line and can legitimately be megabytes — but never let the
-        // carry grow without a newline ever arriving beyond one file's worth.
-        carry = text;
+        // a single line and can legitimately be megabytes — up to a limit.
+        if (text.length > MAX_LINE_CHARS) {
+          carry = '';
+          skipping = true;
+          truncated = true;
+        } else {
+          carry = text;
+        }
         return;
       }
       const body = text.slice(0, lastNl);
@@ -221,9 +253,9 @@ export function countInFile(file, window) {
           /* the last line of a file being written is routinely half a record */
         }
       }
-      resolve({ count, bytes });
+      resolve({ count, bytes, truncated });
     });
-    stream.on('error', () => resolve({ count, bytes }));
+    stream.on('error', () => resolve({ count, bytes, truncated }));
   });
 }
 
@@ -262,10 +294,15 @@ export async function countCatchphrase(o) {
       result.truncated = true;
       break;
     }
-    const r = await countInFile(f.file, { since, until });
+    const r = await countInFile(
+      f.file,
+      { since, until },
+      { maxBytes: maxBytes - result.bytes, deadline: started + maxMs, now: clock },
+    );
     result.count += r.count;
     result.bytes += r.bytes;
     result.files += 1;
+    if (r.truncated) result.truncated = true;
   }
   result.ms = clock() - started;
   return result;

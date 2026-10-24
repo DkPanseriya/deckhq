@@ -48,6 +48,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { samePath } from '../core/same-path.mjs';
+import { gitBin } from '../core/git-bin.mjs';
 
 /** The directory, under the state directory, that holds every one of them. */
 export const WORKTREES_DIR = 'worktrees';
@@ -193,8 +194,18 @@ export function addWorktreeArgv(worktreePath, branch, opts = {}) {
  */
 export function runGit(argv, opts) {
   return new Promise((resolve, reject) => {
+    const git = gitBin();
+    if (!git) {
+      reject(
+        new WorktreeError(
+          'git was not found on PATH, and a Studio worktree is a git worktree. Install git, or hire nobody.',
+          'no-git',
+        ),
+      );
+      return;
+    }
     execFile(
-      'git',
+      git,
       argv,
       {
         cwd: opts.cwd,

@@ -26,3 +26,25 @@ const SPAWNABLE = Object.freeze(['.exe', '.com']);
 export function claudeBin(opts = {}) {
   return findOnPath('claude', { ...opts, exts: SPAWNABLE });
 }
+
+/**
+ * Why `claude` cannot be started, in words the user can act on. An npm install
+ * of Claude Code puts a `claude.cmd` shim on PATH: the terminal runs it, but
+ * DeckHQ cannot start it without a shell, so "not on PATH" would be untrue.
+ * @param {{env?: NodeJS.ProcessEnv, platform?: string, isFile?: (p:string)=>boolean}} [opts]
+ * @returns {string}
+ */
+export function claudeMissingReason(opts = {}) {
+  const platform = opts.platform || process.platform;
+  const shim =
+    platform === 'win32'
+      ? findOnPath('claude', { ...opts, platform, exts: ['.cmd', '.bat'] })
+      : null;
+  if (shim) {
+    return (
+      `found ${shim}, the script an npm install of Claude Code puts on PATH; DeckHQ starts ` +
+      'only claude.exe, which the native Claude Code installer provides'
+    );
+  }
+  return 'claude is not on PATH';
+}

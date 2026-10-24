@@ -26,6 +26,7 @@
 import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { sendError, sendJson } from '../server.mjs';
+import { GIT_NOT_FOUND, gitBin } from '../../core/git-bin.mjs';
 
 const GIT_TIMEOUT_MS = 8_000;
 const MAX_OUTPUT = 4 * 1024 * 1024;
@@ -148,7 +149,7 @@ async function defaultBranch(git, cwd) {
  * @returns {Promise<Changes>}
  */
 export async function collectChanges(cwd, opts = {}) {
-  const git = opts.git || 'git';
+  const git = opts.git || gitBin();
   /** @type {Changes} */
   const out = {
     status: 'ok',
@@ -165,6 +166,12 @@ export async function collectChanges(cwd, opts = {}) {
     if (!info.isDirectory()) throw new Error('not a directory');
   } catch {
     out.status = 'missing';
+    return out;
+  }
+
+  if (!git) {
+    out.status = 'no-git';
+    out.error = GIT_NOT_FOUND;
     return out;
   }
 

@@ -22,6 +22,16 @@
   before `PATH`, and DeckHQ starts some of them in a session's project folder: a file of that name
   committed to a repository would have run in place of Windows' own. Each is now named under the
   Windows folder the system reports, and a test refuses a bare name anywhere in the code.
+- **The Windows console and `git` are started by their full path too.** Opening a session in a
+  console started `cmd.exe` by bare name in the project folder, and the console then looked for
+  `claude` there first; `git` ran by bare name in a session's folder as soon as its review card
+  opened. Both consoles are now named under the Windows folder and run with
+  `NoDefaultCurrentDirectoryInExePath=1`, and `git` is found on PATH like `claude`. Measured on
+  Windows 11: a planted `where.bat` ran in place of `where.exe` without the variable and did not
+  with it.
+- **Another server on this machine cannot post to the daemon.** Any `http://localhost` origin was
+  accepted on any port; a page served by a local dev server was kept out only by a header Safari
+  before 16.4 does not send. The origin's port must now be the daemon's own.
 
 ### Changed
 
@@ -46,6 +56,16 @@
   time. It now returns to the same room, at your magnification; at the fit scale nothing changes.
 - **Ctrl+Enter sends a reply** from the panel (Cmd+Enter on a Mac), as it does in the new-agent
   sheet. Enter is still a new line. An idle session no longer asks "may be mid-turn" before a send.
+- **A busy state file no longer loses acknowledgements.** On Windows the rename that saves
+  `state.json` fails for a moment when another program has it open; one such failure dropped every
+  acknowledgement since the last save. The rename is retried for about 1.5 s, and a failed save is
+  tried again on shutdown.
+- **An npm install of Claude Code is named, not reported as missing.** Replies and `doctor` said
+  "claude is not on PATH" when an npm install had put `claude.cmd` there; they now say DeckHQ needs
+  the `claude.exe` the native installer provides.
+- **The catchphrase count stays inside its limits on one huge transcript.** Its byte and time
+  limits were checked only between files, and one line over about 512 MB could crash the daemon.
+  Both are checked while a file is read, and a line over 8 Mi characters is skipped.
 
 ## 1.9.0 — 2026-10-13
 

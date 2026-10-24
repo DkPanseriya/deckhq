@@ -31,7 +31,7 @@ test('systemExe: the Windows folder the system reports, and the bare name elsewh
   assert.throws(() => systemExe(/** @type {any} */ ('calc'), { platform: 'win32' }));
 });
 
-test('SECURITY: no source file starts a Windows tool by its bare name', () => {
+test('SECURITY: no source file starts a Windows tool or git by its bare name', () => {
   /** @type {string[]} */
   const files = [];
   const walk = (/** @type {string} */ dir) => {
@@ -42,8 +42,11 @@ test('SECURITY: no source file starts a Windows tool by its bare name', () => {
     }
   };
   for (const dir of ['src', 'bin']) walk(path.join(ROOT, dir));
+  // A call that starts one by name, or a launch description that returns one by name
+  // for somebody else to start (the Windows console did, until 25 October 2026). `git` is
+  // started in project folders too, and has its own resolver, `gitBin()`.
   const BARE =
-    /\b(?:spawn|spawnSync|execFile|execFileSync)\(\s*['"](cmd|cmd\.exe|powershell|powershell\.exe|where|where\.exe|reg|reg\.exe|explorer|explorer\.exe)['"]/;
+    /(?:\b(?:spawn|spawnSync|execFile|execFileSync|runGit)\(\s*|\bcmd:\s*)['"](cmd|cmd\.exe|powershell|powershell\.exe|where|where\.exe|reg|reg\.exe|explorer|explorer\.exe|git|git\.exe)['"]/;
   const hits = files
     .map((f) => [path.relative(ROOT, f), BARE.exec(fs.readFileSync(f, 'utf8'))])
     .filter(([, m]) => m)

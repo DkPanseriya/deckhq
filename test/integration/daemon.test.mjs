@@ -381,6 +381,11 @@ test('SECURITY: a cross-site POST is refused', async () => {
     const evilFetchSite = await post({ 'sec-fetch-site': 'cross-site' });
     assert.equal(evilFetchSite.status, 403, 'Sec-Fetch-Site: cross-site must be refused');
 
+    // Another server on this machine is another origin, even where a browser
+    // sends no Sec-Fetch-Site (Safari before 16.4).
+    const otherPort = await post({ origin: 'http://localhost:5173' });
+    assert.equal(otherPort.status, 403, 'a localhost Origin on another port must be refused');
+
     // Our own page still works: it is refused for being an unknown session
     // (404/409), never for being cross-site.
     const ours = await post({ origin: d.url.replace(/\/$/, ''), 'sec-fetch-site': 'same-origin' });

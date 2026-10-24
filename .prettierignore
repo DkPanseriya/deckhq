@@ -12,3 +12,6 @@ site/dist/
 # The private planning repository — WP-95b. Its own repository, its own
 # formatting; absent on every machine but a maintainer's.
 internal/
+
+# Launch-video kits written by the `brag` tool. Generated, never committed.
+brag-output*/

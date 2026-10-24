@@ -21,6 +21,7 @@ import { SendHub } from '../../core/sends.mjs';
 import { createPendingIdentities } from '../../core/pending-identity.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 import { startTurn } from '../send-turn.mjs';
+import { GIT_NOT_FOUND, gitBin } from '../../core/git-bin.mjs';
 
 /**
  * `git init` in a directory. argv array, never a shell string — the path is
@@ -29,7 +30,12 @@ import { startTurn } from '../send-turn.mjs';
  */
 function gitInit(cwd) {
   return new Promise((resolve, reject) => {
-    execFile('git', ['init'], { cwd, timeout: 15_000 }, (err) => {
+    const git = gitBin();
+    if (!git) {
+      reject(Object.assign(new Error(GIT_NOT_FOUND), { code: 'ENOENT' }));
+      return;
+    }
+    execFile(git, ['init'], { cwd, timeout: 15_000 }, (err) => {
       if (err) reject(err);
       else resolve(undefined);
     });
