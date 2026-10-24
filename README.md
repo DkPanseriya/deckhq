@@ -27,30 +27,18 @@ servers it has, and Claude Code checks those servers itself, as it does when it 
 `app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and the first time
 asks once whether you want a Desktop and Start Menu icon. Both need Node 18 or newer, nothing else.
 
+**Platforms.** Used day to day on Windows. The test suite runs on Windows, macOS and Linux in CI
+(Node 18, 20 and 22); the macOS and Linux desktop pieces (app bundle, terminals, desktop entries)
+are written from their documentation and have not been run on a real machine yet.
+
 - **Local.** The daemon binds `127.0.0.1` and nothing else (`HOST` in
   [`src/daemon.mjs`](src/daemon.mjs)) and makes no outbound call. No account, no telemetry.
 - **Zero runtime dependencies.** [`package.json`](package.json) has no `dependencies` field.
 - **MIT**, and all of it is in this repository: [`LICENSE`](LICENSE).
 
-## Why not the agent view you already have?
-
-Claude Code has one built in: `claude agents`. It starts sessions, keeps them running in the
-background and lets you answer one from a list. Use both. They do different jobs.
-
-|                      | Agent view, in Claude Code                                                                                                                        | DeckHQ                                                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Which sessions**   | Every background session you have started, across your projects. A session open in another terminal is listed once you send it to the background. | Every transcript on your disk, wherever the session was started: a terminal, your editor, the desktop app.                                        |
-| **For review**       | A session with an open pull request that needs review, or with failing checks, moves to **Ready for review**.                                     | Every session that finishes its turn waits in Your Office with how long it has waited. Reading it does not clear it; you reply, approve or bench. |
-| **Running them**     | Dispatches new sessions and runs them with no terminal open. Peek at one, reply from the list, or attach to the whole conversation.               | Reads the sessions your tools run and replies to them. It can start one. It never stops one, and closing it stops nothing.                        |
-| **Which tools**      | Claude Code sessions. Its pages name no other tool.                                                                                               | Claude Code, verified. Codex, verified for reading and replying. Gemini CLI and OpenCode adapters are written and unverified.                     |
-| **What you look at** | A list in your terminal, grouped by state, with the sessions that need you at the top. A research preview.                                        | An office seen from above in a window of its own: one room per repository, one robot per session.                                                 |
-
-As of October 2026. Agent view is described from Anthropic's own pages as they read on the 10th:
-[the announcement](https://claude.com/blog/agent-view-in-claude-code) and
-[the documentation](https://code.claude.com/docs/en/agent-view). `deckhq doctor` prints agent
-view's own count beside its own.
-
 ## What you see
+
+<img src="docs/media/site/panel.png" width="260" align="right" alt="The review panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a block reading npm test, 214 passing, the files that changed, and three buttons: 1 Reply, 2 Approve, 3 Bench." />
 
 - **A queue only you can clear.** What a session is doing changes on its own. What you owe it
   changes when you press a button. Opening it, scrolling past it and reading it clear nothing.
@@ -71,14 +59,38 @@ view's own count beside its own.
 
 <table>
   <tr>
-    <td valign="top"><img src="docs/media/site/loop-crew.gif" width="400" alt="A crew, moving: a lead robot named Elif at its desk with five juniors sitting in an arc behind it, each with a laptop and a cable running to the desk." /><br />Capture: a lead and its crew.</td>
-    <td valign="top"><img src="docs/media/site/panel.png" width="260" alt="The review panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a block reading npm test, 214 passing, the files that changed, and three buttons: 1 Reply, 2 Approve, 3 Bench." /><br />Capture: the review card.</td>
+    <td width="50%" valign="top"><img src="docs/media/site/office.png" alt="Your Office: six robots waiting on sofas and chairs, each with a red badge showing how long it has waited, from 7m to 1d 2h, and two with a raised hand." /><br /><sub>Your Office: who is waiting on you, and for how long.</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/site/loop-crew.gif" alt="A crew, moving: a lead robot named Elif at its desk with five juniors sitting in an arc behind it, each with a laptop and a cable running to the desk." /><br /><sub>A lead and its crew of sub-agents.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/media/site/permission.png" alt="The review card asking permission for Bash, rm -rf build, with Allow, Deny and Allow for session buttons, and a note that the same prompt is open in the terminal." /><br /><sub>A permission prompt, answerable from the card (Claude Code, with hooks).</sub></td>
+    <td valign="top"><img src="docs/media/site/lounge.png" alt="The Lounge: fifteen grey robots on sofas and at tables, each with a name." /><br /><sub>The lounge: sessions you parked with bench, out of your queue.</sub></td>
   </tr>
 </table>
+
+_Captures: the running product on its demo floor, where the projects are invented._
 
 Tokens by project, session, model, day and tool, a picture of your floor you can post, and the
 rest, with a picture each: [the features](https://deckhq.dev/features.html).
 [The manual](docs/GUIDE.md) has every command, key and file.
+
+## Why not the agent view you already have?
+
+Claude Code has one built in: `claude agents`. It starts sessions, keeps them running in the
+background and lets you answer one from a list. Use both. They do different jobs.
+
+|                      | Agent view, in Claude Code                                                                                                                        | DeckHQ                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Which sessions**   | Every background session you have started, across your projects. A session open in another terminal is listed once you send it to the background. | Every transcript on your disk, wherever the session was started: a terminal, your editor, the desktop app.                                        |
+| **For review**       | A session with an open pull request that needs review, or with failing checks, moves to **Ready for review**.                                     | Every session that finishes its turn waits in Your Office with how long it has waited. Reading it does not clear it; you reply, approve or bench. |
+| **Running them**     | Dispatches new sessions and runs them with no terminal open. Peek at one, reply from the list, or attach to the whole conversation.               | Reads the sessions your tools run and replies to them. It can start one. It never stops one, and closing it stops nothing.                        |
+| **Which tools**      | Claude Code sessions. Its pages name no other tool.                                                                                               | Claude Code, verified. Codex, verified for reading and replying. Gemini CLI and OpenCode adapters are written and unverified.                     |
+| **What you look at** | A list in your terminal, grouped by state, with the sessions that need you at the top. A research preview.                                        | An office seen from above in a window of its own: one room per repository, one robot per session.                                                 |
+
+As of October 2026. Agent view is described from Anthropic's own pages as they read on the 10th:
+[the announcement](https://claude.com/blog/agent-view-in-claude-code) and
+[the documentation](https://code.claude.com/docs/en/agent-view). `deckhq doctor` prints agent
+view's own count beside its own.
 
 ## Install, the other ways
 
@@ -110,6 +122,25 @@ a downloaded `.command` arrives without its run bit; the pasted lines have neith
 `deckhq shortcut --install --yes` for the icon.
 
 </details>
+
+## Make it yours
+
+- **Look** (`L`): agent size, light, eleven style presets, density and room colours, and 72 options
+  in Settings. A combination that would leave a rug unreadable on its floor is refused with the
+  reason and changes nothing. A look names no project, path or session, so you can post it:
+  `deckhq look export > my-floor.json`.
+
+  <img src="docs/media/site/look-panel.png" width="420" alt="The Look panel: agent size, light (Default, Morning, Evening, Night shift), style presets such as Studio oak and Night lab, density and room colours." />
+
+- **Studio**, opt-in per project (`deckhq studio enable <project>`): a real `claude` session
+  interviews you and writes a blueprint, a roster and a board; each hired role gets its own git
+  worktree and session. A card its role thinks is done comes back as a handover, **flagged, never
+  moved**, and a card past its budget goes to **Blocked** while **nothing is killed**. **Not yet
+  watched:** a real planner interview, or a hired
+  session's real reply. [More on the site](https://deckhq.dev/features.html#studio) and
+  [in the manual](docs/GUIDE.md#studio).
+
+  <img src="docs/media/site/board.png" width="100%" alt="The Studio board for orbital-api, with cards in Backlog, Ready, In progress, Review, Done and Blocked." />
 
 ## What it never does
 
@@ -155,25 +186,19 @@ each will run **before** `--yes`, tag every file they create, and remove only wh
 written from Apple's and freedesktop.org's documentation and have never been executed on a machine.
 A machine with neither Chrome nor Edge gets its default browser, and is told so.
 
-## Change the look
+### Removing it
 
-**Look** in the header, or `L`, opens the five you reach for most: **agent size**, **light**
-(Default, Morning, Evening or Night shift), **style** (eleven presets, Studio oak to Walnut
-executive, in one row that scrolls sideways), **density** and **room colours**. Settings → Look has the rest: **72 options over fourteen pickers**. A combination that
-would leave a rug unreadable on its floor is **refused with the reason and changes nothing**. A
-look is a file you own, and it names no project, no path and no session, so you can post it:
-`deckhq look export > my-floor.json`, then `deckhq look import my-floor.json`.
+```bash
+deckhq shortcut --remove --yes    # the icons
+deckhq autostart --remove --yes   # the login entry
+deckhq statusline --remove --yes  # the status line, if you added it
+claude plugin uninstall deckhq    # the plugin, if you installed it
+npm uninstall -g deckhq
+```
 
-## Studio
-
-Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
-writes one marked file. A real `claude` session then interviews you and writes the blueprint, the
-roster and the board; hiring a role gives it a git worktree of its own and a real session there; a
-card its role thinks is done comes back as a handover, **flagged, never moved**; and a card past
-its budget goes to **Blocked** while **nothing is killed**. **Not yet watched:** a real planner
-interview, or a hired session's real reply. Codex, Gemini CLI and OpenCode roles are marked
-_unverified launch_. All of it: [the site](https://deckhq.dev/features.html#studio) and
-[the manual](docs/GUIDE.md#studio).
+Hooks installed from the floor are removed on the same hooks screen, which deletes only the entries
+DeckHQ tagged. DeckHQ's own data (state, ledger, app profile) is in `~/.deckhq`; delete that folder
+to remove it too.
 
 ## Docs
 
@@ -209,6 +234,10 @@ Real, and listed here rather than discovered later.
   you whether it worked.
 - **The crew is a Claude Code formation.** The other runtimes report too little about sub-agents to
   draw one, so there a junior keeps its seat beside its parent and never gets a cable.
+
+<details>
+<summary><strong>8 more</strong></summary>
+
 - **Without hooks, "waiting on you" and "stopped" are not distinguishable.** A transcript alone
   does not separate them, and the header says so rather than showing you a confident guess.
 - **Which sessions are the same resumed conversation is a good guess, not a fact.** Claude Code
@@ -228,6 +257,8 @@ Real, and listed here rather than discovered later.
 - **Given names do not run out below 600 sessions.** Past 600 live identities on one machine you
   would get `Wren 2` — not a duplicate, but the pool being smaller than your history.
 - **Local only.** One machine, one human. No remote sessions, no team presence, no cloud sync.
+
+</details>
 
 ## Support
 
