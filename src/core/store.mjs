@@ -54,6 +54,11 @@ export * from './store-settings.mjs';
  */
 export const SAVE_DEBOUNCE_MS = 250;
 
+/** Waits between rename attempts; null marks the last attempt (about 1.5 s in all). */
+const RENAME_RETRY_MS = [25, 50, 100, 200, 400, 700, null];
+/** Rename failures that mean "another process has the file open", not "this cannot work". */
+const TRANSIENT_RENAME = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
 function defaultData() {
   return {
     // WP-86. A file this build writes is already current, so a machine that has
@@ -178,7 +183,8 @@ function sanitizeJuniorBooks(raw) {
 export class Store {
   /**
    * @param {string} file absolute path to state.json
-   * @param {{log?: import('./log.mjs').Log, timers?: Timers}} [opts]
+   * @param {{log?: import('./log.mjs').Log, timers?: Timers,
+   *   rename?: (from: string, to: string) => Promise<void>}} [opts]
    */
   constructor(file, opts = {}) {
     this.file = file;
@@ -203,6 +209,10 @@ export class Store {
      * @type {{file:string, message:string, at:number}|null}
      */
     this.writeError = null;
+    /** True after a failed write, so `flush()` tries again on shutdown. */
+    this._dirty = false;
+    /** @type {(from:string, to:string) => Promise<void>} injectable for tests */
+    this._rename = opts.rename || ((from, to) => fsp.rename(from, to));
   }
 
   /**
@@ -645,12 +655,14 @@ export class Store {
       .then(() => this._writeNow())
       .then(() => {
         this.writeError = null;
+        this._dirty = false;
       })
       .catch((err) => {
         // A failed write means every acknowledgement made since the last good
         // one is gone at the next restart — the user-owned half of the model,
         // silently discarded. A log line is not enough: this is surfaced in
         // the interface. See `writeError`.
+        this._dirty = true;
         this.writeError = {
           file: this.file,
           message: (err && err.message) || String(err),
@@ -664,13 +676,33 @@ export class Store {
     this._writing = p;
   }
 
-  /** Atomic write: temp file, then rename. */
+  /**
+   * Atomic write: temp file, then rename.
+   *
+   * On Windows a rename over a file another process has open (a virus scanner,
+   * an indexer, a backup tool, `deckhq waiting` reading the state) fails with
+   * EPERM, EACCES or EBUSY for a moment. One such failure used to lose every
+   * acknowledgement since the last good write, so the rename is retried for
+   * about 1.5 s before the write counts as failed.
+   */
   async _writeNow() {
     const tmp = `${this.file}.tmp-${process.pid}`;
     const json = JSON.stringify(this._data, null, 2);
     await fsp.mkdir(path.dirname(this.file), { recursive: true });
     await fsp.writeFile(tmp, json, 'utf8');
-    await fsp.rename(tmp, this.file);
+    for (const wait of RENAME_RETRY_MS) {
+      try {
+        await this._rename(tmp, this.file);
+        return;
+      } catch (err) {
+        const code = err && /** @type {any} */ (err).code;
+        if (wait === null || !TRANSIENT_RENAME.has(code)) {
+          await fsp.rm(tmp, { force: true }).catch(() => {});
+          throw err;
+        }
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
   }
 
   /**
@@ -682,6 +714,9 @@ export class Store {
     if (this._saveTimer) {
       this._timers.clearTimeout(this._saveTimer);
       this._saveTimer = null;
+      this._triggerWrite();
+    } else if (this._dirty && !this._writing) {
+      // The last write failed: try once more before the process ends.
       this._triggerWrite();
     }
     while (this._writing) {
