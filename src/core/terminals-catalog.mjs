@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { assertCmdSafe, cmdQuote, cmdRefusal, isCmdBareWord } from './cmdline.mjs';
+import { systemExe } from './system-exe.mjs';
 
 /**
  * The value of the `terminal` setting that means "work it out". Anything else
@@ -415,7 +416,7 @@ export const WINDOWS_CMD_REFUSAL =
  * The Windows console launch, as one command line.
  *
  * ```text
- * cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>" "<arg>"
+ * <SystemRoot>\System32\cmd.exe /d /s /c start "" /d "<cwd>" "<SystemRoot>\System32\cmd.exe" /d /s /k <program> "<arg>" "<arg>"
  * ```
  *
  * Every piece of that is load-bearing, and every claim below was checked on
@@ -441,6 +442,14 @@ export const WINDOWS_CMD_REFUSAL =
  *   depending on `start` inheriting it through two processes.
  * - **The quotes.** `&`, `|`, `^`, `<`, `>` and `()` are literal inside them;
  *   `"` and `%` are refused by `cmdQuote` because nothing can make them safe.
+ * - **Both consoles by full path, and no search of the project folder.** The
+ *   outer and the inner `cmd.exe` are named by their path under `SystemRoot`,
+ *   and the console runs with `NoDefaultCurrentDirectoryInExePath=1`, so the
+ *   `claude` or `codex` it starts is looked up on `PATH` only. Without it a
+ *   `claude.bat` committed to the project would run in its place: measured on
+ *   Windows 11 on 25 October 2026, a planted `where.bat` ran instead of
+ *   `where.exe` with the variable unset and did not run with it set, and
+ *   `start` accepted the quoted full path as its program.
  *
  * @param {LaunchContext} ctx
  * @returns {Launch}
@@ -461,10 +470,19 @@ export function windowsConsoleLaunch({ command, cwd }) {
 
   const inner = [program, ...args.map((a) => cmdQuote(a, WINDOWS_CMD_REFUSAL))].join(' ');
   const workdir = dir ? `/d ${cmdQuote(dir, WINDOWS_CMD_REFUSAL)} ` : '';
+  const shell = systemExe('cmd', { platform: 'win32' });
   return {
-    cmd: 'cmd.exe',
-    args: ['/d', '/s', '/c', `start "" ${workdir}cmd /d /s /k ${inner}`],
-    spawnOptions: { windowsVerbatimArguments: true },
+    cmd: shell,
+    args: [
+      '/d',
+      '/s',
+      '/c',
+      `start "" ${workdir}${cmdQuote(shell, WINDOWS_CMD_REFUSAL)} /d /s /k ${inner}`,
+    ],
+    spawnOptions: {
+      windowsVerbatimArguments: true,
+      env: { ...process.env, NoDefaultCurrentDirectoryInExePath: '1' },
+    },
   };
 }
 

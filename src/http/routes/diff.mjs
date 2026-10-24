@@ -32,6 +32,7 @@ import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { openInEditor } from '../../core/editor.mjs';
+import { GIT_NOT_FOUND, gitBin } from '../../core/git-bin.mjs';
 
 const GIT_TIMEOUT_MS = 8_000;
 /** Room for a diff well past the cap, so the cap is ours and not execFile's. */
@@ -134,7 +135,7 @@ export function resolveInRepo(top, file) {
  * @returns {Promise<FileDiff>}
  */
 export async function collectFileDiff(cwd, file, opts = {}) {
-  const git = opts.git || 'git';
+  const git = opts.git || gitBin();
   /** @type {FileDiff} */
   const out = {
     status: 'ok',
@@ -149,6 +150,12 @@ export async function collectFileDiff(cwd, file, opts = {}) {
     if (!info.isDirectory()) throw new Error('not a directory');
   } catch {
     out.status = 'missing';
+    return out;
+  }
+
+  if (!git) {
+    out.status = 'no-git';
+    out.error = GIT_NOT_FOUND;
     return out;
   }
 
@@ -291,8 +298,9 @@ export function register(router, ctx) {
 
     let root;
     try {
-      const top = await runGit('git', ['rev-parse', '--show-toplevel'], agent.cwd);
-      root = top.code === 0 && top.stdout.trim() ? top.stdout.trim() : null;
+      const git = gitBin();
+      const top = git ? await runGit(git, ['rev-parse', '--show-toplevel'], agent.cwd) : null;
+      root = top && top.code === 0 && top.stdout.trim() ? top.stdout.trim() : null;
     } catch {
       root = null;
     }
