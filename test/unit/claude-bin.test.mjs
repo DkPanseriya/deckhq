@@ -55,3 +55,21 @@ test('with no claude on PATH a reply starts nothing and says why', async () => {
     process.env.PATH = saved;
   }
 });
+
+test('an npm install of Claude Code is named as the reason, not reported as missing', async () => {
+  const { claudeMissingReason } = await import('../../src/adapters/claude-code/claude-bin.mjs');
+  const env = { PATH: 'C:\\npm', PATHEXT: '.COM;.EXE;.BAT;.CMD' };
+  const shimOnly = (/** @type {string} */ p) => p === 'C:\\npm\\claude.cmd';
+  assert.match(
+    claudeMissingReason({ platform: 'win32', env, isFile: shimOnly }),
+    /claude\.cmd.*npm.*claude\.exe/,
+  );
+  assert.equal(
+    claudeMissingReason({ platform: 'win32', env, isFile: () => false }),
+    'claude is not on PATH',
+  );
+  assert.equal(
+    claudeMissingReason({ platform: 'linux', env: { PATH: '/usr/bin' } }),
+    'claude is not on PATH',
+  );
+});

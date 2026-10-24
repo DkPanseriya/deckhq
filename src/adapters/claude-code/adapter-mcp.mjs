@@ -25,7 +25,7 @@ import { execFile } from 'node:child_process';
 
 import { lastMcpServers, parseMcpList, readHead } from './parse.mjs';
 import { listSessionFiles } from './adapter-scan.mjs';
-import { claudeBin } from './claude-bin.mjs';
+import { claudeBin, claudeMissingReason } from './claude-bin.mjs';
 
 /**
  * How long `claude mcp list` gets.
@@ -69,7 +69,7 @@ export function runMcpList(deps = {}) {
   const claude = deps.bin === undefined ? claudeBin() : deps.bin;
   return new Promise((resolve) => {
     if (!claude) {
-      resolve({ text: null, reason: 'claude is not on PATH' });
+      resolve({ text: null, reason: claudeMissingReason() });
       return;
     }
     run(

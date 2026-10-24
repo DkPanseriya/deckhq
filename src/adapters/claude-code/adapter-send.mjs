@@ -20,7 +20,7 @@ import { PROJECTS_DIR, TAIL_BYTES, readTail, parseConversation } from './parse.m
 import { parseConversationDetail } from './transcript-detail.mjs';
 import { createStreamParser } from './stream.mjs';
 import { subagentFiles } from './adapter-scan.mjs';
-import { claudeBin } from './claude-bin.mjs';
+import { claudeBin, claudeMissingReason } from './claude-bin.mjs';
 
 /**
  * Find the on-disk transcript file for a raw (unprefixed) session id by
@@ -194,7 +194,7 @@ export function send(id, text, opts = {}) {
   // project folder, which a bare name would be looked for in first (`claude-bin.mjs`).
   const found = opts.bin ? null : claudeBin();
   if (!opts.bin && !found) {
-    return Promise.resolve({ ok: false, error: 'claude is not on PATH' });
+    return Promise.resolve({ ok: false, error: claudeMissingReason() });
   }
   const bin = opts.bin || { command: /** @type {string} */ (found), args: [] };
   const spawnChild = opts.spawnFn || spawn;
