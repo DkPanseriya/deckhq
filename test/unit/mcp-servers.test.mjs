@@ -224,7 +224,10 @@ test('a missing binary, a timeout and an error each say which one it was', async
 });
 
 test('the CLI answers first; the newest session is the fallback; neither is "not checked"', async () => {
+  // `bin` stands in for a claude found on PATH: CI runners have none, and the
+  // injected `run` is what answers, whatever the path.
   const ok = (/** @type {string} */ out) => ({
+    bin: '/usr/local/bin/claude',
     run: (
       /** @type {any} */ _f,
       /** @type {any} */ _a,
@@ -236,6 +239,7 @@ test('the CLI answers first; the newest session is the fallback; neither is "not
     },
   });
   const noCli = {
+    bin: '/usr/local/bin/claude',
     run: (
       /** @type {any} */ _f,
       /** @type {any} */ _a,
