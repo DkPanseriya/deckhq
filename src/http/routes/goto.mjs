@@ -202,7 +202,13 @@ export function register(router, ctx) {
     const id = String(body.id || '');
     if (!id) return sendError(res, 400, 'id is required');
 
+    // Where a click's time goes, in the answer: the owner asked for ten times
+    // faster, and a number on his own machine is how that is shown.
+    const began = Date.now();
+    /** @type {Record<string, number>} */
+    const ms = {};
     let d = await decide(id);
+    ms.decide = Date.now() - began;
     if (d.status !== 200) return sendError(res, d.status, d.error);
 
     if (d.plan.action === 'resume') {
@@ -244,14 +250,17 @@ export function register(router, ctx) {
     // still gets the window, and is told so.
     let opened = false;
     if (d.target.kind === 'app' && typeof d.adapter.openInApp === 'function') {
+      const at = Date.now();
       try {
         await d.adapter.openInApp(d.sessionId, d.subject.cwd);
         opened = true;
       } catch (err) {
         log.debug('go: the app was not handed a link', id, err.message);
       }
+      ms.link = Date.now() - at;
     }
 
+    const raising = Date.now();
     let result;
     try {
       result = await runner.focus(d.target);
@@ -277,12 +286,15 @@ export function register(router, ctx) {
       }
     }
 
+    ms.raise = Date.now() - raising;
+    ms.total = Date.now() - began;
     return sendJson(res, 200, {
       ok: true,
       did: 'focus',
       foreground: result.foreground,
       where: { kind: d.target.kind, label: d.target.label },
       message: describeOutcome(d.target, { ...result, opened }),
+      ms,
     });
   });
 }

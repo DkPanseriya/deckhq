@@ -45,6 +45,12 @@
 
 ### Fixed
 
+- **"Go to session" is about ten times faster on Windows.** Each click started PowerShell and
+  compiled a helper twice, once to find the session's window and once to raise it: 2.5 to 4
+  seconds. One helper now starts when a panel opens and stays ready, and each step takes 30 to 50
+  ms. It is let go after ten minutes with nothing to do. The answer to a click now says how long
+  each step took.
+
 - **Hooks are recognised after another tool rewrites Claude's settings file.** A tool that
   re-saves `~/.claude/settings.json` can drop the tag DeckHQ marks its hooks with. The hooks went
   on posting, but DeckHQ called them not installed, asked you to install them, and guessed each

@@ -26,7 +26,7 @@
  * said in the same place: `focusSupport()` reports `verified: false` for
  * both, and `deckhq doctor` prints it.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -82,6 +82,29 @@ export function focusCommand(
     args.push('-ProcessId', intArg(opts.pid, 'pid'));
   }
   return { command: powershell, args };
+}
+
+/**
+ * The exact argv of the warm helper (`createWarmHelper`). Pure. Nothing on it
+ * but the fixed script and the fixed word: every question goes over its
+ * input, one line each, and is numbers.
+ * @param {string} [powershell]
+ * @returns {{command:string, args:string[]}}
+ */
+export function serveCommand(powershell = systemExe('powershell', { platform: 'win32' })) {
+  return {
+    command: powershell,
+    args: [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      FOCUS_SCRIPT,
+      '-Action',
+      'serve',
+    ],
+  };
 }
 
 /**
@@ -221,19 +244,173 @@ export function focusSupport(opts = {}) {
  *            tab?:string, tabs?:number, tabTitle?:string}>} focus
  */
 
+/** A warm helper with nothing to do for this long is let go. */
+export const WARM_IDLE_MS = 10 * 60_000;
+
+/**
+ * ONE POWERSHELL, STARTED ONCE, ASKED MANY TIMES (`focus.ps1 -Action serve`).
+ *
+ * The owner, 25 October 2026: going to a session "takes very long". Measured
+ * that day: each question started PowerShell and compiled the helper, 1.1 to
+ * 1.5 s, and a click asked two (where is it, then raise it), one after the
+ * other. Warm, the same table answers in 20 to 50 ms.
+ *
+ * Started by the first question, which is the panel opening (the GET that
+ * labels the button), so by the time anybody clicks it is ready. Questions go
+ * one at a time, in order, one line out and one line back. Let go after
+ * `WARM_IDLE_MS` without a question, and on any failure: a helper in an
+ * unknown state is ended, never reused, and the caller falls back to a
+ * one-shot run.
+ *
+ * @param {{command:string, args:string[]}} cmd what starts it
+ * @param {{spawn?: typeof spawn, idleMs?:number, timeoutMs?:number}} [deps]
+ */
+export function createWarmHelper(cmd, deps = {}) {
+  const start = deps.spawn || spawn;
+  const idleMs = deps.idleMs ?? WARM_IDLE_MS;
+  const timeoutMs = deps.timeoutMs ?? TIMEOUT_MS;
+  /** @type {import('node:child_process').ChildProcess|null} */
+  let child = null;
+  /** @type {Promise<void>|null} */
+  let ready = null;
+  /** @type {Array<(line:string|Error) => void>} */
+  let waiting = [];
+  let tail = Promise.resolve();
+  /** @type {NodeJS.Timeout|null} */
+  let idle = null;
+
+  function stop(/** @type {Error} */ why) {
+    const was = child;
+    child = null;
+    ready = null;
+    if (idle) clearTimeout(idle);
+    idle = null;
+    const pending = waiting;
+    waiting = [];
+    for (const w of pending) w(why);
+    if (was) {
+      try {
+        was.stdin?.end();
+        was.kill();
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+
+  function boot() {
+    const proc = start(cmd.command, cmd.args, {
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    child = proc;
+    let buffer = '';
+    proc.stdout?.setEncoding('utf8');
+    proc.stdout?.on('data', (chunk) => {
+      buffer += chunk;
+      for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
+        const line = buffer.slice(0, i).trim();
+        buffer = buffer.slice(i + 1);
+        const next = waiting.shift();
+        if (next) next(line);
+      }
+    });
+    const gone = (/** @type {any} */ err) => {
+      if (child === proc) stop(new Error(err?.message || 'the window helper stopped'));
+    };
+    proc.on('error', gone);
+    proc.on('exit', gone);
+    proc.unref();
+    ready = new Promise((resolve, reject) => {
+      waiting.push((line) => {
+        if (line instanceof Error) reject(line);
+        else if (line === '{"ready":true}') resolve();
+        else reject(new Error('the window helper did not start'));
+      });
+    });
+    ready.catch(() => {});
+  }
+
+  /**
+   * @param {string} line a request, every word a fixed verb or a number
+   * @returns {Promise<string>} its one line of answer
+   */
+  function ask(line) {
+    const run = tail.then(async () => {
+      if (!child) boot();
+      await ready;
+      const proc = /** @type {import('node:child_process').ChildProcess} */ (child);
+      const answer = await new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () => stop(new Error('the window helper did not answer')),
+          timeoutMs,
+        );
+        waiting.push((got) => {
+          clearTimeout(timer);
+          if (got instanceof Error) reject(got);
+          else resolve(got);
+        });
+        proc.stdin?.write(`${line}\n`);
+      });
+      if (idle) clearTimeout(idle);
+      idle = setTimeout(() => stop(new Error('idle')), idleMs);
+      idle.unref();
+      return /** @type {string} */ (answer);
+    });
+    tail = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  return { ask, stop: () => stop(new Error('stopped')), running: () => child !== null };
+}
+
 /**
  * The runner for this platform.
  *
  * @param {{platform?:string, env?:Record<string,string|undefined>,
- *          exec?:typeof execFile, powershell?:string}} [deps] test seams, in
- *   the shape `runTaskbarScript` takes them: `exec` in place of a real
- *   process, so no test ever raises a window on somebody's desktop.
+ *          exec?:typeof execFile, powershell?:string,
+ *          warm?: {ask:(line:string) => Promise<string>}|null}} [deps] test
+ *   seams, in the shape `runTaskbarScript` takes them: `exec` in place of a
+ *   real process, so no test ever raises a window on somebody's desktop.
+ *   `warm` is the long-lived helper; a test that passes `exec` and no `warm`
+ *   gets none, so it sees exactly the one-shot runs it stubbed.
  * @returns {FocusRunner}
  */
 export function createFocusRunner(deps = {}) {
   const platform = deps.platform || process.platform;
   const env = deps.env || process.env;
   const exec = deps.exec || execFile;
+  const warm =
+    deps.warm !== undefined
+      ? deps.warm
+      : platform === 'win32' && !deps.exec
+        ? createWarmHelper(serveCommand(deps.powershell))
+        : null;
+
+  /**
+   * One question, of the warm helper where there is one and it answers, and
+   * of a fresh PowerShell where not. Both print the same line.
+   * @param {string} line @param {() => {command:string, args:string[]}} oneShot
+   */
+  const asked = async (line, oneShot) => {
+    if (warm) {
+      /** @type {any} */
+      let parsed = null;
+      try {
+        parsed = JSON.parse(await warm.ask(line));
+      } catch {
+        parsed = null; // no answer, or not one line of JSON: the one-shot below
+      }
+      // A refusal (`that window is gone`) is an answer, not a broken helper.
+      if (parsed && parsed.ok === false) throw new Error(String(parsed.error || 'refused'));
+      if (parsed) return parsed;
+    }
+    const { command, args } = oneShot();
+    return JSON.parse(await run(command, args));
+  };
 
   /** @param {string} command @param {string[]} args @returns {Promise<string>} */
   const run = (command, args) =>
@@ -268,8 +445,9 @@ export function createFocusRunner(deps = {}) {
 
     async table(pid) {
       if (platform === 'win32') {
-        const { command, args } = focusCommand('table', { pid }, deps.powershell);
-        const parsed = JSON.parse(await run(command, args));
+        const parsed = await asked(`table ${pid ? intArg(pid, 'pid') : 0}`, () =>
+          focusCommand('table', { pid }, deps.powershell),
+        );
         return {
           processes: Array.isArray(parsed.processes) ? parsed.processes : [],
           windows: Array.isArray(parsed.windows) ? parsed.windows : [],
@@ -283,19 +461,18 @@ export function createFocusRunner(deps = {}) {
 
     async focus(target) {
       if (platform === 'win32') {
-        const { command, args } = focusCommand(
-          'focus',
-          {
-            hwnd: /** @type {number} */ (target.hwnd),
-            pid: target.hostPid,
-            // Only a tabbed terminal found through its console has a tab to
-            // pick; an editor's terminals are not tabs UI Automation names by
-            // console title, and a guess there would select the wrong file.
-            consolePid: target.tabbed && target.kind === 'terminal' ? target.sessionPid : 0,
-          },
-          deps.powershell,
-        );
-        const parsed = JSON.parse(await run(command, args));
+        const opts = {
+          hwnd: /** @type {number} */ (target.hwnd),
+          pid: target.hostPid,
+          // Only a tabbed terminal found through its console has a tab to
+          // pick; an editor's terminals are not tabs UI Automation names by
+          // console title, and a guess there would select the wrong file.
+          consolePid: target.tabbed && target.kind === 'terminal' ? target.sessionPid : 0,
+        };
+        const line = `focus ${intArg(opts.hwnd, 'hwnd')} ${intArg(opts.pid, 'pid')} ${
+          opts.consolePid ? intArg(opts.consolePid, 'consolePid') : 0
+        }`;
+        const parsed = await asked(line, () => focusCommand('focus', opts, deps.powershell));
         return {
           foreground: parsed.foreground === true,
           flashed: parsed.flashed === true,

@@ -62,6 +62,14 @@
 #                                  (several tabs share the name), `unmatched`
 #                                  (no tab has it: a renamed tab) or `none`.
 #
+#   -Action serve                  Compile once, print {"ready":true}, then
+#                                  answer one request per line read from the
+#                                  pipe (`table <consolePid>`, `focus <hwnd>
+#                                  <pid> <consolePid>`), one line back each,
+#                                  until the pipe closes. Every word is a fixed
+#                                  verb or a whole number; anything else is
+#                                  answered {"ok":false} and not run.
+#
 # Nothing here kills, signals or sends input to any process. The only state it
 # changes is which window is in front and which of its tabs is showing, and
 # only for `focus`.
@@ -70,7 +78,7 @@
 
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('table', 'focus')]
+  [ValidateSet('table', 'focus', 'serve')]
   [string]$Action,
 
   [long]$Hwnd = 0,
@@ -164,6 +172,8 @@ namespace DeckHQ {
     static extern IntPtr GetStdHandle(int which);
     [DllImport("kernel32.dll")]
     static extern bool WriteFile(IntPtr handle, byte[] bytes, uint count, out uint written, IntPtr overlapped);
+    [DllImport("kernel32.dll")]
+    static extern bool ReadFile(IntPtr handle, byte[] bytes, uint count, out uint read, IntPtr overlapped);
 
     [DllImport("user32.dll")]
     static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
@@ -198,6 +208,7 @@ namespace DeckHQ {
     [DllImport("dwmapi.dll")]
     static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
 
+    const int STD_INPUT_HANDLE = -10;
     const int STD_OUTPUT_HANDLE = -11;
     const int STD_ERROR_HANDLE = -12;
     const uint TH32CS_SNAPPROCESS = 2;
@@ -216,9 +227,36 @@ namespace DeckHQ {
     static IntPtr stdout = IntPtr.Zero;
     static IntPtr stderr = IntPtr.Zero;
 
+    static IntPtr stdin = IntPtr.Zero;
+
     public static void Init() {
+      stdin = GetStdHandle(STD_INPUT_HANDLE);
       stdout = GetStdHandle(STD_OUTPUT_HANDLE);
       stderr = GetStdHandle(STD_ERROR_HANDLE);
+    }
+
+    // `serve`: one request per line on the pipe Node writes, read from the
+    // handle taken at start for the reason given above. Null at end of input,
+    // which is Node closing the pipe, and that ends the loop.
+    static byte[] inBuf = new byte[4096];
+    static int inLen = 0;
+    static int inPos = 0;
+
+    public static string ReadLine() {
+      List<byte> line = new List<byte>();
+      while (true) {
+        if (inPos >= inLen) {
+          uint got;
+          if (!ReadFile(stdin, inBuf, (uint)inBuf.Length, out got, IntPtr.Zero) || got == 0) {
+            return line.Count > 0 ? Encoding.UTF8.GetString(line.ToArray()) : null;
+          }
+          inLen = (int)got;
+          inPos = 0;
+        }
+        byte b = inBuf[inPos++];
+        if (b == (byte)'\n') return Encoding.UTF8.GetString(line.ToArray()).TrimEnd('\r');
+        if (line.Count < 256) line.Add(b);
+      }
     }
 
     static void Write(IntPtr handle, string text) {
@@ -456,32 +494,78 @@ function Select-SessionTab([long]$window, [string]$title) {
   return $state
 }
 
+# Raise one window and, in a tabbed terminal, pick its tab. The JSON line
+# `focus` prints, as text.
+function Invoke-Focus([long]$window, [int]$owner, [int]$consoleOf) {
+  if ($window -le 0) { throw '-Hwnd is required' }
+  $raised = [DeckHQ.Focus]::Raise($window, $owner)
+  $tab = @{ tab = 'none'; tabs = 0 }
+  $title = ''
+  if ($consoleOf -gt 0) {
+    $console = [DeckHQ.Focus]::ConsoleOf($consoleOf)
+    if ($null -ne $console) { $title = [string]$console.title }
+    # A tab that cannot be read is not a reason to fail a window that was
+    # raised: the window is the promise, the tab is the courtesy.
+    try { $tab = Select-SessionTab $window $title } catch { $tab = @{ tab = 'none'; tabs = 0 } }
+  }
+  return '{"ok":true,"foreground":' + $raised.foreground.ToString().ToLowerInvariant() +
+    ',"restored":' + $raised.restored.ToString().ToLowerInvariant() +
+    ',"flashed":' + $raised.flashed.ToString().ToLowerInvariant() +
+    ',"via":"' + $raised.via + '","tab":"' + $tab.tab + '","tabs":' + [int]$tab.tabs +
+    ',"tabTitle":' + [DeckHQ.Focus]::Quoted($title) + '}'
+}
+
+# `serve`: the same two questions, asked over and over of one process that
+# compiled the helper once. Starting PowerShell and compiling it is about a
+# second, and a click used to pay it twice (measured 25 October 2026). One
+# request per line, every word a whole number or one of two fixed verbs:
+#   table <consolePid>            the table, as `-Action table` prints it
+#   focus <hwnd> <pid> <consolePid>   the line `-Action focus` prints
+# One line back for every line in, `{"ok":false,"error":...}` on a failure,
+# so the reader never loses its place.
+function Invoke-Serve {
+  [DeckHQ.Focus]::Say('{"ready":true}')
+  while ($true) {
+    $line = [DeckHQ.Focus]::ReadLine()
+    if ($null -eq $line) { return }
+    try {
+      $words = @($line.Trim() -split ' +')
+      $numbers = @()
+      for ($i = 1; $i -lt $words.Count; $i++) {
+        if ($words[$i] -notmatch '^[0-9]{1,18}$') { throw 'not a number' }
+        $numbers += [long]$words[$i]
+      }
+      if ($words[0] -ceq 'table' -and $numbers.Count -eq 1) {
+        [DeckHQ.Focus]::Say([DeckHQ.Focus]::Table([int]$numbers[0]))
+      }
+      elseif ($words[0] -ceq 'focus' -and $numbers.Count -eq 3) {
+        [DeckHQ.Focus]::Say((Invoke-Focus $numbers[0] ([int]$numbers[1]) ([int]$numbers[2])))
+      }
+      else { throw 'unknown request' }
+    }
+    catch {
+      $reason = $_.Exception.Message
+      if ($_.Exception.InnerException) { $reason = $_.Exception.InnerException.Message }
+      [DeckHQ.Focus]::Say('{"ok":false,"error":' + [DeckHQ.Focus]::Quoted($reason) + '}')
+    }
+  }
+}
+
 try {
   Add-Type -TypeDefinition $source -Language CSharp
   [DeckHQ.Focus]::Init()
+
+  if ($Action -eq 'serve') {
+    Invoke-Serve
+    exit 0
+  }
 
   if ($Action -eq 'table') {
     [DeckHQ.Focus]::Say([DeckHQ.Focus]::Table($ProcessId))
     exit 0
   }
 
-  if ($Hwnd -le 0) { throw '-Hwnd is required' }
-  $raised = [DeckHQ.Focus]::Raise($Hwnd, $ProcessId)
-  $tab = @{ tab = 'none'; tabs = 0 }
-  $title = ''
-  if ($ConsolePid -gt 0) {
-    $console = [DeckHQ.Focus]::ConsoleOf($ConsolePid)
-    if ($null -ne $console) { $title = [string]$console.title }
-    # A tab that cannot be read is not a reason to fail a window that was
-    # raised: the window is the promise, the tab is the courtesy.
-    try { $tab = Select-SessionTab $Hwnd $title } catch { $tab = @{ tab = 'none'; tabs = 0 } }
-  }
-  [DeckHQ.Focus]::Say(
-    '{"ok":true,"foreground":' + $raised.foreground.ToString().ToLowerInvariant() +
-    ',"restored":' + $raised.restored.ToString().ToLowerInvariant() +
-    ',"flashed":' + $raised.flashed.ToString().ToLowerInvariant() +
-    ',"via":"' + $raised.via + '","tab":"' + $tab.tab + '","tabs":' + [int]$tab.tabs +
-    ',"tabTitle":' + [DeckHQ.Focus]::Quoted($title) + '}')
+  [DeckHQ.Focus]::Say((Invoke-Focus $Hwnd $ProcessId $ConsolePid))
   exit 0
 }
 catch {
