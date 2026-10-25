@@ -23,12 +23,19 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { BACKUP_DIR } from '../../core/paths.mjs';
-import { buildHooksBlock, DEFAULT_PORT, HOOK_EVENTS, SETTINGS_FILE } from './hooks-entries.mjs';
+import {
+  buildHooksBlock,
+  DEFAULT_PORT,
+  HOOK_EVENTS,
+  SETTINGS_FILE,
+  isOurEntry,
+} from './hooks-entries.mjs';
 import {
   readSettings,
   writeFileAtomic,
   firstDeckhqPort,
   hasDeckhqEntries,
+  deckhqEntriesDoubled,
   isPlainObject,
   deepEqual,
   runnerStale,
@@ -102,9 +109,12 @@ export async function install(port = DEFAULT_PORT, deps) {
   {
     const { parsed } = await readSettings();
     if (hasDeckhqEntries(parsed)) {
-      const current = firstDeckhqPort(parsed) === Number(port) && !runnerStale(parsed, deps);
+      const current =
+        firstDeckhqPort(parsed) === Number(port) &&
+        !runnerStale(parsed, deps) &&
+        !deckhqEntriesDoubled(parsed);
       if (current) return; // already correct
-      await remove(); // stale port or runner: take ours out, then put them back below
+      await remove(); // stale port or runner, or doubled: take ours out, then put one set back
     }
   }
 
@@ -146,7 +156,7 @@ export async function latestBackup() {
 }
 
 /**
- * Remove only the hook entries DeckHQ added (`_deckhq: true`), pruning
+ * Remove only the hook entries DeckHQ added (`isOurEntry`), pruning
  * emptied matcher groups and emptied event keys. If the result matches the
  * backed-up pre-install content exactly, the original bytes are restored
  * verbatim so the file comes back byte-identical, even though our own
@@ -172,7 +182,7 @@ export async function remove() {
           continue;
         }
         const list = Array.isArray(group.hooks) ? group.hooks : [];
-        const prunedList = list.filter((h) => !(h && h._deckhq === true));
+        const prunedList = list.filter((h) => !isOurEntry(h));
         if (prunedList.length > 0) {
           prunedGroups.push({ ...group, hooks: prunedList });
         }

@@ -267,6 +267,57 @@ test("remove() leaves another tool's untagged hooks alone", async () => {
   assert.equal(ourEntries(after).length, 0);
 });
 
+/** A settings object with every `_deckhq` tag taken out, as a re-serialising tool leaves it. */
+function untagged(settings) {
+  return JSON.parse(JSON.stringify(settings, (k, v) => (k === '_deckhq' ? undefined : v)));
+}
+
+test('our entries are still ours with the tag stripped: installed, not reinstalled on top', async () => {
+  // The owner's file, 25 October 2026: every entry twice, not one tag left.
+  // Hooks were posting and the daemon called them not installed.
+  await reset();
+  await hooks.install(4317);
+  const once = untagged(read());
+  await reset(JSON.stringify(once, null, 2));
+  assert.equal(await hooks.installed(4317), true);
+  assert.equal(await hooks.installedPort(), 4317);
+
+  const doubled = structuredClone(once);
+  for (const [event, groups] of Object.entries(once.hooks)) {
+    doubled.hooks[event] = [...groups, ...structuredClone(groups)];
+  }
+  await reset(JSON.stringify(doubled, null, 2));
+  assert.equal(hooks.deckhqEntriesDoubled(read()), true);
+  await hooks.install(4317);
+  const after = read();
+  assert.equal(hooks.deckhqEntriesDoubled(after), false, 'install collapses the doubled set');
+  assert.equal(ourEntries(after).length, ourEntries({ hooks: hooks.buildHooksBlock(4317) }).length);
+  assert.deepEqual(
+    Object.keys(after.hooks).sort(),
+    Object.keys(hooks.buildHooksBlock(4317)).sort(),
+  );
+});
+
+test("an untagged hook in other words is the user's, and remove() leaves it", async () => {
+  // Posts to the same route, written by hand: close is not the same.
+  const near = {
+    type: 'command',
+    command: `${hooks.hookCommand(4317, 'node')} `,
+  };
+  const url = { type: 'http', url: 'http://localhost:4317/api/permission' };
+  assert.equal(hooks.isOurEntry(near), false);
+  assert.equal(hooks.isOurEntry(url), false);
+  assert.equal(hooks.isOurEntry({ type: 'command', command: hooks.hookCommand(4400) }), true);
+  await reset(
+    JSON.stringify({ hooks: { Stop: [{ hooks: [near] }], PermissionRequest: [{ hooks: [url] }] } }),
+  );
+  await hooks.install(4317);
+  await hooks.remove();
+  const after = read();
+  assert.deepEqual(after.hooks.Stop, [{ hooks: [near] }]);
+  assert.deepEqual(after.hooks.PermissionRequest, [{ hooks: [url] }]);
+});
+
 test('a malformed settings file aborts with a clear error and changes nothing', async () => {
   const broken = '{ this is not json';
   await reset(broken);

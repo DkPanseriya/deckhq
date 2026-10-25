@@ -45,6 +45,13 @@
 
 ### Fixed
 
+- **Hooks are recognised after another tool rewrites Claude's settings file.** A tool that
+  re-saves `~/.claude/settings.json` can drop the tag DeckHQ marks its hooks with. The hooks went
+  on posting, but DeckHQ called them not installed, asked you to install them, and guessed each
+  session's state from its transcript. An untagged entry exactly as DeckHQ writes it now counts as
+  DeckHQ's. Installing again collapses a doubled set into one, and a hook you wrote yourself is
+  still never touched.
+
 - **A benched session you give work to comes back to its desk.** Typing a prompt into a benched
   session now recalls it. Before, a session benched while it was closed (by "settle", say) and
   later resumed worked in the lounge, while its sub-agents sat round its empty chair. Nothing but

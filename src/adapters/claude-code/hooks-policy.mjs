@@ -25,6 +25,7 @@ import {
   hookRunner,
   runnerOfEntry,
   runnerRuns,
+  isOurEntry,
 } from './hooks-entries.mjs';
 
 /**
@@ -203,7 +204,7 @@ export function runnerStale(settings, deps = {}) {
 
 /**
  * @param {any} settings
- * @returns {boolean} true if any `_deckhq`-tagged hook entry is present
+ * @returns {boolean} true if any hook entry of ours (`isOurEntry`) is present
  */
 export function hasDeckhqEntries(settings) {
   const hooks = settings && settings.hooks;
@@ -212,8 +213,31 @@ export function hasDeckhqEntries(settings) {
     if (!Array.isArray(groups)) continue;
     for (const group of groups) {
       const list = group && Array.isArray(group.hooks) ? group.hooks : [];
-      if (list.some((h) => h && h._deckhq === true)) return true;
+      if (list.some(isOurEntry)) return true;
     }
+  }
+  return false;
+}
+
+/**
+ * Are any of our entries in the file more than once? Each copy is a second
+ * process per event posting the same thing. Read so that `install` collapses
+ * them rather than calling a doubled set current.
+ * @param {any} settings
+ * @returns {boolean}
+ */
+export function deckhqEntriesDoubled(settings) {
+  const hooks = settings && settings.hooks;
+  if (!isPlainObject(hooks)) return false;
+  const want = buildHooksBlock(DEFAULT_PORT, 'node');
+  for (const [event, groups] of Object.entries(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    let ours = 0;
+    for (const group of groups) {
+      const list = group && Array.isArray(group.hooks) ? group.hooks : [];
+      ours += list.filter(isOurEntry).length;
+    }
+    if (ours > (Array.isArray(want[event]) ? want[event].length : 0)) return true;
   }
   return false;
 }

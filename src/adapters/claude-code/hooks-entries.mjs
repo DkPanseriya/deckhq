@@ -150,13 +150,44 @@ export function hookCommand(port, runner = hookRunner()) {
 }
 
 /**
+ * IS THIS HOOK ENTRY ONE OF OURS? Tagged `_deckhq`, or, where the tag is gone,
+ * EXACTLY the entry this module writes.
+ *
+ * Another tool re-serialising `settings.json` can drop a key it does not know.
+ * The owner's file, 25 October 2026, held every entry of ours twice and not
+ * one tag: the hooks were posting, 680 events since the daemon started, and
+ * the daemon read them as somebody else's, put the install banner up and ran
+ * the inference path. Install would then have added a third set.
+ *
+ * Without the tag nothing is matched on a likeness. A command must be
+ * character for character the one `hookCommand` builds for its own port and
+ * runner, and the permission entry must be the one URL `permissionEntry`
+ * writes; a hand-written hook that posts to us in any other words is the
+ * user's, and is never removed.
+ * @param {any} entry
+ * @returns {boolean}
+ */
+export function isOurEntry(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  if (entry._deckhq === true) return true;
+  if (entry.type === 'http') {
+    return /^http:\/\/127\.0\.0\.1:\d+\/api\/permission$/.test(String(entry.url || ''));
+  }
+  if (entry.type !== 'command') return false;
+  const command = String(entry.command || '');
+  const runner = /^("[^"]+"|\S+) -e "/.exec(command);
+  const port = /port:(\d+),path:'\/api\/hook'/.exec(command);
+  return Boolean(runner && port) && command === hookCommand(Number(port?.[1]), runner?.[1]);
+}
+
+/**
  * What one of our command entries is started by: `node`, a path, or null for
  * an entry that is not ours, is the `http` one, or is not in a shape we wrote.
  * @param {any} entry
  * @returns {string|null}
  */
 export function runnerOfEntry(entry) {
-  if (!entry || entry._deckhq !== true || entry.type === 'http') return null;
+  if (!isOurEntry(entry) || entry.type === 'http') return null;
   const m = /^(?:"([^"]+)"|(\S+)) -e "/.exec(String(entry.command || ''));
   return m ? m[1] || m[2] : null;
 }
@@ -195,7 +226,7 @@ export function runnerRuns(runner, deps = {}) {
  * @returns {number|null}
  */
 export function portOfEntry(entry) {
-  if (!entry || entry._deckhq !== true) return null;
+  if (!isOurEntry(entry)) return null;
   if (entry.type === 'http') {
     const m = new RegExp(`^http://127\\.0\\.0\\.1:(\\d+)${PERMISSION_PATH}$`).exec(
       String(entry.url || ''),
