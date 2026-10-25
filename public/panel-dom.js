@@ -17,6 +17,9 @@
 
 import { CLOSEUP_PX } from './panel-rules.js';
 
+/** The quick replies under a card's answer, in the order they are drawn. */
+export const QUICK_REPLIES = ['Go ahead', 'Continue', 'Commit it'];
+
 /**
  * Builds the card. Called once by `createPanel()`: the panel is a singleton
  * by construction — it registers a `document` keydown listener and gives its
@@ -142,17 +145,10 @@ export function buildPanelDom() {
   recordEl.className = 'panel-record';
   recordEl.hidden = true;
 
-  top.append(
-    identityRow,
-    formerEl,
-    titleEl,
-    metaEl,
-    gotoRow,
-    traitEl,
-    waitingEl,
-    doingEl,
-    recordEl,
-  );
+  // The traits and the record line are about the agent, not the turn: they
+  // live under "Details" at the foot now, so the header is who, where and how
+  // long it has waited (the owner, 25 October 2026: "very crowded").
+  top.append(identityRow, formerEl, titleEl, metaEl, gotoRow, waitingEl, doingEl);
 
   // The scrolling body: the rest of the thread folded away, WHAT IT SAID
   // under it, then WHAT CHANGED.
@@ -235,10 +231,25 @@ export function buildPanelDom() {
   handoverSection.append(handoverHeading, handoverState, handoverBody, handoverActions);
 
   const saidSection = document.createElement('section');
-  saidSection.className = 'review-section';
+  saidSection.className = 'review-section review-turn';
+  // Named for a screen reader, not drawn: the turn below reads as one, the
+  // way it does in Claude Code, without a label over each part.
   const saidHeading = document.createElement('h3');
-  saidHeading.className = 'review-heading';
+  saidHeading.className = 'review-heading sr-only';
   saidHeading.textContent = 'What it said';
+
+  // "NEEDS YOU": the question at the end of its answer, lifted to the top of
+  // the card when the floor says it is waiting on you. Text, set with
+  // `textContent`, from `askOf()`.
+  const askEl = document.createElement('div');
+  askEl.className = 'review-ask';
+  askEl.hidden = true;
+  const askLabel = document.createElement('span');
+  askLabel.className = 'review-ask-label';
+  askLabel.textContent = 'Needs you';
+  const askText = document.createElement('span');
+  askText.className = 'review-ask-text';
+  askEl.append(askLabel, askText);
   const saidEl = document.createElement('div');
   saidEl.className = 'review-said';
 
@@ -297,7 +308,7 @@ export function buildPanelDom() {
   jumpBtn.title = 'Jump to the latest thing it said';
   threadDetails.append(threadSummary, threadEl, jumpBtn);
 
-  saidSection.append(threadDetails, saidHeading, saidEl, sinceEl, liveSection);
+  saidSection.append(askEl, threadDetails, saidHeading, saidEl, sinceEl, liveSection);
 
   const changedSection = document.createElement('section');
   changedSection.className = 'review-section';
@@ -319,7 +330,16 @@ export function buildPanelDom() {
   expandAllBtn.className = 'review-expand-all';
   expandAllBtn.textContent = '[ expand all ]';
   changedFoot.appendChild(expandAllBtn);
-  changedSection.append(changedHeadRow, changedEl);
+  // Folded to its one line, `What changed in deckhq  +236 −3,226  64 files`:
+  // it is the project's working tree, not this turn, and drawn open it was the
+  // largest thing on the card (the owner's floor, 25 October 2026).
+  const changedFold = document.createElement('details');
+  changedFold.className = 'review-changes-fold';
+  const changedSummary = document.createElement('summary');
+  changedSummary.className = 'review-changes-summary';
+  changedSummary.appendChild(changedHeadRow);
+  changedFold.append(changedSummary, changedEl);
+  changedSection.append(changedFold);
 
   body.append(permissionSection, studioSection, handoverSection, saidSection, changedSection);
 
@@ -355,17 +375,38 @@ export function buildPanelDom() {
   sendBtn.className = 'btn';
   sendBtn.textContent = 'Send';
   sendBtn.title = 'Send this reply (Ctrl+Enter)';
-  composerRow.append(hintEl, sendBtn);
+  // Three replies most turns end on, one click into the composer. A click
+  // FILLS the box and sends nothing: Ctrl+Enter or Send is still yours.
+  const quickRow = document.createElement('div');
+  quickRow.className = 'composer-quick';
+  quickRow.setAttribute('role', 'group');
+  quickRow.setAttribute('aria-label', 'Quick replies');
+  for (const text of QUICK_REPLIES) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'composer-chip';
+    chip.setAttribute('data-reply', text);
+    chip.textContent = text;
+    quickRow.appendChild(chip);
+  }
+  // On the Send row, not a row of their own: every line under the answer is
+  // a line the answer does not get.
+  composerRow.append(quickRow, hintEl, sendBtn);
   form.append(inputLabel, textarea, composerRow);
 
   // Costs, one quiet line at the bottom, and the resume links beneath it.
-  const foot = document.createElement('div');
+  // Everything about the agent rather than the turn, folded: its traits, a
+  // record it holds, what it has cost, and the resume links.
+  const foot = document.createElement('details');
   foot.className = 'panel-foot';
+  const footSummary = document.createElement('summary');
+  footSummary.className = 'panel-foot-summary';
+  footSummary.textContent = 'Details';
   const costEl = document.createElement('div');
   costEl.className = 'panel-cost num';
   const resumeEl = document.createElement('div');
   resumeEl.className = 'panel-resume';
-  foot.append(costEl, resumeEl);
+  foot.append(footSummary, traitEl, recordEl, costEl, resumeEl);
 
   return {
     top,
@@ -405,6 +446,8 @@ export function buildPanelDom() {
     handoverActions,
     saidSection,
     saidHeading,
+    askEl,
+    askText,
     saidEl,
     liveSection,
     liveRow,
@@ -417,6 +460,7 @@ export function buildPanelDom() {
     threadEl,
     jumpBtn,
     changedSection,
+    changedFold,
     changedHeadRow,
     changedHeading,
     changedTotals,
@@ -427,6 +471,7 @@ export function buildPanelDom() {
     actionsEl,
     moreMenu,
     form,
+    quickRow,
     inputLabel,
     textarea,
     composerRow,

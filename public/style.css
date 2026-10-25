@@ -1438,7 +1438,7 @@ button {
    ground as the rest of the shell; the one hairline on its left edge is the
    only thing that separates it from the floor. */
 .panel {
-  flex: 0 0 27rem;
+  flex: 0 0 32rem;
   max-width: 60vw;
   display: flex;
   flex-direction: column;
@@ -1903,7 +1903,7 @@ button {
    - INK for what is structure (headings, strong, a table's head) and the
      softer ink for running text. No state colour sets any text in here. */
 .review-said {
-  font-size: 0.84rem;
+  font-size: 0.94rem;
   line-height: 1.62;
   color: var(--ink-2);
 }
@@ -2507,6 +2507,187 @@ button {
 .panel-resume-link[aria-pressed='true'] {
   color: var(--ink-2);
   text-decoration-style: solid;
+}
+
+/* ------------------------------------------------- the card as a conversation
+   The owner, 25 October 2026: "I only use it for an overview… never to look
+   at its output or respond to it… very crowded and hard to understand." The
+   card reads as Claude Code does: what you asked, what it did on one line,
+   what it said. Labels over each part are gone; the agent's own words are the
+   largest thing on the card. */
+
+.review-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.review-turn > .review-said {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* NEEDS YOU: the question its answer ends on. The crimson is the rule and the
+   tint; the words stay in ink, as everywhere crimson marks a state. */
+.review-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-line);
+}
+.review-ask[hidden] {
+  display: none;
+}
+.review-ask-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.review-ask-text {
+  font-size: 0.94rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* `> what you typed`, cut to four lines until clicked */
+.turn-prompt {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.turn-prompt-mark {
+  font-family: var(--font-mono);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.turn-prompt-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.turn-prompt.is-open .turn-prompt-text {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+/* `● 24 tool calls · 3 notes  last: Bash` — what it did, one line that opens */
+.turn-work {
+  font-size: 0.78rem;
+}
+.turn-work-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+.turn-work-line::-webkit-details-marker {
+  display: none;
+}
+.turn-work-line:hover {
+  color: var(--ink-2);
+}
+.turn-work-dot {
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--state-working);
+  align-self: center;
+}
+.turn-work-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.turn-work[open] .turn-work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--line);
+}
+
+/* the answer itself: the reading surface, at the card's largest size */
+.turn-answer {
+  color: var(--ink);
+}
+
+/* WHAT CHANGED, folded to its one line */
+.review-changes-summary {
+  cursor: pointer;
+  list-style: none;
+}
+.review-changes-summary::-webkit-details-marker {
+  display: none;
+}
+.review-changes-summary .review-heading {
+  margin: 0;
+}
+.review-changes-summary .review-heading::before {
+  content: '▸ ';
+}
+.review-changes-fold[open] .review-changes-summary .review-heading::before {
+  content: '▾ ';
+}
+.review-changes-fold[open] .review-changes {
+  margin-top: 0.45rem;
+}
+
+/* quick replies: fill the box, send nothing */
+.composer-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+}
+.composer-chip {
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.composer-chip:hover {
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.composer-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Details: about the agent, not the turn */
+.panel-foot-summary {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+.panel-foot[open] .panel-foot-summary {
+  margin-bottom: 0.3rem;
 }
 /* ====================================================== end WP-08 block */
 

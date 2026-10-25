@@ -71,6 +71,162 @@ export function splitTranscript(messages) {
 }
 
 /**
+ * THE TURN THE CARD LEADS WITH (the owner, 25 October 2026: "I never look at
+ * its output or respond to it… the panel is very crowded and hard to
+ * understand"). The card reads like Claude Code: what you asked, what it did,
+ * what it said. So the latest answer is drawn with the prompt that started it
+ * above it, and the work between them folded to one line.
+ *
+ * `prompt` is the last thing the person typed before `latest`; `work` is what
+ * happened between the two (tools, reasoning, the agent's notes on the way);
+ * `earlier` is everything before the prompt. With no prompt in the transcript
+ * (a session the agent opened itself) `work` starts at the top.
+ *
+ * @param {Entry[]|null|undefined} messages
+ * @returns {{latest:Entry|null, prompt:Entry|null, work:Entry[], earlier:Entry[], since:Entry[]}}
+ */
+export function splitTurn(messages) {
+  const { latest, earlier, since } = splitTranscript(messages);
+  if (!latest) return { latest, prompt: null, work: [], earlier, since };
+  let p = -1;
+  for (let i = earlier.length - 1; i >= 0; i--) {
+    if (earlier[i].role === 'user' && isTyped(earlier[i].text)) {
+      p = i;
+      break;
+    }
+  }
+  if (p === -1) return { latest, prompt: null, work: earlier, earlier: [], since };
+  return {
+    latest,
+    prompt: earlier[p],
+    work: earlier.slice(p + 1),
+    earlier: earlier.slice(0, p),
+    since,
+  };
+}
+
+/**
+ * Did a PERSON type this? A user-role entry is also how the runtime hands a
+ * session what nobody typed: a background task finishing
+ * (`<task-notification>`), a slash command's echo and output, a system
+ * reminder, an interruption marker. Those wake a turn but are not the
+ * question it answers, so they are its work, never its prompt.
+ * @param {string|null|undefined} text
+ */
+export function isTyped(text) {
+  const t = String(text || '').trimStart();
+  if (!t) return false;
+  if (/^\[Request interrupted/.test(t)) return false;
+  return !/^<(task-notification|system-reminder|local-command-[a-z-]+|command-[a-z-]+|user-memory-input)\b/.test(
+    t,
+  );
+}
+
+/**
+ * The work fold's one line: `24 tool calls · 3 notes`. A note is something
+ * the agent said on the way, before its answer.
+ * @param {Entry[]} work
+ * @returns {string}
+ */
+export function workSummary(work) {
+  const tools = work.filter((m) => m.role === 'tool').length;
+  const notes = work.filter((m) => m.role === 'assistant' && m.text).length;
+  const woken = work.filter((m) => m.role === 'user' && !isTyped(m.text)).length;
+  const parts = [];
+  if (tools) parts.push(`${tools} ${tools === 1 ? 'tool call' : 'tool calls'}`);
+  if (notes) parts.push(`${notes} ${notes === 1 ? 'note' : 'notes'}`);
+  if (woken) parts.push(`${woken} ${woken === 1 ? 'notice' : 'notices'}`);
+  if (!parts.length && work.length) parts.push('its reasoning');
+  return parts.join(' · ');
+}
+
+/**
+ * The earlier fold's one line: `6 earlier turns`. A turn is one thing the
+ * person typed.
+ * @param {Entry[]} earlier
+ * @returns {string}
+ */
+export function earlierTurns(earlier) {
+  const turns = earlier.filter((m) => m.role === 'user' && isTyped(m.text)).length;
+  if (!turns) return earlierSummary(earlier);
+  return `${turns} earlier ${turns === 1 ? 'turn' : 'turns'}`;
+}
+
+/**
+ * WHAT IT IS ASKING YOU, if anything: the last question in the last two
+ * paragraphs of its answer, as one sentence. Read off the text alone, so it
+ * is shown only where the floor already says the session is waiting on you;
+ * an answer that asks nothing gives null, and the card shows no box.
+ * @param {string|null|undefined} text
+ * @returns {string|null}
+ */
+export function askOf(text) {
+  const paras = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(-2)
+    .reverse();
+  for (const para of paras) {
+    const plain = para
+      .replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+/gm, '')
+      .replace(/[*_`]+/g, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const questions = plain.match(/[^.!?]*\?/g);
+    if (!questions) continue;
+    const q = questions[questions.length - 1].trim();
+    if (q.length < 8) continue;
+    return q.length > 280 ? `${q.slice(0, 277).trimEnd()}…` : q;
+  }
+  return null;
+}
+
+/**
+ * What the person typed to start this turn: one quiet block, `>` and their
+ * words exactly as typed, cut to a few lines until it is clicked.
+ * @param {Entry} m @param {Document} doc
+ */
+export function renderPrompt(m, doc) {
+  const wrap = el(doc, 'div', 'turn-prompt');
+  wrap.setAttribute('title', 'Your prompt. Click to show all of it.');
+  wrap.appendChild(el(doc, 'span', 'turn-prompt-mark', '>'));
+  wrap.appendChild(el(doc, 'span', 'turn-prompt-text', m.text));
+  if (m.images) wrap.appendChild(renderAttachments(m.images, doc));
+  return wrap;
+}
+
+/**
+ * What it did between the prompt and the answer, folded to one line that
+ * opens to every call: `● 24 tool calls · 3 notes`.
+ * @param {Entry[]} work @param {Document} doc @param {{agentName?:string}} [opts]
+ */
+export function renderWork(work, doc, opts = {}) {
+  const details = doc.createElement('details');
+  details.className = 'turn-work';
+  const summary = doc.createElement('summary');
+  summary.className = 'turn-work-line';
+  // A drawn dot, not a glyph: state colours never set text.
+  const dot = el(doc, 'span', 'turn-work-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  summary.appendChild(dot);
+  summary.appendChild(el(doc, 'span', 'turn-work-what', workSummary(work)));
+  // The last tool it ran, so the line says something before it is opened.
+  const last = [...work].reverse().find((m) => m.role === 'tool' && m.tool);
+  if (last && last.tool) {
+    const name = humaniseToolSummary(last.tool.name, last.tool.name) || last.tool.name;
+    summary.appendChild(el(doc, 'span', 'turn-work-last', `last: ${name}`));
+  }
+  details.appendChild(summary);
+  const body = el(doc, 'div', 'turn-work-body');
+  for (const node of renderEntries(work, doc, opts)) body.appendChild(node);
+  details.appendChild(body);
+  return details;
+}
+
+/**
  * The fold's one line: `earlier in this conversation · 6 messages · 14 tool calls`.
  * Reasoning is not counted — it is neither a message nor an act.
  * @param {Entry[]} earlier
@@ -182,6 +338,32 @@ export function renderThinking(text, doc) {
 }
 
 /**
+ * Something the runtime handed the session that nobody typed (`isTyped`): one
+ * quiet line, `notice  Background command "…" completed`, that opens to the
+ * text as it came. The line is the notice's own `<summary>` where it has one.
+ * @param {string} text @param {Document} doc
+ */
+export function renderNotice(text, doc) {
+  const details = doc.createElement('details');
+  details.className = 'tool-call tool-call--thinking tool-call--notice';
+  const summary = doc.createElement('summary');
+  summary.className = 'tool-call-line';
+  summary.appendChild(el(doc, 'span', 'tool-call-name', 'notice'));
+  const raw = String(text || '');
+  const said = /<summary>([\s\S]*?)<\/summary>/.exec(raw);
+  const line = (said ? said[1] : raw.replace(/<[^>]*>/g, ' '))
+    .split('\n')
+    .map((l) => l.trim())
+    .find(Boolean);
+  if (line) summary.appendChild(el(doc, 'span', 'tool-call-what', line.slice(0, 120)));
+  details.appendChild(summary);
+  const body = el(doc, 'div', 'tool-call-body');
+  body.appendChild(el(doc, 'pre', 'tool-call-pre', raw));
+  details.appendChild(body);
+  return details;
+}
+
+/**
  * "2 images — open in the session": a picture the person attached. It is on
  * their disk and in the session; this page has neither, and says where it is
  * rather than drawing a box that would be empty.
@@ -227,13 +409,18 @@ export function renderEntries(entries, doc, opts = {}) {
   /** @type {HTMLElement|null} */
   let run = null;
   for (const m of entries) {
-    if (m.role === 'tool' || m.role === 'thinking') {
+    const notice = m.role === 'user' && !isTyped(m.text);
+    if (m.role === 'tool' || m.role === 'thinking' || notice) {
       if (!run) {
         run = el(doc, 'div', 'tool-run');
         out.push(run);
       }
       run.appendChild(
-        m.role === 'tool' && m.tool ? renderToolCall(m.tool, doc) : renderThinking(m.text, doc),
+        notice
+          ? renderNotice(m.text, doc)
+          : m.role === 'tool' && m.tool
+            ? renderToolCall(m.tool, doc)
+            : renderThinking(m.text, doc),
       );
       continue;
     }

@@ -19,11 +19,19 @@ import assert from 'node:assert/strict';
 import { HANDBACK, LONG_OUTPUT, REPLY, richTranscriptJsonl } from '../fixtures/rich-transcript.mjs';
 import { all, byClass, byTag, doc } from '../helpers/dom-stub.mjs';
 import {
+  askOf,
   earlierSummary,
+  earlierTurns,
+  isTyped,
   renderEntries,
+  renderNotice,
+  renderPrompt,
   renderThinking,
   renderToolCall,
+  renderWork,
   splitTranscript,
+  splitTurn,
+  workSummary,
 } from '../../public/panel-transcript.js';
 
 const { MAX_TOOL_RESULT, bounded, parseConversationDetail, toolInputText, toolResultText } =
@@ -299,4 +307,80 @@ test('an MCP tool is read back into its server and tool, and a call with no resu
     1,
     'no result section for a call still running',
   );
+});
+
+// ------------------------------------------------- the turn the card leads with
+
+test('the card leads with the turn: what you asked, what it did, what it said', () => {
+  const { latest, prompt, work, earlier, since } = splitTurn(entries);
+  assert.equal(latest.text, REPLY);
+  assert.equal(prompt, entries[9], 'the last thing typed before the answer');
+  assert.deepEqual(
+    work.map((e) => e.role),
+    ['thinking'],
+  );
+  assert.equal(earlier.length, 9);
+  assert.deepEqual(since, []);
+  assert.equal(earlierTurns(earlier), '1 earlier turn');
+  assert.equal(workSummary(work), 'its reasoning');
+  assert.equal(
+    workSummary(entries.slice(1, 8)),
+    '5 tool calls · 1 note',
+    'a note is something it said on the way',
+  );
+});
+
+test('a background task finishing woke the turn, but you did not type it: it is work, not the prompt', () => {
+  const typed = { role: 'user', text: 'Re-render film 05.', at: 1 };
+  const woke = {
+    role: 'user',
+    text: '<task-notification>\n<summary>Background command "render" completed</summary>\n</task-notification>',
+    at: 2,
+  };
+  const said = { role: 'assistant', text: 'Done. Both files decode.', at: 3 };
+  const turn = splitTurn([typed, { role: 'assistant', text: 'Rendering.', at: 1.5 }, woke, said]);
+  assert.equal(turn.prompt, typed);
+  assert.equal(workSummary(turn.work), '1 note · 1 notice');
+  for (const t of [
+    '<system-reminder>x',
+    '<command-name>/compact',
+    '<local-command-stdout>x',
+    '[Request interrupted by user]',
+  ]) {
+    assert.equal(isTyped(t), false, t);
+  }
+  assert.equal(isTyped('<div> is a tag I want to ask about'), true);
+  const notice = renderNotice(woke.text, doc);
+  assert.equal(
+    byClass(notice, 'tool-call-what')[0].textContent,
+    'Background command "render" completed',
+  );
+  assert.equal(
+    byTag(notice, 'summary').length,
+    1,
+    "the notice's own <summary> is text, not an element",
+  );
+});
+
+test('needs you: the question its answer ends on, and nothing for an answer that asks nothing', () => {
+  assert.equal(
+    askOf(
+      'I measured it.\n\nOrder: hooks, then speed, then the panel. **Go ahead** in that order?',
+    ),
+    'Order: hooks, then speed, then the panel. Go ahead in that order?'.split('. ').pop(),
+  );
+  assert.equal(askOf('All done. Tests pass.'), null);
+  assert.equal(askOf('Want the 4K too?\n\n```js\nconst a = b ? c : d;\n```'), 'Want the 4K too?');
+  assert.equal(askOf('- Which of these?\n\nNothing else.'), 'Which of these?');
+  assert.equal(askOf(null), null);
+  assert.ok(askOf(`${'Long '.repeat(80)}question?`).length <= 280);
+});
+
+test('SECURITY: the prompt and the work fold are text, whatever they hold', () => {
+  const prompt = renderPrompt({ role: 'user', text: '<img src=x onerror=alert(1)>', at: 0 }, doc);
+  assert.equal(byTag(prompt, 'img').length, 0);
+  assert.match(prompt.textContent, /<img src=x onerror=alert\(1\)>/);
+  const work = renderWork(entries.slice(1, 8), doc);
+  assert.equal(byTag(work, 'details')[0], work);
+  assert.equal(byClass(work, 'turn-work-what')[0].textContent, '5 tool calls · 1 note');
 });

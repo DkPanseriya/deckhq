@@ -43,6 +43,23 @@
 - **A room's hover says how many sessions in it are idle**, open and doing nothing, where there
   are any. The strip of counts is unchanged: idle has no slot of its own.
 
+### Changed
+
+- **A session's card reads like the conversation it is.** It leads with the turn, the way Claude
+  Code draws one:
+  - your prompt in a quiet `>` block
+  - what the agent did, folded to one line that opens to every call ("16 tool calls · 5 notes")
+  - its answer, larger, in the card's widest column
+  - earlier turns, folded above as "3 earlier turns"
+  - when the session is waiting on you and its answer ends on a question, that question at the
+    top under "Needs you"
+
+  A background task finishing, a slash command's output and other notices nobody typed now count
+  as the agent's work, not as your prompt. The "what changed" list is folded to its one line. The
+  traits, the record line, the costs and the resume links sit under "Details" at the foot. Three
+  quick replies ("Go ahead", "Continue", "Commit it") fill the reply box and send nothing until
+  you do. The card is a little wider.
+
 ### Fixed
 
 - **"Go to session" is about ten times faster on Windows.** Each click started PowerShell and

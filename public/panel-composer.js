@@ -182,6 +182,16 @@ export function createComposerPart(ctx) {
     if (had !== has) onDraftChange?.(id, has);
   });
 
+  // A quick reply fills the box, as typing it would, and sends nothing.
+  ctx.quickRow?.addEventListener('click', (e) => {
+    const chip = /** @type {HTMLElement|null} */ (e.target)?.closest?.('.composer-chip');
+    const text = chip?.getAttribute('data-reply');
+    if (!text || textarea.disabled) return;
+    textarea.value = text;
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+  });
+
   return {
     sendText,
     restoreComposer,

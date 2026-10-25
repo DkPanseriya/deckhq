@@ -29,10 +29,14 @@ import { renderMarkdown } from './markdown.js';
 import { currentId, displayedAgent } from './panel-state.js';
 import { threadSkeleton } from './panel-dom.js';
 import {
+  askOf,
   earlierSummary,
+  earlierTurns,
   renderAttachments,
   renderEntries,
-  splitTranscript,
+  renderPrompt,
+  renderWork,
+  splitTurn,
 } from './panel-transcript.js';
 
 /**
@@ -66,6 +70,8 @@ export function createSaidPart(ctx) {
     threadSummary,
     threadEl,
     jumpBtn,
+    askEl,
+    askText,
   } = ctx;
   const toast = ctx.toast || (() => {});
   let conversationToken = 0; // guards against a slow fetch clobbering a newer one
@@ -127,12 +133,29 @@ export function createSaidPart(ctx) {
     }
   }
 
-  /** The last thing the agent said, rendered as markdown — and what it has done since. */
+  /**
+   * "Needs you": the question its answer ends on, at the top of the card, and
+   * only while the floor says it is waiting on you.
+   * @param {import('./panel-transcript.js').Entry|null} latest
+   */
+  function renderAsk(latest) {
+    const state = displayedAgent?.activityState;
+    const waiting = state === 'for_review' || state === 'needs_input';
+    const ask = waiting && latest ? askOf(latest.text) : null;
+    askText.textContent = ask || '';
+    askEl.hidden = !ask;
+  }
+
+  /**
+   * The turn, as Claude Code draws it: what you asked, what it did (one line
+   * that opens), and what it said — and what it has done since.
+   */
   function renderSaid() {
     saidEl.textContent = '';
     sinceEl.textContent = '';
     sinceEl.hidden = true;
-    const { latest, earlier, since } = splitTranscript(messages);
+    const { latest, prompt, work, earlier, since } = splitTurn(messages);
+    renderAsk(latest);
     if (!latest) {
       const empty = document.createElement('div');
       empty.className = 'msg-empty';
@@ -140,9 +163,16 @@ export function createSaidPart(ctx) {
       saidEl.appendChild(empty);
       return;
     }
+    if (prompt) saidEl.appendChild(renderPrompt(prompt, document));
+    if (work.length) {
+      saidEl.appendChild(renderWork(work, document, { agentName: displayedAgent?.label }));
+    }
     // Untrusted daemon data → token tree → textContent. Never innerHTML.
-    saidEl.appendChild(renderMarkdown(latest.text, document));
-    if (latest.images) saidEl.appendChild(renderAttachments(latest.images, document));
+    const answer = document.createElement('div');
+    answer.className = 'turn-answer';
+    answer.appendChild(renderMarkdown(latest.text, document));
+    if (latest.images) answer.appendChild(renderAttachments(latest.images, document));
+    saidEl.appendChild(answer);
     // What has happened AFTER the last thing it said: a turn in progress.
     // Neither the answer nor history, so it is neither promoted nor folded.
     if (since.length) {
@@ -162,7 +192,7 @@ export function createSaidPart(ctx) {
    */
   function renderThread() {
     threadEl.textContent = '';
-    const { latest, earlier } = splitTranscript(messages);
+    const { latest, earlier } = splitTurn(messages);
     // With nothing from the agent yet, `renderSaid()` has said so and the
     // person's own words are the whole thread; they are shown, not hidden.
     if (earlier.length === 0) {
@@ -171,7 +201,7 @@ export function createSaidPart(ctx) {
     }
     threadDetails.hidden = false;
     threadDetails.open = !latest;
-    threadSummary.textContent = earlierSummary(earlier);
+    threadSummary.textContent = latest ? earlierTurns(earlier) : earlierSummary(earlier);
     for (const node of renderEntries(earlier, document)) threadEl.appendChild(node);
   }
 
@@ -250,7 +280,14 @@ export function createSaidPart(ctx) {
       openFile(file);
       return;
     }
-    if (t.closest('.md-in-session')) ctx.goToSession?.();
+    if (t.closest('.md-in-session')) {
+      ctx.goToSession?.();
+      return;
+    }
+    // Your prompt is cut to a few lines; a click shows all of it, and another
+    // cuts it again. Unless you are selecting text in it.
+    const prompt = t.closest('.turn-prompt');
+    if (prompt && !String(window.getSelection?.() || '')) prompt.classList.toggle('is-open');
   });
 
   return { loadConversation, renderSaid, renderThread, jumpToLatest };
