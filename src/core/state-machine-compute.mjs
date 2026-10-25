@@ -31,6 +31,7 @@ import {
   compareAgents,
   changeKey,
   idleNow,
+  recalledBy,
 } from './state-machine-rules.mjs';
 import { copyBreakdown } from './usage.mjs';
 import { now as clockNow } from './clock.mjs';
@@ -269,8 +270,13 @@ export class RegistryCompute extends RegistrySnapshot {
             // transcript is the only signal available that the user has
             // already engaged this session again, superseding the pending
             // review. Clear it the same way, rather than leaving reviewSince
-            // stale in the store while activityState moves on without it.
-            this.store.setAck(id, { reviewSince: null, needsInputSince: null });
+            // stale in the store while activityState moves on without it. A
+            // benched session is recalled by the same reply (`recalledBy`).
+            this.store.setAck(id, {
+              reviewSince: null,
+              needsInputSince: null,
+              ...recalledBy(this.store, id),
+            });
           }
           obs.activityState = next;
         } else {

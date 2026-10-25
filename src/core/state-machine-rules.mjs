@@ -83,6 +83,22 @@ export function endedOr(prev) {
 }
 
 /**
+ * A prompt typed into a BENCHED session recalls it. Benched means "reviewed,
+ * no work assigned", and the user has just assigned it work: left on the bench,
+ * a session resumed after a settle worked in the lounge for the rest of its
+ * life while its juniors sat at its empty desk (owner's floor, 25 October
+ * 2026). It rides on the one exception the invariant already makes, a prompt
+ * typed into this exact session, and on nothing else. A fired session is not
+ * recalled: the app's archive owns `let_go`.
+ * @param {Store} store @param {string} id
+ * @returns {{state?: 'active'}} a patch for `store.setAck`
+ */
+export function recalledBy(store, id) {
+  const ack = store.getAck(id);
+  return ack && ack.state === 'benched' ? { state: 'active' } : {};
+}
+
+/**
  * Normalise an id that may or may not already carry its runtime prefix.
  * @param {string} runtime
  * @param {string} rawId

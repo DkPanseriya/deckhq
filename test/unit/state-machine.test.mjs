@@ -1093,6 +1093,53 @@ test('INVARIANT: UserPromptSubmit is the one documented exception and DOES clear
   assert.equal(find(registry, 'a').reviewSince, null);
 });
 
+test('INVARIANT: a prompt typed into a benched session recalls it, and no observed event does', async () => {
+  // The owner's floor, 25 October 2026: a session benched by a settle while
+  // its process was gone was resumed and given work. It typed in the lounge
+  // while its eight juniors sat round its empty chair.
+  const { registry } = await setupHookRegistry();
+  const id = agentId('claude-code', 'a');
+  await registry.act(id, 'bench');
+  for (const hookEvent of [
+    'SessionStart',
+    'PreToolUse',
+    'PostToolUse',
+    'Notification',
+    'SubagentStop',
+    'Stop',
+    'SessionEnd',
+  ]) {
+    registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent });
+    assert.equal(find(registry, 'a').ackState, 'benched', `still benched after ${hookEvent}`);
+  }
+  await registry.refresh();
+  assert.equal(find(registry, 'a').ackState, 'benched', 'still benched after a scan');
+
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'UserPromptSubmit' });
+  assert.equal(find(registry, 'a').ackState, 'active', 'a typed prompt brings it back');
+
+  // A fired session is the app archive's, and a prompt does not rehire it.
+  await registry.act(id, 'let_go');
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'UserPromptSubmit' });
+  assert.equal(find(registry, 'a').ackState, 'let_go');
+});
+
+test('poll path: a new user turn recalls a benched session, as the hook does', async () => {
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'assistant', turnEnded: true })],
+    live: [makeLive('a')],
+  });
+  const registry = new Registry({ store: fakeStore(), adapters: [adapter] });
+  await registry.refresh();
+  assert.equal(find(registry, 'a').activityState, 'for_review');
+  await registry.act(agentId('claude-code', 'a'), 'bench');
+
+  adapter.setSummaries([makeSummary('a', { lastRole: 'user', turnEnded: false })]);
+  await registry.refresh();
+  assert.equal(find(registry, 'a').activityState, 'working');
+  assert.equal(find(registry, 'a').ackState, 'active');
+});
+
 test('poll path: assistant spoke last but a tool is still running -> working, NOT for_review', async () => {
   // The reported bug: an agent that was hard at work walked to the manager's
   // office and waited there. `lastRole === 'assistant'` is true for the whole

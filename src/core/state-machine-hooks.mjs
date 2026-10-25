@@ -6,9 +6,9 @@
  * `state-machine.mjs` states each one: `SessionEnd` and `SessionStart` are
  * guarded by `endedOr` so a restart or a process death cannot walk a
  * `for_review` item out of the office, and `UserPromptSubmit` is the one
- * hook event that MAY clear `reviewSince` — because it fires when the user
- * typed into this exact session, which is first-person action rather than
- * passive observation.
+ * hook event that MAY clear `reviewSince`, and recall a benched session —
+ * because it fires when the user typed into this exact session, which is
+ * first-person action rather than passive observation.
  */
 
 /** @typedef {import('./model.mjs').Agent} Agent */
@@ -21,7 +21,7 @@
 /** @typedef {import('./state-machine-rules.mjs').HookEvent} HookEvent */
 
 import { RegistryScan } from './state-machine-scan.mjs';
-import { toAgentId, endedOr } from './state-machine-rules.mjs';
+import { toAgentId, endedOr, recalledBy } from './state-machine-rules.mjs';
 import { now as clockNow } from './clock.mjs';
 
 export class RegistryHooks extends RegistryScan {
@@ -78,7 +78,11 @@ export class RegistryHooks extends RegistryScan {
         obs.turnOpen = true;
         obs.lastOutputAt = now;
         obs.lastActivityAt = Math.max(obs.lastActivityAt, now);
-        this.store.setAck(id, { reviewSince: null, needsInputSince: null });
+        this.store.setAck(id, {
+          reviewSince: null,
+          needsInputSince: null,
+          ...recalledBy(this.store, id),
+        });
         break;
 
       case 'Notification':

@@ -30,14 +30,17 @@
  *      fires because the user just typed into this exact session — direct,
  *      first-person action on the agent, not passive observation. This is
  *      the one hook event excluded from the blanket "unchanged" assertion in
- *      the invariant test below.
+ *      the invariant test below. For the same reason it recalls a BENCHED
+ *      session (`recalledBy`): typing a prompt into it is assigning it work,
+ *      and benched means "no work assigned". It never touches `let_go`.
  *   4. Degraded/poll path, §4.2: when a session is live and its transcript's
  *      last turn flips from assistant to user, that is this path's only
  *      available signal for the same thing UserPromptSubmit reports directly
  *      — the user already replied. Treated the same way, for consistency:
  *      activityState moves off for_review AND reviewSince/needsInputSince
  *      are cleared together, rather than leaving a stale reviewSince behind
- *      in the store once nothing shows it in the UI any more.
+ *      in the store once nothing shows it in the UI any more. A benched
+ *      session is recalled by it, as by UserPromptSubmit.
  *
  * WP-19's pending permissions ride along beside all of this and touch none of
  * it: `setPendingPermission`/`clearPendingPermission` write into one map that

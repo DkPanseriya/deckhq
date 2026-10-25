@@ -45,6 +45,11 @@
 
 ### Fixed
 
+- **A benched session you give work to comes back to its desk.** Typing a prompt into a benched
+  session now recalls it. Before, a session benched while it was closed (by "settle", say) and
+  later resumed worked in the lounge, while its sub-agents sat round its empty chair. Nothing but
+  your own prompt recalls it, and a fired session stays fired.
+
 - **A look shared from the DeckHQ app opens here.** The app's look file can name a robot, a
   ready-made look and its 3D layers, and this build refused the whole file over them. They are now
   read and set aside; the floor arrives whole, and any other unknown key is still refused. A

@@ -136,7 +136,8 @@ finished; review this_. Those need different responses from you, so they look di
 counted separately.
 
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
-yours. `for_review` is entered automatically and can only be _left_ by you.
+yours. `for_review` is entered automatically and can only be _left_ by you. Typing a prompt into a
+benched session recalls it: that is you giving it work.
 
 **One exception to "walks to Your Office".** A session whose turn is over, or whose hand is up,
 stays at its own desk while at least one of its sub-agents is still working. It is not finished:
