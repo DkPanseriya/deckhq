@@ -46,6 +46,20 @@ export * from './hooks-summary.mjs';
 export * from './hooks-policy.mjs';
 
 /**
+ * Are our entries in the settings file more than once (`deckhqEntriesDoubled`)?
+ * Then every event starts two processes posting the same thing. Never throws.
+ * @returns {Promise<boolean>}
+ */
+export async function doubled() {
+  try {
+    const { parsed } = await readSettings();
+    return deckhqEntriesDoubled(parsed);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The port the installed hooks currently post to, or null if none are
  * installed. Never throws.
  * @returns {Promise<number|null>}

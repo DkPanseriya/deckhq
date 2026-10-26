@@ -62,6 +62,16 @@
 
 ### Fixed
 
+- **The ledger keeps every day you asked for across a clock change.** Its retention counted back
+  in 24-hour steps, and on the day after the clocks went back it deleted one day early. Usage
+  windows and trends started an hour off on those days for the same reason. All of them now count
+  calendar days.
+
+- **Hooks installed twice are said so, with a one-click tidy.** Another tool re-saving Claude's
+  settings can leave DeckHQ's hooks in the file twice, and then every event starts two processes.
+  The header says so, and the hooks screen's Tidy writes one set back (the file is backed up
+  first).
+
 - **"Go to session" is about ten times faster on Windows.** Each click started PowerShell and
   compiled a helper twice, once to find the session's window and once to raise it: 2.5 to 4
   seconds. One helper now starts when a panel opens and stays ready, and each step takes 30 to 50

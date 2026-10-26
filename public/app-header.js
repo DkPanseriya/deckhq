@@ -11,6 +11,7 @@
 
 import { queueOrder } from './deck.js';
 import { floorCounts } from './floor-counts.js';
+import { DOUBLED_HOOKS_TEXT, hooksDoubled } from './hooks-status.js';
 import { applyMotionPreference } from './settings-ui.js';
 import {
   announce,
@@ -258,6 +259,16 @@ export function renderHeader(snapshot) {
     : DEGRADED_HOOKS_TEXT;
   el.degradedLink.hidden =
     degradedNoted.length > 0 && degradedNoted.length === degradedRuntimes.length;
+  el.degradedLink.textContent = 'Install hooks';
+  // Installed, but twice over: exact, and every event run twice. Said only
+  // when nothing above needs the banner, and the link opens the same screen,
+  // where Tidy is the button.
+  if (degradedRuntimes.length === 0 && hooksDoubled(snapshot.hooks)) {
+    el.degradedBanner.hidden = false;
+    el.degradedText.textContent = DOUBLED_HOOKS_TEXT;
+    el.degradedLink.hidden = false;
+    el.degradedLink.textContent = 'Tidy';
+  }
 
   // A store that cannot write is quietly throwing away every acknowledgement
   // as soon as the daemon restarts. Never let that be silent.

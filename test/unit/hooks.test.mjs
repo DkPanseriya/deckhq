@@ -288,9 +288,11 @@ test('our entries are still ours with the tag stripped: installed, not reinstall
   }
   await reset(JSON.stringify(doubled, null, 2));
   assert.equal(hooks.deckhqEntriesDoubled(read()), true);
+  assert.equal(await hooks.doubled(), true, 'the status the hooks screen reads');
   await hooks.install(4317);
   const after = read();
   assert.equal(hooks.deckhqEntriesDoubled(after), false, 'install collapses the doubled set');
+  assert.equal(await hooks.doubled(), false);
   assert.equal(ourEntries(after).length, ourEntries({ hooks: hooks.buildHooksBlock(4317) }).length);
   assert.deepEqual(
     Object.keys(after.hooks).sort(),

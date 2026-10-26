@@ -280,6 +280,24 @@ export function createHooksUI(opts) {
     const actions = document.createElement('div');
     actions.className = 'hooks-actions';
 
+    if (adapter.installed && adapter.doubled) {
+      // Our hooks twice over, which another tool re-saving the file can leave
+      // behind: every event starts two processes. The install is what writes
+      // one set back, and it runs only on this click, like any install.
+      const twice = document.createElement('p');
+      twice.className = 'hooks-error';
+      twice.textContent =
+        'DeckHQ’s hooks are in your settings file twice, so every event starts two processes. ' +
+        'Tidy writes one set back; the file is backed up first.';
+      section.appendChild(twice);
+      const tidyBtn = document.createElement('button');
+      tidyBtn.type = 'button';
+      tidyBtn.className = 'btn btn--primary';
+      tidyBtn.textContent = 'Tidy';
+      tidyBtn.addEventListener('click', () => install(adapter.runtime, tidyBtn));
+      actions.append(tidyBtn);
+    }
+
     if (adapter.installed) {
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';

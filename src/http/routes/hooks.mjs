@@ -31,6 +31,7 @@ export function register(router, ctx) {
     let error = null;
     let installedAtPort = null;
     let viaPlugin = false;
+    let doubled = false;
     /** @type {{key:string, file:string}|null} */
     let blockedByPolicy = null;
     try {
@@ -39,6 +40,7 @@ export function register(router, ctx) {
         installed = await adapter.hooks.installed(port());
         installedAtPort = (await adapter.hooks.installedPort?.()) ?? null;
         viaPlugin = Boolean(await adapter.hooks.pluginInstalled?.());
+        doubled = installed ? Boolean(await adapter.hooks.doubled?.()) : false;
         // WP-56. A managed policy can switch these hooks off over DeckHQ's
         // head, and the result is indistinguishable from a broken install
         // everywhere else: the file is right, the port is right, nothing
@@ -87,6 +89,9 @@ export function register(router, ctx) {
       // running, otherwise null. The header banner says so; there is no
       // button, because there is nothing on this side to press.
       blockedByPolicy,
+      // True when our entries are in the settings file more than once, so
+      // every event runs twice. Installing again writes one set back.
+      doubled,
       ...registry.hookHealthFor(adapter.id),
     };
   }
@@ -187,19 +192,25 @@ export function register(router, ctx) {
   });
 
   async function refreshHookStatus() {
-    /** @type {Record<string, {supported:boolean, installed:boolean}>} */
+    /** @type {Record<string, {supported:boolean, installed:boolean, doubled?:boolean}>} */
     const status = {};
     for (const adapter of adapters.getAdapters()) {
       let installed = false;
+      let doubled = false;
       try {
         installed = adapter.hooks.supported
           ? (await adapter.hooks.installed(port())) ||
             Boolean(await adapter.hooks.pluginInstalled?.())
           : false;
+        doubled = installed ? Boolean(await adapter.hooks.doubled?.()) : false;
       } catch {
         installed = false;
       }
-      status[adapter.id] = { supported: Boolean(adapter.hooks.supported), installed };
+      status[adapter.id] = {
+        supported: Boolean(adapter.hooks.supported),
+        installed,
+        ...(doubled ? { doubled } : {}),
+      };
     }
     registry.setHookStatus(status);
     return status;

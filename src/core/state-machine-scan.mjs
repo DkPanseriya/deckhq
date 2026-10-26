@@ -37,7 +37,7 @@ import { legacyIdsOf, resolveProjects } from './project-of.mjs';
 
 export class RegistryScan extends RegistryCompute {
   /**
-   * @param {Record<string, {supported:boolean, installed:boolean}>} status
+   * @param {Record<string, {supported:boolean, installed:boolean, doubled?:boolean}>} status
    */
   setHookStatus(status) {
     this._hookStatus = { ...this._hookStatus, ...(status || {}) };
