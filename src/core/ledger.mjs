@@ -128,7 +128,6 @@ import path from 'node:path';
 import { createLog } from './log.mjs';
 import {
   DAY_FILE_RE,
-  DAY_MS,
   DEFAULT_RETENTION_DAYS,
   FLUSH_INTERVAL_MS,
   LEDGER_KINDS,
@@ -140,6 +139,7 @@ import {
   finiteNumber,
 } from './ledger-record.mjs';
 import { parseRecords } from './ledger-read.mjs';
+import { addDays } from './ledger-records.mjs';
 import { now as clockNow } from './clock.mjs';
 
 export * from './ledger-record.mjs';
@@ -462,7 +462,9 @@ export class Ledger {
    */
   async prune(retentionDays = DEFAULT_RETENTION_DAYS, now = this._now()) {
     const days = clampRetentionDays(retentionDays);
-    const cutoff = dayStart(dayKey(now)) - (days - 1) * DAY_MS;
+    // Calendar days, not 24-hour steps: across the night the clocks go back a
+    // day is 25 hours, and stepping 24 kept one day fewer than asked.
+    const cutoff = dayStart(addDays(dayKey(now), -(days - 1)));
     /** @type {string[]} */
     const removed = [];
     let kept = 0;

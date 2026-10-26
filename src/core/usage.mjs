@@ -54,6 +54,7 @@
  */
 
 import { DAY_MS, dayKey, dayStart, finiteNumber } from './ledger-record.mjs';
+import { addDays } from './ledger-records.mjs';
 import { now as clockNow } from './clock.mjs';
 
 /**
@@ -161,7 +162,6 @@ export function breakdownDelta(next, prev) {
  * @returns {{name:string, since:number, until:number, days:number, label:string}}
  */
 export function windowFor(name, now = clockNow()) {
-  const todayStart = dayStart(dayKey(now));
   const spec =
     name === 'today'
       ? { days: 1, label: 'today' }
@@ -171,7 +171,7 @@ export function windowFor(name, now = clockNow()) {
   const key = name === 'today' ? 'today' : name === '30d' ? '30d' : '7d';
   return {
     name: key,
-    since: todayStart - (spec.days - 1) * DAY_MS,
+    since: dayStart(addDays(dayKey(now), -(spec.days - 1))),
     until: now,
     days: spec.days,
     label: spec.label,
@@ -424,10 +424,10 @@ export function aggregate(records, opts = {}) {
 export function trend(records, opts = {}) {
   const now = opts.now ?? clockNow();
   const days = Math.max(1, Math.floor(opts.days ?? TREND_DAYS));
-  const todayStart = dayStart(dayKey(now));
-  const since = todayStart - (days - 1) * DAY_MS;
+  // Calendar days: a window across the clocks changing is not N x 24 hours.
+  const since = dayStart(addDays(dayKey(now), -(days - 1)));
   const priorUntil = since - 1;
-  const priorSince = since - days * DAY_MS;
+  const priorSince = dayStart(addDays(dayKey(now), -(2 * days - 1)));
 
   const current = aggregate(records, { now, since, until: now });
   const previous = aggregate(records, { now, since: priorSince, until: priorUntil });

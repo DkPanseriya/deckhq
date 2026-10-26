@@ -138,7 +138,14 @@ test('the week card reports what the day files say', async () => {
     const body = await res.json();
 
     assert.equal(body.kind, 'week');
-    assert.equal(body.until - body.since, 7 * DAY, 'the window is not a week');
+    // A calendar week, Monday 00:00 to Monday 00:00: 168 hours most weeks,
+    // 167 or 169 in the one the clocks change in (this test failed on
+    // 26 October 2026 asserting 7 x 24 hours).
+    const since = new Date(body.since);
+    const weekOn = new Date(since.getFullYear(), since.getMonth(), since.getDate() + 7);
+    assert.equal(body.until, weekOn.getTime(), 'the window is not a week');
+    assert.equal(since.getHours() + since.getMinutes(), 0, 'it starts at midnight');
+    assert.ok(Math.abs(body.until - body.since - 7 * DAY) <= 3_600_000);
     assert.equal(body.window.turns, 5, 'five turns were written, one a day');
     assert.equal(body.window.discharges, 5);
     assert.equal(body.window.tokens, 250_000);
