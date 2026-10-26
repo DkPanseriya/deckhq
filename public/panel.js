@@ -82,7 +82,8 @@ import {
   setAnswering,
   setAnnouncedPermissionId,
 } from './panel-permission.js';
-import { createSaidPart, setMessages } from './panel-said.js';
+import { createSaidPart, messages, setMessages } from './panel-said.js';
+import { touchedFiles } from './panel-transcript.js';
 import {
   createChangesPart,
   expandedFiles,
@@ -195,8 +196,22 @@ export function createPanel(opts) {
   // WP-100. "open in the session" inside a rendered reply is the card's own
   // go-to-session button by another name; the part that owns it is built
   // below, so it is reached through a closure rather than handed in.
-  const said = createSaidPart({ ...dom, getSnapshot, toast, goToSession: () => goToSession() });
-  const changes = createChangesPart({ ...dom, getSnapshot, toast });
+  const said = createSaidPart({
+    ...dom,
+    getSnapshot,
+    toast,
+    goToSession: () => goToSession(),
+    // The transcript says which files this session edited; the change list
+    // re-sorts when it lands.
+    onMessages: () => changes.refilter(),
+  });
+  const changes = createChangesPart({
+    ...dom,
+    getSnapshot,
+    toast,
+    touched: () =>
+      messages ? touchedFiles(messages, displayedAgent?.repoRoot || displayedAgent?.cwd) : null,
+  });
   const actions = createActionsPart({
     ...dom,
     root,

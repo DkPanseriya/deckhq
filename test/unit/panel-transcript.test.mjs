@@ -31,6 +31,7 @@ import {
   renderWork,
   splitTranscript,
   splitTurn,
+  touchedFiles,
   workSummary,
 } from '../../public/panel-transcript.js';
 
@@ -383,4 +384,26 @@ test('SECURITY: the prompt and the work fold are text, whatever they hold', () =
   const work = renderWork(entries.slice(1, 8), doc);
   assert.equal(byTag(work, 'details')[0], work);
   assert.equal(byClass(work, 'turn-work-what')[0].textContent, '5 tool calls · 1 note');
+});
+
+test("the change list's own files: what this session's Edit and Write calls touched", () => {
+  const call = (name, input) => ({
+    role: 'tool',
+    text: '',
+    at: 0,
+    tool: { name, summary: name, input, result: 'ok' },
+  });
+  const got = touchedFiles(
+    [
+      call('Edit', 'C:\\Repo\\Src\\App.js\n- a\n+ b'),
+      call('Write', 'C:/Repo/docs/GUIDE.md\n# Guide'),
+      call('MultiEdit', 'C:\\Elsewhere\\notes.md\n- x'),
+      call('Bash', 'C:\\Repo\\run.sh'),
+      call('Read', 'C:\\Repo\\README.md'),
+      { role: 'assistant', text: 'C:\\Repo\\x.js', at: 0 },
+    ],
+    'C:\\Repo\\',
+  );
+  assert.deepEqual([...got].sort(), ['docs/guide.md', 'src/app.js']);
+  assert.equal(touchedFiles(null, 'C:\\Repo').size, 0);
 });

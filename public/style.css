@@ -2652,6 +2652,18 @@ button {
 .review-changes-fold[open] .review-changes {
   margin-top: 0.45rem;
 }
+/* the rest of the tree: other sessions' work, one line until opened */
+.review-others {
+  margin-top: 0.4rem;
+}
+.review-others-summary {
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.review-others[open] .review-others-summary {
+  margin-bottom: 0.3rem;
+}
 
 /* quick replies: fill the box, send nothing */
 .composer-quick {

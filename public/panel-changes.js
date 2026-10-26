@@ -38,11 +38,16 @@ export const expandedFiles = new Set();
 
 /**
  * @param {PanelDom & {getSnapshot: () => any,
- *          toast: (m:string, o?:{isError?:boolean}) => void}} ctx
+ *          toast: (m:string, o?:{isError?:boolean}) => void,
+ *          touched?: () => Set<string>|null}} ctx
+ *   `touched`: the repo-relative paths, lower-cased, this session edited, or
+ *   null while its transcript is not loaded (then every file is shown as one)
  */
 export function createChangesPart(ctx) {
   const { getSnapshot, toast, changedEl, changedTotals, changedFoot, expandAllBtn } = ctx;
   let changesToken = 0;
+  /** The last answer from `/api/changes`, so a transcript arriving later can re-sort it. */
+  let lastChanges = null;
 
   // `[ expand all ]`. A listener on an element of its own, so nothing about
   // registration order can matter (docs/DEVIATIONS.md §122, rule 1).
@@ -101,6 +106,7 @@ export function createChangesPart(ctx) {
    * @param {any} c
    */
   function renderChanges(c) {
+    lastChanges = c;
     changedEl.textContent = '';
     changedTotals.textContent = '';
     fileRows = [];
@@ -133,78 +139,106 @@ export function createChangesPart(ctx) {
       return;
     }
     const t = c.totals || { files: 0, added: 0, removed: 0 };
-    changedTotals.textContent = `+${formatNumber(t.added)}  −${formatNumber(t.removed)}  ${t.files} ${
-      t.files === 1 ? 'file' : 'files'
-    }`;
+    // THIS SESSION'S FILES FIRST. The tree is the project's, and on a busy
+    // one most of it is other sessions' work (64 files under a card whose
+    // turn edited seven, 25 October 2026). What this session's own Edit and
+    // Write calls touched is read off its transcript; the rest is one fold.
+    const touched = ctx.touched?.() ?? null;
+    const all = [
+      ...(c.files || []).map((f) => ({ f, staged: false })),
+      ...(c.staged || []).map((f) => ({ f, staged: true })),
+    ];
+    const isMine = (f) => Boolean(touched && touched.has(String(f.path).toLowerCase()));
+    const mine = touched ? all.filter((r) => isMine(r.f)) : all;
+    const others = touched ? all.filter((r) => !isMine(r.f)) : [];
+    if (touched && mine.length) {
+      const added = mine.reduce((n, r) => n + (Number(r.f.added) || 0), 0);
+      const removed = mine.reduce((n, r) => n + (Number(r.f.removed) || 0), 0);
+      changedTotals.textContent = `+${formatNumber(added)}  −${formatNumber(removed)}  ${mine.length} of ${t.files} ${
+        t.files === 1 ? 'file' : 'files'
+      }`;
+    } else {
+      changedTotals.textContent = `+${formatNumber(t.added)}  −${formatNumber(t.removed)}  ${t.files} ${
+        t.files === 1 ? 'file' : 'files'
+      }`;
+    }
+    if (touched && !mine.length) note('nothing this session edited is uncommitted');
     const table = document.createElement('div');
     table.className = 'review-files';
-    for (const [list, staged] of [
-      [c.files || [], false],
-      [c.staged || [], true],
-    ]) {
-      for (const f of list) {
-        // The row is a button so that "click or Enter" is the platform's own
-        // behaviour rather than a keydown handler that would also have to
-        // reimplement Space, focus and the disclosure's ARIA.
-        const head = document.createElement('button');
-        head.type = 'button';
-        head.className = 'review-file-head';
-        head.setAttribute('aria-expanded', 'false');
-        const p = document.createElement('span');
-        p.className = 'review-file-path';
-        p.textContent = f.path;
-        head.title = staged ? `${f.path} (staged)` : f.path;
-        const add = document.createElement('span');
-        add.className = 'review-file-num num';
-        add.textContent = f.binary ? 'bin' : `+${f.added}`;
-        const rem = document.createElement('span');
-        rem.className = 'review-file-num num';
-        rem.textContent = f.binary ? '' : `−${f.removed}`;
-        if (staged) {
-          const s = document.createElement('span');
-          s.className = 'review-file-staged';
-          s.textContent = 'staged';
-          p.appendChild(s);
-        }
-        head.append(p, add, rem);
-
-        const openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.className = 'review-file-open';
-        openBtn.textContent = '↗';
-        openBtn.title = 'Open in editor';
-        openBtn.setAttribute('aria-label', `Open ${f.path} in your editor`);
-
-        const diffEl = document.createElement('div');
-        diffEl.className = 'review-file-diff';
-        diffEl.id = `review-diff-${fileRows.length}`;
-        diffEl.hidden = true;
-        head.setAttribute('aria-controls', diffEl.id);
-
-        const row = document.createElement('div');
-        row.className = 'review-file';
-        const rowTop = document.createElement('div');
-        rowTop.className = 'review-file-row';
-        rowTop.append(head, openBtn);
-        row.append(rowTop, diffEl);
-        table.appendChild(row);
-
-        const entry = {
-          key: (staged ? 'S:' : 'U:') + f.path,
-          path: f.path,
-          staged,
-          head,
-          diffEl,
-          loaded: false,
-          line: 1,
-        };
-        fileRows.push(entry);
-        head.addEventListener('click', () => setFileExpanded(entry, !isFileExpanded(entry)));
-        openBtn.addEventListener('click', () => openFileInEditor(entry));
-        if (expandedFiles.has(entry.key)) setFileExpanded(entry, true);
+    const othersTable = document.createElement('div');
+    othersTable.className = 'review-files';
+    for (const { f, staged } of [...mine, ...others]) {
+      const into = touched && !isMine(f) ? othersTable : table;
+      // The row is a button so that "click or Enter" is the platform's own
+      // behaviour rather than a keydown handler that would also have to
+      // reimplement Space, focus and the disclosure's ARIA.
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'review-file-head';
+      head.setAttribute('aria-expanded', 'false');
+      const p = document.createElement('span');
+      p.className = 'review-file-path';
+      p.textContent = f.path;
+      head.title = staged ? `${f.path} (staged)` : f.path;
+      const add = document.createElement('span');
+      add.className = 'review-file-num num';
+      add.textContent = f.binary ? 'bin' : `+${f.added}`;
+      const rem = document.createElement('span');
+      rem.className = 'review-file-num num';
+      rem.textContent = f.binary ? '' : `−${f.removed}`;
+      if (staged) {
+        const s = document.createElement('span');
+        s.className = 'review-file-staged';
+        s.textContent = 'staged';
+        p.appendChild(s);
       }
+      head.append(p, add, rem);
+
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'review-file-open';
+      openBtn.textContent = '↗';
+      openBtn.title = 'Open in editor';
+      openBtn.setAttribute('aria-label', `Open ${f.path} in your editor`);
+
+      const diffEl = document.createElement('div');
+      diffEl.className = 'review-file-diff';
+      diffEl.id = `review-diff-${fileRows.length}`;
+      diffEl.hidden = true;
+      head.setAttribute('aria-controls', diffEl.id);
+
+      const row = document.createElement('div');
+      row.className = 'review-file';
+      const rowTop = document.createElement('div');
+      rowTop.className = 'review-file-row';
+      rowTop.append(head, openBtn);
+      row.append(rowTop, diffEl);
+      into.appendChild(row);
+
+      const entry = {
+        key: (staged ? 'S:' : 'U:') + f.path,
+        path: f.path,
+        staged,
+        head,
+        diffEl,
+        loaded: false,
+        line: 1,
+      };
+      fileRows.push(entry);
+      head.addEventListener('click', () => setFileExpanded(entry, !isFileExpanded(entry)));
+      openBtn.addEventListener('click', () => openFileInEditor(entry));
+      if (expandedFiles.has(entry.key)) setFileExpanded(entry, true);
     }
     changedEl.appendChild(table);
+    if (others.length) {
+      const fold = document.createElement('details');
+      fold.className = 'review-others';
+      const summary = document.createElement('summary');
+      summary.className = 'review-others-summary';
+      summary.textContent = `${others.length} other ${others.length === 1 ? 'change' : 'changes'} in the tree`;
+      fold.append(summary, othersTable);
+      changedEl.appendChild(fold);
+    }
     if (fileRows.length) {
       changedEl.appendChild(changedFoot);
       syncExpandAll();
@@ -315,9 +349,15 @@ export function createChangesPart(ctx) {
     }
   }
 
+  /** Re-sort the last answer: the transcript, and with it what this session touched, has arrived. */
+  function refilter() {
+    if (lastChanges) renderChanges(lastChanges);
+  }
+
   return {
     loadChanges,
     renderChanges,
+    refilter,
     setFileExpanded,
     isFileExpanded,
     loadDiff,

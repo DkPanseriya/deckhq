@@ -57,7 +57,7 @@ const DETAIL_LIMIT = 400;
 /**
  * @param {PanelDom & {getSnapshot: () => any,
  *          toast?: (m:string, o?:{isError?:boolean}) => void,
- *          goToSession?: () => void}} ctx
+ *          goToSession?: () => void, onMessages?: () => void}} ctx
  */
 export function createSaidPart(ctx) {
   const {
@@ -116,6 +116,7 @@ export function createSaidPart(ctx) {
       messages = data.messages || [];
       renderSaid();
       renderThread();
+      ctx.onMessages?.();
     } catch (err) {
       if (token !== conversationToken) return;
       messages = [];

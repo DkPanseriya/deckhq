@@ -122,6 +122,39 @@ export function isTyped(text) {
   );
 }
 
+/** The tools that write a file, and whose input starts with its path. */
+const WRITING_TOOLS = new Set(['Edit', 'MultiEdit', 'Write']);
+
+/**
+ * The files this session edited, as repository-relative paths, lower-cased
+ * for comparing: read off its own Edit, MultiEdit and Write calls, whose
+ * input's first line is the file's path (`transcript-detail.mjs`). A path
+ * outside `root` is not this repository's and is left out. What a shell
+ * command changed is not counted: there is no path to read.
+ * @param {Entry[]|null|undefined} messages
+ * @param {string|null|undefined} root the repository's root
+ * @returns {Set<string>}
+ */
+export function touchedFiles(messages, root) {
+  const out = new Set();
+  const base = String(root || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+  for (const m of Array.isArray(messages) ? messages : []) {
+    if (m.role !== 'tool' || !m.tool || !WRITING_TOOLS.has(m.tool.name)) continue;
+    const first = String(m.tool.input || '')
+      .split('\n')[0]
+      .trim()
+      .replace(/\\/g, '/')
+      .toLowerCase();
+    if (!first) continue;
+    if (base && first.startsWith(`${base}/`)) out.add(first.slice(base.length + 1));
+    else if (!/^([a-z]:)?\//.test(first)) out.add(first.replace(/^\.\//, ''));
+  }
+  return out;
+}
+
 /**
  * The work fold's one line: `24 tool calls · 3 notes`. A note is something
  * the agent said on the way, before its answer.

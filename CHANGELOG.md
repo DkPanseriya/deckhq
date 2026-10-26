@@ -60,6 +60,12 @@
   quick replies ("Go ahead", "Continue", "Commit it") fill the reply box and send nothing until
   you do. The card is a little wider.
 
+- **"What changed" leads with this session's own files.** The list is the project's working
+  tree, so on a busy project it was mostly other sessions' work. Files the session edited
+  (read off its own Edit and Write calls) come first, with their totals ("5 of 7 files"). The rest
+  are folded under "N other changes in the tree". Files a shell command changed are not counted,
+  because the transcript doesn't name them.
+
 ### Fixed
 
 - **The ledger keeps every day you asked for across a clock change.** Its retention counted back
