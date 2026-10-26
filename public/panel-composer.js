@@ -21,7 +21,9 @@ import { setStreaming } from './panel-live.js';
  *          getSnapshot: () => any,
  *          toast: (m:string, o?:{isError?:boolean}) => void,
  *          announce: (t:string) => void,
- *          onDraftChange?: (id:string, hasDraft:boolean) => void}} ctx
+ *          onDraftChange?: (id:string, hasDraft:boolean) => void,
+ *          onActed?: (id:string, what:string) => void}} ctx
+ *   `onActed`: a send was ACCEPTED, and the deck moves on from there
  */
 export function createComposerPart(ctx) {
   const {
@@ -116,6 +118,7 @@ export function createComposerPart(ctx) {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       toast(o.approve ? `Approved — sent “${text}” to ${who(agent)}` : 'Message sent');
       if (o.approve) announce(`${who(agent)}: approved`);
+      ctx.onActed?.(id, o.approve ? 'approve' : 'reply');
       // The turn is accepted, not finished. Hold on to what was sent so the
       // stream's own failure can still put it back, and start the live row.
       if (body.sendId) {

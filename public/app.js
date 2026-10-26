@@ -434,6 +434,9 @@ setPanel(
     onNewAgent: (projectId) => openNewAgentDialog(projectId),
     // WP15 task C.3: rename / re-avatar an existing agent.
     onRename: (agent) => openIdentityDialog(agent),
+    // In the deck, an item you have answered is done with for now: the card
+    // moves on to the next one waiting, if a card is open.
+    onActed: (id) => deckUI?.advanceFrom(id, { openPanel: !el.panelRoot.hidden }),
     // Keep `hasDraft` on client state current between snapshots.
     onDraftChange: (id, hasDraft) => {
       const a = latestSnapshot?.agents?.find((x) => x.id === id);

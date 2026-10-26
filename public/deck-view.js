@@ -199,6 +199,26 @@ export function queueStep(queue, from, direction) {
   return queue[index].id;
 }
 
+/**
+ * Who is next after `id`, which was just acted on: the first item after it,
+ * in the order it was last drawn in, that is still waiting; at the end of the
+ * queue, the nearest one before it. `orders` is the order as drawn now and
+ * as drawn the time before, newest first, because an item acted on leaves the
+ * queue with the next snapshot and that can land before the action's answer.
+ * Null when nobody else is waiting.
+ * @param {string[][]} orders
+ * @param {string[]} waiting the ids in the queue now
+ * @param {string} id
+ * @returns {string|null}
+ */
+export function nextWaiting(orders, waiting, id) {
+  const order = orders.find((o) => o.includes(id));
+  if (!order) return null;
+  const at = order.indexOf(id);
+  const still = (/** @type {string} */ x) => x !== id && waiting.includes(x);
+  return order.slice(at + 1).find(still) || [...order.slice(0, at)].reverse().find(still) || null;
+}
+
 // --------------------------------------------------------------- formatting
 
 /**

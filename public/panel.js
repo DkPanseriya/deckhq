@@ -125,6 +125,8 @@ export {
  *   re-avatar" flow (WP15 task C.3) for the currently displayed agent.
  * @param {(id:string, hasDraft:boolean) => void} [opts.onDraftChange] the
  *   composer's unsent text for a session appeared or went away.
+ * @param {(id:string, what:string) => void} [opts.onActed] an action or a send on
+ *   `id` was accepted; in the deck, the card moves on to the next one waiting
  * @param {(map:Record<string,string|null>) => void} [opts.onTendencies] WP-28.
  *   The floor's idle tendencies arrived with `GET /api/traits`. A hint about
  *   which existing idle clip an agent leans on, and nothing else.
@@ -140,6 +142,7 @@ export function createPanel(opts) {
     onRename,
     onDraftChange,
     onTendencies,
+    onActed,
   } = opts;
 
   /** The clock behind the "waiting 1d 2h" line, while the panel is open. */
@@ -220,6 +223,7 @@ export function createPanel(opts) {
     announce,
     onNewAgent,
     onRename,
+    onActed,
   });
   const resume = createResumePart({ ...dom, getSnapshot, toast });
   const goto = createGotoPart({ ...dom, getSnapshot, toast, announce });
@@ -232,6 +236,7 @@ export function createPanel(opts) {
     toast,
     announce,
     onDraftChange,
+    onActed,
   });
   const live = createLivePart({ ...dom, root, toast });
 

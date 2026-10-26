@@ -60,6 +60,10 @@
   quick replies ("Go ahead", "Continue", "Commit it") fill the reply box and send nothing until
   you do. The card is a little wider.
 
+- **The deck works as an inbox.** With a card open beside the deck (`Tab`, then `Enter`), the
+  card moves on to the next one waiting once you approve, bench or send a reply. In the deck the
+  card takes the wider half, because that's where the reading happens.
+
 - **"What changed" leads with this session's own files.** The list is the project's working
   tree, so on a busy project it was mostly other sessions' work. Files the session edited
   (read off its own Edit and Write calls) come first, with their totals ("5 of 7 files"). The rest

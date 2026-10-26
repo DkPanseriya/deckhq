@@ -1197,7 +1197,10 @@ instead of walking, clips hold a representative pose, and the floor stays fully 
 The floor answers _"is anything waiting on me"_ from across the room; the deck is where you clear
 it. `Tab` swaps between them and leaves the panel where it is. It is a real table — same queue,
 same order, same actions — so a screen reader reaches everything the floor shows, and the floor is
-never the only way to get to anything. Whenever something is waiting, a strip of chips under the
+never the only way to get to anything. It is also the quickest way to answer them: `Enter` opens
+the oldest one's card beside the table, wider than on the floor, and `J` / `K` move the card with
+the cursor. Once you approve, bench or send a reply, the card moves on to the next one waiting.
+Whenever something is waiting, a strip of chips under the
 header carries the queue's shape without leaving the floor at all: oldest on the left, and it
 stays there. The deck's **Resting** tab is the lounge as a list: everybody in it, most recent
 first, including the ones the floor shows only as a number on the lounge's `+N resting` chip.

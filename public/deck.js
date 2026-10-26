@@ -52,6 +52,7 @@ import {
   queueAnchor,
   queueCursor,
   queueStep,
+  nextWaiting,
   renderDeckTable,
   renderRestingTable,
   rowLabel,
@@ -133,6 +134,13 @@ export function createDeckUI(opts) {
   let deckOpen = false;
   /** Where the keys act when the panel is shut and has no selection to lend. */
   let cursorId = null;
+  /**
+   * The queue's order as last drawn, and as drawn the time before: an item
+   * acted on leaves the queue with the next snapshot, which can arrive before
+   * the action's own answer does, and where it WAS is what says who is next.
+   */
+  let orderNow = /** @type {string[]} */ ([]);
+  let orderBefore = /** @type {string[]} */ ([]);
 
   // WP-83's state, and all of it. Which tab is showing, which window the Usage
   // tab is asking for, what the last fetch came back with, and how each of its
@@ -487,6 +495,11 @@ export function createDeckUI(opts) {
   function render() {
     const queue = getQueue();
     const now = clockNow();
+    const ids = queue.map((a) => a.id);
+    if (ids.join() !== orderNow.join()) {
+      orderBefore = orderNow;
+      orderNow = ids;
+    }
 
     stripEl.hidden = queue.length === 0;
     syncChips(queue, now, getSelectedId());
@@ -520,6 +533,33 @@ export function createDeckUI(opts) {
     // on every keystroke. A panel already open follows the cursor.
     onSelect(next.id, { openPanel: !deckOpen });
     announce?.(rowLabel(next, clockNow()));
+    syncSelection();
+  }
+
+  /**
+   * INBOX FLOW (the owner, 25 October 2026: "I never respond from it"). An
+   * item you approved, benched or replied to from the deck is done with for
+   * now, so the cursor — and the card, if one is open — moves to the next one
+   * waiting, the way a mail client moves on after you archive. Worked out
+   * from the queue as it stood when you acted, because the acted item leaves
+   * it with the next snapshot. Nothing here acts: it only selects.
+   * @param {string} id the item just acted on
+   * @param {{openPanel?: boolean}} [o] whether the card follows
+   */
+  function advanceFrom(id, o = {}) {
+    if (!deckOpen) return;
+    const queue = getQueue();
+    const nextId = nextWaiting(
+      [orderNow, orderBefore],
+      queue.map((a) => a.id),
+      id,
+    );
+    if (!nextId) return;
+    const next = queue.find((a) => a.id === nextId);
+    if (!next) return;
+    cursorId = next.id;
+    onSelect(next.id, { openPanel: o.openPanel === true });
+    announce?.(`Next: ${rowLabel(next, clockNow())}`);
     syncSelection();
   }
 
@@ -618,6 +658,7 @@ export function createDeckUI(opts) {
     render,
     syncSelection,
     move,
+    advanceFrom,
     openCursor,
     open,
     close,

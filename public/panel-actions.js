@@ -36,7 +36,8 @@ import { textNode } from './panel-dom.js';
  *          toast: (m:string, o?:{isError?:boolean}) => void,
  *          announce: (t:string) => void,
  *          onNewAgent?: (projectId:string) => void,
- *          onRename?: (agent:any) => void}} ctx
+ *          onRename?: (agent:any) => void,
+ *          onActed?: (id:string, what:string) => void}} ctx
  */
 export function createActionsPart(ctx) {
   const {
@@ -262,6 +263,7 @@ export function createActionsPart(ctx) {
               : `${ACTION_LABELS[action]} — done`,
       );
       announce(`${name}: ${ACTION_LABELS[action].toLowerCase()}`);
+      ctx.onActed?.(id, action);
     } catch (err) {
       if (inPanel) {
         setDisplayedAgent(rollback);

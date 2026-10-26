@@ -2509,6 +2509,13 @@ button {
   text-decoration-style: solid;
 }
 
+/* In the deck the card is where the reading happens, and the table beside it
+   needs only its first three columns: the card takes the larger half. */
+.app:has(> .stage.is-deck) > .panel {
+  flex-basis: 46rem;
+  max-width: 55vw;
+}
+
 /* ------------------------------------------------- the card as a conversation
    The owner, 25 October 2026: "I only use it for an overview… never to look
    at its output or respond to it… very crowded and hard to understand." The
