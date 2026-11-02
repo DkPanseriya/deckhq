@@ -28,6 +28,15 @@ export const FEED = 'feed.xml';
 export const MAKER_URL = 'https://darshakpanseriya.com';
 
 /**
+ * DeckHQ's listing on Launchpadly: one text link, in the footer. The listing
+ * stays only while its badge is on the site (owner, 2 November 2026), and a
+ * text link is a badge to them. It is a link and nothing more: no image and no
+ * script from their server, so the footer's "loads nothing from anywhere else"
+ * stays true.
+ */
+export const LAUNCHPADLY_URL = 'https://launchpadly.co/startup/deckhq';
+
+/**
  * The host a sign-up address sends a reader to, or null when there is none.
  *
  * @param {string} [url]

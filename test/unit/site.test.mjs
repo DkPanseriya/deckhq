@@ -42,6 +42,8 @@ const siteDir = path.join(root, 'site');
  *     documentation of agent view, which the home page's comparison cites as
  *     its source for every word it says about that tool;
  *   - `darshakpanseriya.com`: the maker's own site, one link in the footer;
+ *   - `launchpadly.co`: DeckHQ's listing there, one text link in the footer,
+ *     which the listing requires (`LAUNCHPADLY_URL` in `site/slots.mjs`);
  *   - the host of `WAITLIST_URL` in `site/slots.mjs`, when that is set: the
  *     hosted sign-up form the e-mail button opens. It is taken from the
  *     constant, so setting the address is the whole change. Empty today.
@@ -52,6 +54,7 @@ const LINKABLE = [
   'claude.com',
   'code.claude.com',
   'darshakpanseriya.com',
+  'launchpadly.co',
   ...(waitlistHost() ? [waitlistHost()] : []),
 ];
 

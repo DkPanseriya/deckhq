@@ -57,6 +57,7 @@ import {
   fill,
   followBlock,
   followLinks,
+  LAUNCHPADLY_URL,
   MAKER_URL,
   quotesBlock,
   releaseAnchor,
@@ -514,6 +515,7 @@ ${page.body.replace(/\n$/, '')}
             <li><a href="https://www.npmjs.com/package/deckhq">npm</a></li>
             <li><a href="${REPO}/blob/main/docs/GUIDE.md">The manual</a></li>
             <li><a href="${REPO}/issues">Report a problem</a></li>
+            <li><a href="${LAUNCHPADLY_URL}" target="_blank" rel="noopener">Listed on Launchpadly</a></li>
           </ul>
         </div>
         <div class="foot-col">
